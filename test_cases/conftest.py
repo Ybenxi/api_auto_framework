@@ -40,7 +40,8 @@ def login_session():
         
         if response.status_code == 200:
             res_json = response.json()
-            token = res_json.get("access_token")
+            # 兼容性处理：Token 可能在根目录，也可能在 data 目录下
+            token = res_json.get("access_token") or res_json.get("data", {}).get("access_token")
             if token:
                 session.headers.update({"Authorization": f"Bearer {token}"})
                 print(f"[Setup] 登录成功，获取 Token: {token[:10]}...")
