@@ -2,8 +2,10 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>Apifox Pro - 自动化测试报告</title>
+    <title>Ben xi report - 自动化测试报告 v2.0</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/atom-one-dark.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
     <style>
@@ -16,18 +18,43 @@
             --card-bg: #ffffff;
         }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background: var(--bg-color); margin: 0; padding: 0; color: #333; }
-        .navbar { background: #001529; color: white; padding: 0 40px; height: 64px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
-        .navbar .brand { font-size: 20px; font-weight: 600; display: flex; align-items: center; }
-        .navbar .brand::before { content: ''; width: 4px; height: 20px; background: var(--primary-color); margin-right: 12px; border-radius: 2px; }
+        
+        /* Navbar */
+        .navbar { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 0 40px; height: 64px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+        .navbar .brand { font-size: 22px; font-weight: 700; display: flex; align-items: center; letter-spacing: 0.5px; }
+        .navbar .brand::before { content: '🚀'; margin-right: 12px; font-size: 24px; }
+        .navbar-right { display: flex; align-items: center; gap: 16px; }
+        .env-badge { background: rgba(255,255,255,0.2); padding: 6px 16px; border-radius: 20px; font-size: 13px; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.3); }
+        .btn { background: rgba(255,255,255,0.15); color: white; border: 1px solid rgba(255,255,255,0.3); padding: 6px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; transition: all 0.3s; backdrop-filter: blur(10px); }
+        .btn:hover { background: rgba(255,255,255,0.25); transform: translateY(-1px); }
+        
         .container { max-width: 1200px; margin: 24px auto; padding: 0 20px; }
         
         /* Dashboard */
         .dashboard { display: flex; gap: 24px; margin-bottom: 24px; }
-        .card { background: var(--card-bg); border-radius: 8px; padding: 24px; box-shadow: 0 1px 2px rgba(0,0,0,0.03); flex: 1; }
-        .chart-container { width: 160px; height: 160px; position: relative; }
-        .chart-info { display: flex; flex-direction: column; justify-content: center; gap: 12px; margin-left: 40px; }
-        .stat-item { display: flex; align-items: center; font-size: 14px; color: #666; }
-        .stat-dot { width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; }
+        .card { background: var(--card-bg); border-radius: 12px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); flex: 1; }
+        
+        /* Left Card - Duration Stats */
+        .duration-stats { display: flex; flex-direction: column; gap: 20px; }
+        .stat-row { display: flex; justify-content: space-between; align-items: center; padding: 16px; background: #f7f9fc; border-radius: 8px; border-left: 4px solid var(--primary-color); }
+        .stat-label { font-size: 14px; color: #666; font-weight: 500; }
+        .stat-value { font-size: 24px; font-weight: 700; color: var(--primary-color); }
+        
+        /* Right Card - Result Stats */
+        .result-stats { display: flex; align-items: center; gap: 32px; }
+        .chart-container { width: 140px; height: 140px; position: relative; }
+        .result-list { display: flex; flex-direction: column; gap: 16px; flex: 1; }
+        .result-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; background: #fafafa; border-radius: 8px; }
+        .result-label { display: flex; align-items: center; font-size: 14px; color: #666; }
+        .result-dot { width: 10px; height: 10px; border-radius: 50%; margin-right: 10px; }
+        .result-value { font-size: 16px; font-weight: 700; }
+        .result-percent { font-size: 12px; color: #999; margin-left: 8px; }
+        
+        /* Tab Filter */
+        .tab-filter { background: var(--card-bg); border-radius: 12px; padding: 16px 24px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); display: flex; gap: 16px; }
+        .tab-item { padding: 8px 20px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; color: #666; transition: all 0.3s; border: 1px solid transparent; }
+        .tab-item:hover { background: #f0f2f5; }
+        .tab-item.active { background: var(--primary-color); color: white; border-color: var(--primary-color); }
         
         /* Case List */
         .case-table { width: 100%; border-collapse: separate; border-spacing: 0 12px; }
@@ -41,8 +68,10 @@
         .status-tag { padding: 4px 12px; border-radius: 4px; font-size: 12px; font-weight: 600; }
         .status-passed { background: #f6ffed; color: var(--success-color); border: 1px solid #b7eb8f; }
         .status-failed { background: #fff1f0; color: var(--error-color); border: 1px solid #ffa39e; }
+        .status-skipped { background: #fffbe6; color: var(--warning-color); border: 1px solid #ffe58f; }
         .case-row.passed td:first-child { border-left-color: var(--success-color); }
         .case-row.failed td:first-child { border-left-color: var(--error-color); }
+        .case-row.skipped td:first-child { border-left-color: var(--warning-color); }
 
         /* Modal */
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.45); z-index: 1000; justify-content: center; align-items: center; }
@@ -59,39 +88,135 @@
         .info-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; background: #fff; padding: 16px; border-radius: 8px; border: 1px solid #f0f0f0; }
         .info-label { color: #8c8c8c; font-size: 12px; margin-bottom: 4px; }
         .info-value { font-size: 14px; font-weight: 500; word-break: break-all; }
+        
+        /* Hidden class for filtering */
+        .hidden { display: none !important; }
     </style>
 </head>
 <body>
     <div class="navbar">
-        <div class="brand">Apifox Pro 测试报告</div>
-        <div style="font-size: 14px; opacity: 0.8;">环境: <span id="env-tag">DEV</span> | 生成时间: <span id="gen-time"></span></div>
+        <div class="brand">Ben xi report</div>
+        <div class="navbar-right">
+            <div class="env-badge">
+                <span data-lang="zh">环境</span><span data-lang="en" style="display:none;">ENV</span>: 
+                <strong id="env-tag">DEV</strong> | 
+                <span id="gen-time"></span>
+            </div>
+            <button class="btn" onclick="toggleLanguage()">
+                <span id="lang-toggle">中/En</span>
+            </button>
+            <button class="btn" onclick="exportPDF()">
+                <span data-lang="zh">导出 PDF</span>
+                <span data-lang="en" style="display:none;">Export PDF</span>
+            </button>
+        </div>
     </div>
 
-    <div class="container">
+    <div class="container" id="report-content">
         <div class="dashboard">
-            <div class="card" style="display: flex; align-items: center;">
-                <div class="chart-container">
-                    <canvas id="summaryChart"></canvas>
-                </div>
-                <div class="chart-info">
-                    <div class="stat-item"><span class="stat-dot" style="background: var(--success-color);"></span> 成功: <b id="cnt-passed" style="margin-left: 8px; color: var(--success-color);">0</b></div>
-                    <div class="stat-item"><span class="stat-dot" style="background: var(--error-color);"></span> 失败: <b id="cnt-failed" style="margin-left: 8px; color: var(--error-color);">0</b></div>
-                    <div class="stat-item"><span class="stat-dot" style="background: var(--warning-color);"></span> 跳过: <b id="cnt-skipped" style="margin-left: 8px; color: var(--warning-color);">0</b></div>
+            <!-- Left Card: Duration Stats -->
+            <div class="card">
+                <div class="duration-stats">
+                    <div class="stat-row">
+                        <div class="stat-label">
+                            <span data-lang="zh">总耗时</span>
+                            <span data-lang="en" style="display:none;">Total Duration</span>
+                        </div>
+                        <div class="stat-value" id="total-duration">0.00s</div>
+                    </div>
+                    <div class="stat-row" style="border-left-color: #52c41a;">
+                        <div class="stat-label">
+                            <span data-lang="zh">平均耗时</span>
+                            <span data-lang="en" style="display:none;">Avg Duration</span>
+                        </div>
+                        <div class="stat-value" id="avg-duration" style="color: #52c41a;">0.00s</div>
+                    </div>
                 </div>
             </div>
-            <div class="card" style="flex: 0.6; display: flex; flex-direction: column; justify-content: center; text-align: center;">
-                <div style="font-size: 14px; color: #8c8c8c; margin-bottom: 8px;">综合通过率</div>
-                <div id="pass-rate" style="font-size: 48px; font-weight: 700; color: var(--primary-color);">0%</div>
+            
+            <!-- Right Card: Result Stats -->
+            <div class="card">
+                <div class="result-stats">
+                    <div class="chart-container">
+                        <canvas id="summaryChart"></canvas>
+                    </div>
+                    <div class="result-list">
+                        <div class="result-item">
+                            <div class="result-label">
+                                <span class="result-dot" style="background: var(--success-color);"></span>
+                                <span data-lang="zh">成功</span>
+                                <span data-lang="en" style="display:none;">Passed</span>
+                            </div>
+                            <div>
+                                <span class="result-value" id="cnt-passed" style="color: var(--success-color);">0</span>
+                                <span class="result-percent" id="pct-passed">(0%)</span>
+                            </div>
+                        </div>
+                        <div class="result-item">
+                            <div class="result-label">
+                                <span class="result-dot" style="background: var(--error-color);"></span>
+                                <span data-lang="zh">失败</span>
+                                <span data-lang="en" style="display:none;">Failed</span>
+                            </div>
+                            <div>
+                                <span class="result-value" id="cnt-failed" style="color: var(--error-color);">0</span>
+                                <span class="result-percent" id="pct-failed">(0%)</span>
+                            </div>
+                        </div>
+                        <div class="result-item">
+                            <div class="result-label">
+                                <span class="result-dot" style="background: var(--warning-color);"></span>
+                                <span data-lang="zh">跳过</span>
+                                <span data-lang="en" style="display:none;">Skipped</span>
+                            </div>
+                            <div>
+                                <span class="result-value" id="cnt-skipped" style="color: var(--warning-color);">0</span>
+                                <span class="result-percent" id="pct-skipped">(0%)</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab Filter -->
+        <div class="tab-filter">
+            <div class="tab-item active" onclick="filterCases('all')" data-filter="all">
+                <span data-lang="zh">全部</span>
+                <span data-lang="en" style="display:none;">All</span>
+                (<span id="tab-all-count">0</span>)
+            </div>
+            <div class="tab-item" onclick="filterCases('passed')" data-filter="passed">
+                <span data-lang="zh">成功</span>
+                <span data-lang="en" style="display:none;">Passed</span>
+                (<span id="tab-passed-count">0</span>)
+            </div>
+            <div class="tab-item" onclick="filterCases('failed')" data-filter="failed">
+                <span data-lang="zh">失败</span>
+                <span data-lang="en" style="display:none;">Failed</span>
+                (<span id="tab-failed-count">0</span>)
             </div>
         </div>
 
         <table class="case-table">
             <thead>
                 <tr>
-                    <th width="10%">状态</th>
-                    <th width="50%">用例名称</th>
-                    <th width="20%">执行时间</th>
-                    <th width="20%">耗时</th>
+                    <th width="10%">
+                        <span data-lang="zh">状态</span>
+                        <span data-lang="en" style="display:none;">Status</span>
+                    </th>
+                    <th width="50%">
+                        <span data-lang="zh">用例名称</span>
+                        <span data-lang="en" style="display:none;">Test Case</span>
+                    </th>
+                    <th width="20%">
+                        <span data-lang="zh">执行时间</span>
+                        <span data-lang="en" style="display:none;">Execution Time</span>
+                    </th>
+                    <th width="20%">
+                        <span data-lang="zh">耗时</span>
+                        <span data-lang="en" style="display:none;">Duration</span>
+                    </th>
                 </tr>
             </thead>
             <tbody id="case-list">
@@ -103,7 +228,10 @@
     <div id="detailModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <div style="font-weight: 600;" id="modal-title">接口详情</div>
+                <div style="font-weight: 600;" id="modal-title">
+                    <span data-lang="zh">接口详情</span>
+                    <span data-lang="en" style="display:none;">API Details</span>
+                </div>
                 <span class="close-btn" onclick="closeModal()">&times;</span>
             </div>
             <div class="modal-body" id="modal-body">
@@ -115,82 +243,218 @@
     <script>
         const testData = {{RESULTS_JSON}};
         const envInfo = {{ENV_JSON}};
+        let currentLang = 'zh';
+        let currentFilter = 'all';
 
-        document.getElementById('gen-time').innerText = new Date().toLocaleString();
-        document.getElementById('env-tag').innerText = envInfo.env || 'DEV';
+        // Initialize report
+        function initReport() {
+            // Set environment and time
+            const now = new Date();
+            const timeStr = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')} (UTC+8)`;
+            document.getElementById('gen-time').innerText = timeStr;
+            document.getElementById('env-tag').innerText = envInfo.env || 'DEV';
 
-        const stats = { passed: 0, failed: 0, skipped: 0 };
-        const listBody = document.getElementById('case-list');
+            // Calculate statistics
+            const stats = { passed: 0, failed: 0, skipped: 0, totalDuration: 0 };
+            const listBody = document.getElementById('case-list');
 
-        testData.forEach((item, index) => {
-            stats[item.status]++;
-            const row = document.createElement('tr');
-            row.className = `case-row ${item.status}`;
-            row.onclick = () => showDetail(index);
-            row.innerHTML = `
-                <td><span class="status-tag status-${item.status}">${item.status.toUpperCase()}</span></td>
-                <td style="font-weight: 500;">${item.nodeid.split('::').pop()}</td>
-                <td style="color: #8c8c8c; font-size: 13px;">${item.start_time}</td>
-                <td style="font-weight: 600;">${item.duration.toFixed(3)}s</td>
-            `;
-            listBody.appendChild(row);
-        });
+            testData.forEach((item, index) => {
+                stats[item.status]++;
+                stats.totalDuration += item.duration;
+                
+                const row = document.createElement('tr');
+                row.className = `case-row ${item.status}`;
+                row.setAttribute('data-status', item.status);
+                row.onclick = () => showDetail(index);
+                
+                const statusText = {
+                    'passed': '<span data-lang="zh">通过</span><span data-lang="en" style="display:none;">PASSED</span>',
+                    'failed': '<span data-lang="zh">失败</span><span data-lang="en" style="display:none;">FAILED</span>',
+                    'skipped': '<span data-lang="zh">跳过</span><span data-lang="en" style="display:none;">SKIPPED</span>'
+                };
+                
+                row.innerHTML = `
+                    <td><span class="status-tag status-${item.status}">${statusText[item.status] || item.status.toUpperCase()}</span></td>
+                    <td style="font-weight: 500;">${item.nodeid.split('::').pop()}</td>
+                    <td style="color: #8c8c8c; font-size: 13px;">${item.start_time}</td>
+                    <td style="font-weight: 600;">${item.duration.toFixed(3)}s</td>
+                `;
+                listBody.appendChild(row);
+            });
 
-        document.getElementById('cnt-passed').innerText = stats.passed;
-        document.getElementById('cnt-failed').innerText = stats.failed;
-        document.getElementById('cnt-skipped').innerText = stats.skipped;
-        const total = stats.passed + stats.failed + stats.skipped;
-        const rate = total === 0 ? 0 : Math.round((stats.passed / total) * 100);
-        document.getElementById('pass-rate').innerText = rate + '%';
+            // Update stats
+            const total = stats.passed + stats.failed + stats.skipped;
+            document.getElementById('cnt-passed').innerText = stats.passed;
+            document.getElementById('cnt-failed').innerText = stats.failed;
+            document.getElementById('cnt-skipped').innerText = stats.skipped;
+            
+            document.getElementById('pct-passed').innerText = `(${total ? Math.round((stats.passed/total)*100) : 0}%)`;
+            document.getElementById('pct-failed').innerText = `(${total ? Math.round((stats.failed/total)*100) : 0}%)`;
+            document.getElementById('pct-skipped').innerText = `(${total ? Math.round((stats.skipped/total)*100) : 0}%)`;
+            
+            document.getElementById('total-duration').innerText = stats.totalDuration.toFixed(2) + 's';
+            document.getElementById('avg-duration').innerText = total ? (stats.totalDuration / total).toFixed(2) + 's' : '0.00s';
+            
+            document.getElementById('tab-all-count').innerText = total;
+            document.getElementById('tab-passed-count').innerText = stats.passed;
+            document.getElementById('tab-failed-count').innerText = stats.failed;
 
-        new Chart(document.getElementById('summaryChart'), {
-            type: 'doughnut',
-            data: {
-                datasets: [{
-                    data: [stats.passed, stats.failed, stats.skipped],
-                    backgroundColor: ['#52c41a', '#f5222d', '#faad14'],
-                    borderWidth: 0
-                }]
-            },
-            options: { cutout: '75%', plugins: { legend: { display: false } } }
-        });
+            // Draw chart
+            new Chart(document.getElementById('summaryChart'), {
+                type: 'doughnut',
+                data: {
+                    datasets: [{
+                        data: [stats.passed, stats.failed, stats.skipped],
+                        backgroundColor: ['#52c41a', '#f5222d', '#faad14'],
+                        borderWidth: 0
+                    }]
+                },
+                options: { cutout: '70%', plugins: { legend: { display: false } } }
+            });
+        }
 
+        // Language toggle
+        function toggleLanguage() {
+            currentLang = currentLang === 'zh' ? 'en' : 'zh';
+            const zhElements = document.querySelectorAll('[data-lang="zh"]');
+            const enElements = document.querySelectorAll('[data-lang="en"]');
+            
+            zhElements.forEach(el => el.style.display = currentLang === 'zh' ? '' : 'none');
+            enElements.forEach(el => el.style.display = currentLang === 'en' ? '' : 'none');
+        }
+
+        // Filter cases
+        function filterCases(status) {
+            currentFilter = status;
+            const rows = document.querySelectorAll('.case-row');
+            const tabs = document.querySelectorAll('.tab-item');
+            
+            tabs.forEach(tab => tab.classList.remove('active'));
+            document.querySelector(`[data-filter="${status}"]`).classList.add('active');
+            
+            rows.forEach(row => {
+                if (status === 'all' || row.getAttribute('data-status') === status) {
+                    row.classList.remove('hidden');
+                } else {
+                    row.classList.add('hidden');
+                }
+            });
+        }
+
+        // Show detail modal
         function showDetail(index) {
             const data = testData[index];
             const modal = document.getElementById('detailModal');
             const body = document.getElementById('modal-body');
-            document.getElementById('modal-title').innerText = data.nodeid;
+            document.getElementById('modal-title').innerHTML = `<span data-lang="zh">接口详情</span><span data-lang="en" style="display:none;">API Details</span>: ${data.nodeid}`;
             
             let extraHtml = '';
             if (data.extra && data.extra.request) {
                 extraHtml = `
                     <div class="detail-section">
-                        <div class="detail-title">基本信息</div>
+                        <div class="detail-title">
+                            <span data-lang="zh">基本信息</span>
+                            <span data-lang="en" style="display:none;">Basic Info</span>
+                        </div>
                         <div class="info-grid">
-                            <div><div class="info-label">请求地址</div><div class="info-value" style="color: var(--primary-color);">${data.extra.request.url}</div></div>
-                            <div><div class="info-label">请求方法</div><div class="info-value"><span class="status-tag" style="background: #e6f7ff; color: #1890ff;">${data.extra.request.method}</span></div></div>
+                            <div>
+                                <div class="info-label">
+                                    <span data-lang="zh">请求地址</span>
+                                    <span data-lang="en" style="display:none;">Request URL</span>
+                                </div>
+                                <div class="info-value" style="color: var(--primary-color);">${data.extra.request.url}</div>
+                            </div>
+                            <div>
+                                <div class="info-label">
+                                    <span data-lang="zh">请求方法</span>
+                                    <span data-lang="en" style="display:none;">Method</span>
+                                </div>
+                                <div class="info-value"><span class="status-tag" style="background: #e6f7ff; color: #1890ff;">${data.extra.request.method}</span></div>
+                            </div>
                         </div>
                     </div>
                     <div class="detail-section">
-                        <div class="detail-title">请求参数 (Body/Params)</div>
+                        <div class="detail-title">
+                            <span data-lang="zh">请求参数</span>
+                            <span data-lang="en" style="display:none;">Request Body</span>
+                        </div>
                         <pre><code class="language-json">${JSON.stringify(data.extra.request.body, null, 2)}</code></pre>
                     </div>
                     <div class="detail-section">
-                        <div class="detail-title">响应数据 (Response)</div>
+                        <div class="detail-title">
+                            <span data-lang="zh">响应数据</span>
+                            <span data-lang="en" style="display:none;">Response</span>
+                        </div>
                         <pre><code class="language-json">${JSON.stringify(data.extra.response.body, null, 2)}</code></pre>
                     </div>
                 `;
             } else {
-                extraHtml = '<div style="text-align: center; color: #999; padding: 40px;">该用例未捕获到接口流量数据</div>';
+                extraHtml = `<div style="text-align: center; color: #999; padding: 40px;">
+                    <span data-lang="zh">该用例未捕获到接口流量数据</span>
+                    <span data-lang="en" style="display:none;">No API traffic data captured</span>
+                </div>`;
             }
 
             body.innerHTML = extraHtml;
             modal.style.display = 'flex';
+            
+            // Apply language after injecting HTML
+            const zhElements = body.querySelectorAll('[data-lang="zh"]');
+            const enElements = body.querySelectorAll('[data-lang="en"]');
+            zhElements.forEach(el => el.style.display = currentLang === 'zh' ? '' : 'none');
+            enElements.forEach(el => el.style.display = currentLang === 'en' ? '' : 'none');
+            
             hljs.highlightAll();
         }
 
-        function closeModal() { document.getElementById('detailModal').style.display = 'none'; }
-        window.onclick = (event) => { if (event.target.className === 'modal') closeModal(); }
+        // Export to PDF
+        async function exportPDF() {
+            const button = event.target.closest('button');
+            const originalText = button.innerHTML;
+            button.innerHTML = currentLang === 'zh' ? '生成中...' : 'Generating...';
+            button.disabled = true;
+
+            try {
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF('p', 'mm', 'a4');
+                
+                // Capture dashboard
+                const dashboard = document.querySelector('.dashboard');
+                const dashboardCanvas = await html2canvas(dashboard, { scale: 2 });
+                const dashboardImg = dashboardCanvas.toDataURL('image/png');
+                pdf.addImage(dashboardImg, 'PNG', 10, 10, 190, (dashboardCanvas.height * 190) / dashboardCanvas.width);
+                
+                // Capture tab filter
+                const tabFilter = document.querySelector('.tab-filter');
+                const tabCanvas = await html2canvas(tabFilter, { scale: 2 });
+                const tabImg = tabCanvas.toDataURL('image/png');
+                const yOffset = 10 + (dashboardCanvas.height * 190) / dashboardCanvas.width + 5;
+                pdf.addImage(tabImg, 'PNG', 10, yOffset, 190, (tabCanvas.height * 190) / tabCanvas.width);
+                
+                // Save PDF
+                const filename = `Ben_xi_report_${new Date().getTime()}.pdf`;
+                pdf.save(filename);
+                
+                button.innerHTML = originalText;
+                button.disabled = false;
+            } catch (error) {
+                console.error('PDF export failed:', error);
+                alert(currentLang === 'zh' ? 'PDF 导出失败，请查看控制台' : 'PDF export failed, check console');
+                button.innerHTML = originalText;
+                button.disabled = false;
+            }
+        }
+
+        function closeModal() { 
+            document.getElementById('detailModal').style.display = 'none'; 
+        }
+        
+        window.onclick = (event) => { 
+            if (event.target.className === 'modal') closeModal(); 
+        }
+
+        // Initialize on load
+        initReport();
     </script>
 </body>
 </html>

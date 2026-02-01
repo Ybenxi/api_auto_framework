@@ -84,7 +84,7 @@ def pytest_sessionfinish(session, exitstatus):
     测试结束时，将结果注入 HTML 模板
     """
     template_path = os.path.join(os.path.dirname(__file__), "..", "assets", "report_template.html")
-    report_path = os.path.join(os.path.dirname(__file__), "..", "reports", "apifox_report.html")
+    report_path = os.path.join(os.path.dirname(__file__), "..", "reports", "benxi_report_v2.html")
     
     if not os.path.exists(os.path.dirname(report_path)):
         os.makedirs(os.path.dirname(report_path))
@@ -100,7 +100,7 @@ def pytest_sessionfinish(session, exitstatus):
         
         with open(report_path, 'w', encoding='utf-8') as f:
             f.write(final_html)
-        print(f"\n[Report] 高级 HTML 报告已生成: {report_path}")
+        print(f"\n[Report] Ben xi report v2.0 已生成: {report_path}")
 
 # --- 自动拦截 Requests 流量的辅助工具 ---
 @pytest.fixture(autouse=True)
