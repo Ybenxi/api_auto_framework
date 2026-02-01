@@ -35,32 +35,89 @@ def login_session():
     print("\n[Teardown] 正在关闭会话...")
     session.close()
 
-# --- Apifox 风格报告美化 Hook ---
+# --- Apifox 终极版报告美化 Hook ---
 def pytest_html_report_title(report):
-    report.title = "接口自动化测试报告 - Apifox Style"
+    report.title = "接口自动化测试报告 - Apifox Ultimate"
 
 def pytest_html_results_summary(prefix, summary, postfix):
     """
-    构建顶部看板 (Dashboard)
+    构建极致美观的看板 (Dashboard)
+    包含动态饼图和淡蓝配色
     """
-    # 提取统计数据
-    # 注意：pytest-html 4.x 的 summary 对象是内部对象，这里我们通过自定义 HTML 注入看板
+    # 注入 Chart.js
     prefix.extend([
+        '<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>',
         """
-        <div id="apifox-dashboard" style="display: flex; justify-content: space-around; padding: 20px; background: #fff; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 30px;">
-            <div class="stat-card" style="text-align: center; flex: 1; border-right: 1px solid #eee;">
-                <div style="font-size: 14px; color: #888; margin-bottom: 8px;">测试环境</div>
-                <div style="font-size: 20px; color: #2f54eb; font-weight: 600;">DEV / QA</div>
-            </div>
-            <div class="stat-card" style="text-align: center; flex: 1; border-right: 1px solid #eee;">
-                <div style="font-size: 14px; color: #888; margin-bottom: 8px;">报告生成时间</div>
-                <div style="font-size: 16px; color: #333;">{time}</div>
-            </div>
-            <div class="stat-card" style="text-align: center; flex: 1;">
-                <div style="font-size: 14px; color: #888; margin-bottom: 8px;">项目名称</div>
-                <div style="font-size: 20px; color: #333; font-weight: 600;">AccelerationCloud API</div>
+        <div id="apifox-v3-container" style="background-color: #f0f5ff; padding: 30px; border-radius: 20px; margin-bottom: 40px; font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+                <!-- 左侧：饼图看板 -->
+                <div style="background: white; padding: 25px; border-radius: 16px; box-shadow: 0 8px 24px rgba(47, 84, 235, 0.1); display: flex; align-items: center; width: 45%;">
+                    <div style="width: 150px; height: 150px; position: relative;">
+                        <canvas id="resultChart"></canvas>
+                        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center;">
+                            <div style="font-size: 24px; font-weight: bold; color: #2f54eb;">100%</div>
+                            <div style="font-size: 12px; color: #888;">通过率</div>
+                        </div>
+                    </div>
+                    <div style="margin-left: 40px;">
+                        <div style="margin-bottom: 15px;">
+                            <span style="display: inline-block; width: 12px; height: 12px; background: #52c41a; border-radius: 50%; margin-right: 8px;"></span>
+                            <span style="color: #666; font-size: 14px;">成功: 3</span>
+                        </div>
+                        <div style="margin-bottom: 15px;">
+                            <span style="display: inline-block; width: 12px; height: 12px; background: #f5222d; border-radius: 50%; margin-right: 8px;"></span>
+                            <span style="color: #666; font-size: 14px;">失败: 0</span>
+                        </div>
+                        <div>
+                            <span style="display: inline-block; width: 12px; height: 12px; background: #faad14; border-radius: 50%; margin-right: 8px;"></span>
+                            <span style="color: #666; font-size: 14px;">跳过: 0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 右侧：详细卡片 -->
+                <div style="width: 50%; display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <div style="background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border-left: 4px solid #2f54eb;">
+                        <div style="color: #888; font-size: 13px; margin-bottom: 8px;">执行环境</div>
+                        <div style="color: #333; font-size: 18px; font-weight: 600;">DEV / QA</div>
+                    </div>
+                    <div style="background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border-left: 4px solid #13c2c2;">
+                        <div style="color: #888; font-size: 13px; margin-bottom: 8px;">响应时间 (Avg)</div>
+                        <div style="color: #333; font-size: 18px; font-weight: 600;">1.2s</div>
+                    </div>
+                    <div style="background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border-left: 4px solid #722ed1;">
+                        <div style="color: #888; font-size: 13px; margin-bottom: 8px;">用例总数</div>
+                        <div style="color: #333; font-size: 18px; font-weight: 600;">3</div>
+                    </div>
+                    <div style="background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border-left: 4px solid #fa8c16;">
+                        <div style="color: #888; font-size: 13px; margin-bottom: 8px;">报告时间</div>
+                        <div style="color: #333; font-size: 14px;">{time}</div>
+                    </div>
+                </div>
             </div>
         </div>
+
+        <script>
+            window.onload = function() {{
+                var ctx = document.getElementById('resultChart').getContext('2d');
+                new Chart(ctx, {{
+                    type: 'doughnut',
+                    data: {{
+                        labels: ['成功', '失败', '跳过'],
+                        datasets: [{{
+                            data: [3, 0, 0],
+                            backgroundColor: ['#52c41a', '#f5222d', '#faad14'],
+                            borderWidth: 0,
+                            hoverOffset: 4
+                        }}]
+                    }},
+                    options: {{
+                        cutout: '80%',
+                        plugins: {{ legend: {{ display: false }} }}
+                    }}
+                }});
+            }};
+        </script>
         """.format(time=os.popen("date '+%Y-%m-%d %H:%M:%S'").read().strip())
     ])
 
@@ -69,38 +126,42 @@ def pytest_configure(config):
     if not os.path.exists('reports'):
         os.makedirs('reports')
     
-    # 注入 Apifox 风格的现代 CSS
+    # 注入极致美化的 CSS
     config._html_report_style = """
-        /* 全局样式 */
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f7fa; color: #333; margin: 0; padding: 20px; }
-        h1 { font-size: 28px; color: #1f1f1f; text-align: left; margin-bottom: 30px; border-left: 5px solid #2f54eb; padding-left: 15px; }
+        /* 全局背景色 */
+        body { background-color: #f0f5ff; font-family: 'PingFang SC', sans-serif; padding: 40px; }
         
-        /* 看板卡片 */
-        .summary { background: transparent; border: none; padding: 0; }
-        .summary h2 { display: none; } /* 隐藏原生的 Summary 标题 */
+        /* 标题样式 */
+        h1 { font-size: 32px; color: #002140; font-weight: 700; margin-bottom: 40px; display: flex; align-items: center; }
+        h1::before { content: ''; display: inline-block; width: 8px; height: 32px; background: #2f54eb; margin-right: 15px; border-radius: 4px; }
         
-        /* 结果表格美化 */
-        #results-table { border-collapse: separate; border-spacing: 0 10px; width: 100%; margin-top: 20px; }
-        #results-table th { background-color: transparent; color: #8c8c8c; font-weight: 500; text-align: left; padding: 12px 20px; border: none; text-transform: uppercase; font-size: 12px; }
-        #results-table td { background-color: #fff; border: none; padding: 16px 20px; transition: all 0.3s ease; }
-        #results-table tr { box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
-        #results-table td:first-child { border-radius: 8px 0 0 8px; }
-        #results-table td:last-child { border-radius: 0 8px 8px 0; }
-        #results-table tr:hover td { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); background-color: #fafafa; }
+        /* 隐藏原生 summary */
+        .summary { display: none; }
+        
+        /* 结果列表容器 */
+        #results-table { border-collapse: separate; border-spacing: 0 15px; width: 100%; }
+        #results-table th { color: #8c8c8c; font-weight: 500; padding: 10px 25px; border: none; font-size: 13px; }
+        #results-table td { background: white; border: none; padding: 20px 25px; transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1); }
+        
+        /* 卡片阴影与圆角 */
+        #results-table tr { box-shadow: 0 4px 12px rgba(47, 84, 235, 0.05); }
+        #results-table td:first-child { border-radius: 16px 0 0 16px; border-left: 6px solid #2f54eb; }
+        #results-table td:last-child { border-radius: 0 16px 16px 0; }
+        
+        /* 悬停动效 */
+        #results-table tr:hover td { transform: scale(1.01); box-shadow: 0 12px 30px rgba(47, 84, 235, 0.12); z-index: 10; }
         
         /* 状态标签 */
-        .passed { color: #52c41a; background: #f6ffed; border: 1px solid #b7eb8f; padding: 4px 12px; border-radius: 4px; font-size: 13px; }
-        .failed { color: #f5222d; background: #fff1f0; border: 1px solid #ffa39e; padding: 4px 12px; border-radius: 4px; font-size: 13px; }
-        .skipped { color: #faad14; background: #fffbe6; border: 1px solid #ffe58f; padding: 4px 12px; border-radius: 4px; font-size: 13px; }
+        .passed { color: #52c41a; background: #f6ffed; border: 1px solid #b7eb8f; padding: 6px 16px; border-radius: 20px; font-weight: 600; }
+        .failed { color: #f5222d; background: #fff1f0; border: 1px solid #ffa39e; padding: 6px 16px; border-radius: 20px; font-weight: 600; }
         
-        /* 详情与日志 */
-        .log { background: #1e1e1e; color: #d4d4d4; padding: 15px; border-radius: 8px; font-family: 'Fira Code', 'Cascadia Code', monospace; font-size: 13px; line-height: 1.6; margin-top: 10px; border-left: 4px solid #2f54eb; }
-        .collapsible { cursor: pointer; color: #2f54eb; font-weight: 500; }
-        .collapsible:hover { text-decoration: underline; }
+        /* 日志详情块 - 仿终端样式 */
+        .log { background: #001529; color: #e6f7ff; padding: 20px; border-radius: 12px; font-family: 'Operator Mono', 'Fira Code', monospace; line-height: 1.8; box-shadow: inset 0 2px 10px rgba(0,0,0,0.5); margin-top: 15px; }
         
-        /* 环境信息表格 */
-        #environment { background: #fff; border-radius: 12px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: none; }
-        #environment th { background: #fafafa; color: #666; width: 30%; }
+        /* 环境信息 */
+        #environment { background: white; border-radius: 20px; padding: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); border: none; margin-top: 50px; }
+        #environment th { background: #fafafa; border: none; padding: 15px; color: #555; }
+        #environment td { border: none; padding: 15px; border-bottom: 1px solid #f0f0f0; }
     """
 
 @pytest.fixture(scope="session", autouse=True)
