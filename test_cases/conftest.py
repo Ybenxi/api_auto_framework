@@ -5,6 +5,7 @@ import json
 import time
 from datetime import datetime
 from api.auth_api import auth_api
+from config.config import config
 
 # 用于存储所有测试结果和捕获的流量
 test_results = []
