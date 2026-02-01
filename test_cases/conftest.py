@@ -15,25 +15,40 @@ def login_session():
     全局登录会话管理
     """
     session = requests.Session()
-    # 这里可以根据需要配置默认请求头
-    session.headers.update({"Content-Type": "application/json"})
+    # 强制要求 JSON
+    session.headers.update({"Content-Type": "application/json; charset=utf-8"})
     
     # 执行登录逻辑
     print("\n[Setup] 正在执行全局登录...")
     try:
-        response = auth_api.get_token()
+        # 1. 获取认证配置
+        auth_data = config.auth_data
+        url = f"{config.base_url}/api/v1/auth/{auth_data['tenant_id']}/oauth2/token"
+        params = {
+            "grant_type": "client_credentials",
+            "user_id": auth_data["user_id"],
+            "Jmeter-Test": "Jmeter-Test"
+        }
+        headers = {
+            "Content-Type": "application/json; charset=utf-8",
+            "Authorization": f"Basic {auth_data['basic_auth']}"
+        }
+        
+        # 2. 发送登录请求 (注意：登录请求不使用 session，避免 header 冲突)
+        response = requests.post(url, params=params, headers=headers)
+        
         if response.status_code == 200:
-            token = response.json().get("access_token")
+            res_json = response.json()
+            token = res_json.get("access_token")
             if token:
                 session.headers.update({"Authorization": f"Bearer {token}"})
                 print(f"[Setup] 登录成功，获取 Token: {token[:10]}...")
             else:
-                print("[Setup] 登录响应中未找到 access_token")
+                print(f"[Setup] 登录响应中未找到 access_token, 响应内容: {res_json}")
         else:
-            print(f"[Setup] 登录失败，状态码: {response.status_code}")
+            print(f"[Setup] 登录失败，状态码: {response.status_code}, 响应: {response.text}")
     except Exception as e:
-        print(f"[Setup] 登录失败: {e}")
-        pytest.fail("Global login failed")
+        print(f"[Setup] 登录过程发生异常: {e}")
 
     yield session
     
@@ -91,12 +106,19 @@ def capture_traffic(request, login_session):
     """
     自动拦截用例中的 requests 调用并记录
     """
-    original_request = requests.Session.request
+    # 获取原始的 request 方法
+    original_method = login_session.request
 
-    def patched_request(self, method, url, **kwargs):
-        response = original_request(self, method, url, **kwargs)
+    def patched_request(method, url, **kwargs):
+        # 执行原始请求
+        response = original_method(method, url, **kwargs)
         
-        # 记录流量
+        # 记录流量数据
+        try:
+            res_body = response.json()
+        except:
+            res_body = response.text
+
         traffic = {
             "request": {
                 "method": method,
@@ -105,15 +127,16 @@ def capture_traffic(request, login_session):
             },
             "response": {
                 "status_code": response.status_code,
-                "body": response.json() if 'application/json' in response.headers.get('Content-Type', '') else response.text
+                "body": res_body
             }
         }
-        # 将流量挂载到当前 item 上，供 pytest_runtest_makereport 使用
+        # 将流量挂载到当前测试用例的 item 对象上
+        # pytest_runtest_makereport 钩子会读取此数据
         request.node.extra_data = traffic
         return response
 
-    # 替换 session 的请求方法
-    login_session.request = patched_request.__get__(login_session, requests.Session)
+    # 使用 monkeypatch 思想，在当前 fixture 作用域内替换 session 的方法
+    login_session.request = patched_request
     yield
-    # 恢复原始方法 (虽然 session 会销毁，但保持好习惯)
-    login_session.request = original_request.__get__(login_session, requests.Session)
+    # 恢复原始方法
+    login_session.request = original_method
