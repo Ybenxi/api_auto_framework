@@ -35,31 +35,72 @@ def login_session():
     print("\n[Teardown] 正在关闭会话...")
     session.close()
 
-# --- 报告美化 Hook ---
+# --- Apifox 风格报告美化 Hook ---
 def pytest_html_report_title(report):
-    report.title = "接口自动化测试报告"
+    report.title = "接口自动化测试报告 - Apifox Style"
 
 def pytest_html_results_summary(prefix, summary, postfix):
-    prefix.extend(["<p style='color: #666;'>测试执行环境: <b>DEV</b></p>"])
+    """
+    构建顶部看板 (Dashboard)
+    """
+    # 提取统计数据
+    # 注意：pytest-html 4.x 的 summary 对象是内部对象，这里我们通过自定义 HTML 注入看板
+    prefix.extend([
+        """
+        <div id="apifox-dashboard" style="display: flex; justify-content: space-around; padding: 20px; background: #fff; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 30px;">
+            <div class="stat-card" style="text-align: center; flex: 1; border-right: 1px solid #eee;">
+                <div style="font-size: 14px; color: #888; margin-bottom: 8px;">测试环境</div>
+                <div style="font-size: 20px; color: #2f54eb; font-weight: 600;">DEV / QA</div>
+            </div>
+            <div class="stat-card" style="text-align: center; flex: 1; border-right: 1px solid #eee;">
+                <div style="font-size: 14px; color: #888; margin-bottom: 8px;">报告生成时间</div>
+                <div style="font-size: 16px; color: #333;">{time}</div>
+            </div>
+            <div class="stat-card" style="text-align: center; flex: 1;">
+                <div style="font-size: 14px; color: #888; margin-bottom: 8px;">项目名称</div>
+                <div style="font-size: 20px; color: #333; font-weight: 600;">AccelerationCloud API</div>
+            </div>
+        </div>
+        """.format(time=os.popen("date '+%Y-%m-%d %H:%M:%S'").read().strip())
+    ])
 
 @pytest.hookimpl(tryfirst=True)
 def pytest_configure(config):
-    # 自定义报告样式
     if not os.path.exists('reports'):
         os.makedirs('reports')
     
-    # 注入 CSS
+    # 注入 Apifox 风格的现代 CSS
     config._html_report_style = """
-        h1 { color: #2c3e50; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; padding: 20px; }
-        .summary { background-color: #f8f9fa; border-radius: 8px; padding: 15px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-        #results-table { border-collapse: separate; border-spacing: 0 8px; width: 100%; }
-        #results-table th { background-color: #34495e; color: white; border: none; padding: 12px; }
-        #results-table td { background-color: white; border: none; padding: 12px; border-top: 1px solid #eee; border-bottom: 1px solid #eee; }
-        #results-table tr:hover td { background-color: #f1f4f7; }
-        .passed { color: #27ae60; font-weight: bold; }
-        .failed { color: #e74c3c; font-weight: bold; }
-        .skipped { color: #f39c12; font-weight: bold; }
-        .log { background-color: #2d3436; color: #dfe6e9; padding: 10px; border-radius: 4px; font-family: 'Consolas', monospace; }
+        /* 全局样式 */
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f7fa; color: #333; margin: 0; padding: 20px; }
+        h1 { font-size: 28px; color: #1f1f1f; text-align: left; margin-bottom: 30px; border-left: 5px solid #2f54eb; padding-left: 15px; }
+        
+        /* 看板卡片 */
+        .summary { background: transparent; border: none; padding: 0; }
+        .summary h2 { display: none; } /* 隐藏原生的 Summary 标题 */
+        
+        /* 结果表格美化 */
+        #results-table { border-collapse: separate; border-spacing: 0 10px; width: 100%; margin-top: 20px; }
+        #results-table th { background-color: transparent; color: #8c8c8c; font-weight: 500; text-align: left; padding: 12px 20px; border: none; text-transform: uppercase; font-size: 12px; }
+        #results-table td { background-color: #fff; border: none; padding: 16px 20px; transition: all 0.3s ease; }
+        #results-table tr { box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+        #results-table td:first-child { border-radius: 8px 0 0 8px; }
+        #results-table td:last-child { border-radius: 0 8px 8px 0; }
+        #results-table tr:hover td { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); background-color: #fafafa; }
+        
+        /* 状态标签 */
+        .passed { color: #52c41a; background: #f6ffed; border: 1px solid #b7eb8f; padding: 4px 12px; border-radius: 4px; font-size: 13px; }
+        .failed { color: #f5222d; background: #fff1f0; border: 1px solid #ffa39e; padding: 4px 12px; border-radius: 4px; font-size: 13px; }
+        .skipped { color: #faad14; background: #fffbe6; border: 1px solid #ffe58f; padding: 4px 12px; border-radius: 4px; font-size: 13px; }
+        
+        /* 详情与日志 */
+        .log { background: #1e1e1e; color: #d4d4d4; padding: 15px; border-radius: 8px; font-family: 'Fira Code', 'Cascadia Code', monospace; font-size: 13px; line-height: 1.6; margin-top: 10px; border-left: 4px solid #2f54eb; }
+        .collapsible { cursor: pointer; color: #2f54eb; font-weight: 500; }
+        .collapsible:hover { text-decoration: underline; }
+        
+        /* 环境信息表格 */
+        #environment { background: #fff; border-radius: 12px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: none; }
+        #environment th { background: #fafafa; color: #666; width: 30%; }
     """
 
 @pytest.fixture(scope="session", autouse=True)
