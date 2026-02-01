@@ -1,0 +1,3 @@
+
+[Setup] 正在执行全局登录...
+[Setup] 登录失败: 'AuthAPI' object has no attribute 'login'

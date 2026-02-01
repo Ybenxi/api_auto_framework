@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>Apifox Pro - 自动化测试报告</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #2f54eb;
+            --success-color: #52c41a;
+            --error-color: #f5222d;
+            --warning-color: #faad14;
+            --bg-color: #f0f2f5;
+            --card-bg: #ffffff;
+        }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background: var(--bg-color); margin: 0; padding: 0; color: #333; }
+        .navbar { background: #001529; color: white; padding: 0 40px; height: 64px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+        .navbar .brand { font-size: 20px; font-weight: 600; display: flex; align-items: center; }
+        .navbar .brand::before { content: ''; width: 4px; height: 20px; background: var(--primary-color); margin-right: 12px; border-radius: 2px; }
+        .container { max-width: 1200px; margin: 24px auto; padding: 0 20px; }
+        
+        /* Dashboard */
+        .dashboard { display: flex; gap: 24px; margin-bottom: 24px; }
+        .card { background: var(--card-bg); border-radius: 8px; padding: 24px; box-shadow: 0 1px 2px rgba(0,0,0,0.03); flex: 1; }
+        .chart-container { width: 160px; height: 160px; position: relative; }
+        .chart-info { display: flex; flex-direction: column; justify-content: center; gap: 12px; margin-left: 40px; }
+        .stat-item { display: flex; align-items: center; font-size: 14px; color: #666; }
+        .stat-dot { width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; }
+        
+        /* Case List */
+        .case-table { width: 100%; border-collapse: separate; border-spacing: 0 12px; }
+        .case-table th { text-align: left; padding: 0 16px; color: #8c8c8c; font-weight: 500; font-size: 14px; }
+        .case-row { background: var(--card-bg); cursor: pointer; transition: all 0.3s; box-shadow: 0 1px 2px rgba(0,0,0,0.03); }
+        .case-row:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+        .case-row td { padding: 16px; border-top: 1px solid transparent; border-bottom: 1px solid transparent; }
+        .case-row td:first-child { border-left: 4px solid transparent; border-radius: 8px 0 0 8px; }
+        .case-row td:last-child { border-radius: 0 8px 8px 0; }
+        
+        .status-tag { padding: 4px 12px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+        .status-passed { background: #f6ffed; color: var(--success-color); border: 1px solid #b7eb8f; }
+        .status-failed { background: #fff1f0; color: var(--error-color); border: 1px solid #ffa39e; }
+        .case-row.passed td:first-child { border-left-color: var(--success-color); }
+        .case-row.failed td:first-child { border-left-color: var(--error-color); }
+
+        /* Modal */
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.45); z-index: 1000; justify-content: center; align-items: center; }
+        .modal-content { background: white; width: 80%; max-width: 900px; max-height: 85vh; border-radius: 12px; display: flex; flex-direction: column; overflow: hidden; animation: modalFade 0.3s; }
+        @keyframes modalFade { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        .modal-header { padding: 16px 24px; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between; align-items: center; }
+        .modal-body { padding: 24px; overflow-y: auto; background: #fafafa; }
+        .close-btn { cursor: pointer; font-size: 20px; color: #999; }
+        
+        .detail-section { margin-bottom: 24px; }
+        .detail-title { font-size: 14px; font-weight: 600; margin-bottom: 12px; color: #1f1f1f; display: flex; align-items: center; }
+        .detail-title::before { content: ''; width: 3px; height: 14px; background: var(--primary-color); margin-right: 8px; }
+        pre { margin: 0; border-radius: 8px; font-family: 'Fira Code', monospace; font-size: 13px; }
+        .info-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; background: #fff; padding: 16px; border-radius: 8px; border: 1px solid #f0f0f0; }
+        .info-label { color: #8c8c8c; font-size: 12px; margin-bottom: 4px; }
+        .info-value { font-size: 14px; font-weight: 500; word-break: break-all; }
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <div class="brand">Apifox Pro 测试报告</div>
+        <div style="font-size: 14px; opacity: 0.8;">环境: <span id="env-tag">DEV</span> | 生成时间: <span id="gen-time"></span></div>
+    </div>
+
+    <div class="container">
+        <div class="dashboard">
+            <div class="card" style="display: flex; align-items: center;">
+                <div class="chart-container">
+                    <canvas id="summaryChart"></canvas>
+                </div>
+                <div class="chart-info">
+                    <div class="stat-item"><span class="stat-dot" style="background: var(--success-color);"></span> 成功: <b id="cnt-passed" style="margin-left: 8px; color: var(--success-color);">0</b></div>
+                    <div class="stat-item"><span class="stat-dot" style="background: var(--error-color);"></span> 失败: <b id="cnt-failed" style="margin-left: 8px; color: var(--error-color);">0</b></div>
+                    <div class="stat-item"><span class="stat-dot" style="background: var(--warning-color);"></span> 跳过: <b id="cnt-skipped" style="margin-left: 8px; color: var(--warning-color);">0</b></div>
+                </div>
+            </div>
+            <div class="card" style="flex: 0.6; display: flex; flex-direction: column; justify-content: center; text-align: center;">
+                <div style="font-size: 14px; color: #8c8c8c; margin-bottom: 8px;">综合通过率</div>
+                <div id="pass-rate" style="font-size: 48px; font-weight: 700; color: var(--primary-color);">0%</div>
+            </div>
+        </div>
+
+        <table class="case-table">
+            <thead>
+                <tr>
+                    <th width="10%">状态</th>
+                    <th width="50%">用例名称</th>
+                    <th width="20%">执行时间</th>
+                    <th width="20%">耗时</th>
+                </tr>
+            </thead>
+            <tbody id="case-list">
+                <!-- 动态注入用例行 -->
+            </tbody>
+        </table>
+    </div>
+
+    <div id="detailModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div style="font-weight: 600;" id="modal-title">接口详情</div>
+                <span class="close-btn" onclick="closeModal()">&times;</span>
+            </div>
+            <div class="modal-body" id="modal-body">
+                <!-- 动态注入详情内容 -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const testData = [];
+        const envInfo = {"env": "DEV"};
+
+        document.getElementById('gen-time').innerText = new Date().toLocaleString();
+        document.getElementById('env-tag').innerText = envInfo.env || 'DEV';
+
+        const stats = { passed: 0, failed: 0, skipped: 0 };
+        const listBody = document.getElementById('case-list');
+
+        testData.forEach((item, index) => {
+            stats[item.status]++;
+            const row = document.createElement('tr');
+            row.className = `case-row ${item.status}`;
+            row.onclick = () => showDetail(index);
+            row.innerHTML = `
+                <td><span class="status-tag status-${item.status}">${item.status.toUpperCase()}</span></td>
+                <td style="font-weight: 500;">${item.nodeid.split('::').pop()}</td>
+                <td style="color: #8c8c8c; font-size: 13px;">${item.start_time}</td>
+                <td style="font-weight: 600;">${item.duration.toFixed(3)}s</td>
+            `;
+            listBody.appendChild(row);
+        });
+
+        document.getElementById('cnt-passed').innerText = stats.passed;
+        document.getElementById('cnt-failed').innerText = stats.failed;
+        document.getElementById('cnt-skipped').innerText = stats.skipped;
+        const total = stats.passed + stats.failed + stats.skipped;
+        const rate = total === 0 ? 0 : Math.round((stats.passed / total) * 100);
+        document.getElementById('pass-rate').innerText = rate + '%';
+
+        new Chart(document.getElementById('summaryChart'), {
+            type: 'doughnut',
+            data: {
+                datasets: [{
+                    data: [stats.passed, stats.failed, stats.skipped],
+                    backgroundColor: ['#52c41a', '#f5222d', '#faad14'],
+                    borderWidth: 0
+                }]
+            },
+            options: { cutout: '75%', plugins: { legend: { display: false } } }
+        });
+
+        function showDetail(index) {
+            const data = testData[index];
+            const modal = document.getElementById('detailModal');
+            const body = document.getElementById('modal-body');
+            document.getElementById('modal-title').innerText = data.nodeid;
+            
+            let extraHtml = '';
+            if (data.extra && data.extra.request) {
+                extraHtml = `
+                    <div class="detail-section">
+                        <div class="detail-title">基本信息</div>
+                        <div class="info-grid">
+                            <div><div class="info-label">请求地址</div><div class="info-value" style="color: var(--primary-color);">${data.extra.request.url}</div></div>
+                            <div><div class="info-label">请求方法</div><div class="info-value"><span class="status-tag" style="background: #e6f7ff; color: #1890ff;">${data.extra.request.method}</span></div></div>
+                        </div>
+                    </div>
+                    <div class="detail-section">
+                        <div class="detail-title">请求参数 (Body/Params)</div>
+                        <pre><code class="language-json">${JSON.stringify(data.extra.request.body, null, 2)}</code></pre>
+                    </div>
+                    <div class="detail-section">
+                        <div class="detail-title">响应数据 (Response)</div>
+                        <pre><code class="language-json">${JSON.stringify(data.extra.response.body, null, 2)}</code></pre>
+                    </div>
+                `;
+            } else {
+                extraHtml = '<div style="text-align: center; color: #999; padding: 40px;">该用例未捕获到接口流量数据</div>';
+            }
+
+            body.innerHTML = extraHtml;
+            modal.style.display = 'flex';
+            hljs.highlightAll();
+        }
+
+        function closeModal() { document.getElementById('detailModal').style.display = 'none'; }
+        window.onclick = (event) => { if (event.target.className === 'modal') closeModal(); }
+    </script>
+</body>
+</html>
