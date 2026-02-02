@@ -4,8 +4,67 @@
 """
 import os
 import ast
+import re
 import pandas as pd
 from pathlib import Path
+
+
+class TestCaseVisitor(ast.NodeVisitor):
+    """
+    AST 访问器，用于提取测试用例信息
+    """
+    
+    def __init__(self, module_name: str):
+        self.module_name = module_name
+        self.test_cases = []
+        self.current_class = None
+        self.current_class_markers = []
+    
+    def visit_ClassDef(self, node):
+        """访问类定义节点"""
+        # 保存当前类信息
+        old_class = self.current_class
+        old_markers = self.current_class_markers
+        
+        # 设置当前类
+        self.current_class = node.name
+        self.current_class_markers = extract_markers(node)
+        
+        # 继续遍历类的子节点
+        self.generic_visit(node)
+        
+        # 恢复之前的类信息
+        self.current_class = old_class
+        self.current_class_markers = old_markers
+    
+    def visit_FunctionDef(self, node):
+        """访问函数定义节点"""
+        # 只处理测试函数
+        if node.name.startswith("test_"):
+            # 提取 Docstring
+            description = extract_docstring(node)
+            
+            # 提取 API URI
+            api_uri = extract_api_uri(node)
+            
+            # 提取方法级别的 markers
+            method_markers = extract_markers(node)
+            
+            # 合并类和方法的 markers
+            all_markers = list(set(self.current_class_markers + method_markers))
+            
+            # 添加到测试用例列表
+            self.test_cases.append({
+                "Module": self.module_name,
+                "Class": self.current_class if self.current_class else "",
+                "Function": node.name,
+                "Description": description,
+                "API URI": api_uri,
+                "Markers": ", ".join(all_markers) if all_markers else ""
+            })
+        
+        # 不需要继续遍历函数内部
+        pass
 
 
 def extract_test_cases(test_cases_dir: str = "test_cases") -> list:
@@ -21,9 +80,10 @@ def extract_test_cases(test_cases_dir: str = "test_cases") -> list:
         - Class: 测试类名
         - Function: 测试方法名
         - Description: 测试用例描述（从 Docstring 提取）
+        - API URI: API 路径（从 Docstring 提取）
         - Markers: Pytest markers（如 @pytest.mark.contact）
     """
-    test_cases = []
+    all_test_cases = []
     
     # 获取项目根目录
     project_root = Path(__file__).parent.parent
@@ -46,63 +106,19 @@ def extract_test_cases(test_cases_dir: str = "test_cases") -> list:
             # 获取相对路径作为 Module 名称
             module_name = str(test_file.relative_to(test_cases_path))
             
-            # 遍历 AST 节点
-            for node in ast.walk(tree):
-                # 查找测试类
-                if isinstance(node, ast.ClassDef):
-                    class_name = node.name
-                    
-                    # 提取类级别的 markers
-                    class_markers = extract_markers(node)
-                    
-                    # 遍历类中的方法
-                    for item in node.body:
-                        if isinstance(item, ast.FunctionDef) and item.name.startswith("test_"):
-                            function_name = item.name
-                            
-                            # 提取方法的 Docstring
-                            description = extract_docstring(item)
-                            
-                            # 提取方法级别的 markers
-                            method_markers = extract_markers(item)
-                            
-                            # 合并类和方法的 markers
-                            all_markers = list(set(class_markers + method_markers))
-                            
-                            # 添加到测试用例列表
-                            test_cases.append({
-                                "Module": module_name,
-                                "Class": class_name,
-                                "Function": function_name,
-                                "Description": description,
-                                "Markers": ", ".join(all_markers) if all_markers else ""
-                            })
-                
-                # 查找模块级别的测试函数（不在类中）
-                elif isinstance(node, ast.FunctionDef) and node.name.startswith("test_"):
-                    function_name = node.name
-                    
-                    # 提取 Docstring
-                    description = extract_docstring(node)
-                    
-                    # 提取 markers
-                    markers = extract_markers(node)
-                    
-                    # 添加到测试用例列表
-                    test_cases.append({
-                        "Module": module_name,
-                        "Class": "",
-                        "Function": function_name,
-                        "Description": description,
-                        "Markers": ", ".join(markers) if markers else ""
-                    })
+            # 使用访问器遍历 AST
+            visitor = TestCaseVisitor(module_name)
+            visitor.visit(tree)
+            
+            # 添加到总列表
+            all_test_cases.extend(visitor.test_cases)
         
         except Exception as e:
             print(f"[ERROR] 解析文件 {test_file} 失败: {e}")
     
-    print(f"[INFO] 扫描完成，共找到 {len(test_cases)} 个测试用例")
+    print(f"[INFO] 扫描完成，共找到 {len(all_test_cases)} 个测试用例")
     
-    return test_cases
+    return all_test_cases
 
 
 def extract_docstring(node: ast.AST) -> str:
@@ -132,6 +148,44 @@ def extract_docstring(node: ast.AST) -> str:
         
         # 如果没有找到，返回第一行
         return lines[0].strip()
+    
+    return ""
+
+
+def extract_api_uri(node: ast.AST) -> str:
+    """
+    从 Docstring 中提取 API URI
+    
+    Args:
+        node: AST 节点
+        
+    Returns:
+        API URI（如 /api/v1/cores/actc/contacts）
+    """
+    docstring = ast.get_docstring(node)
+    
+    if docstring:
+        # 尝试匹配多种格式的 URI
+        patterns = [
+            r'Path:\s*([/\w\-{}]+)',  # Path: /api/v1/...
+            r'path:\s*([/\w\-{}]+)',  # path: /api/v1/...
+            r'URI:\s*([/\w\-{}]+)',   # URI: /api/v1/...
+            r'uri:\s*([/\w\-{}]+)',   # uri: /api/v1/...
+            r'URL:\s*([/\w\-{}]+)',   # URL: /api/v1/...
+            r'url:\s*([/\w\-{}]+)',   # url: /api/v1/...
+            r'接口:\s*([/\w\-{}]+)',  # 接口: /api/v1/...
+            r'接口路径:\s*([/\w\-{}]+)',  # 接口路径: /api/v1/...
+            r'测试\s+([A-Z]+)\s+([/\w\-{}]+)',  # 测试 GET /api/v1/...
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, docstring)
+            if match:
+                # 如果是最后一个模式（包含 HTTP 方法），返回完整的 URI
+                if len(match.groups()) > 1:
+                    return match.group(2)
+                else:
+                    return match.group(1)
     
     return ""
 
@@ -205,7 +259,8 @@ def generate_excel(test_cases: list, output_file: str = "test_cases.xlsx"):
         worksheet.column_dimensions["B"].width = 30  # Class
         worksheet.column_dimensions["C"].width = 50  # Function
         worksheet.column_dimensions["D"].width = 80  # Description
-        worksheet.column_dimensions["E"].width = 30  # Markers
+        worksheet.column_dimensions["E"].width = 50  # API URI
+        worksheet.column_dimensions["F"].width = 30  # Markers
         
         # 设置表头样式
         from openpyxl.styles import Font, PatternFill, Alignment
