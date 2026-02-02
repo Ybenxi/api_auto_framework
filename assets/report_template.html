@@ -198,38 +198,17 @@
             </div>
         </div>
 
-        <!-- Two-Level Filter: Module + Suite -->
+        <!-- Module Filter (Single Level) -->
         <div class="tab-filter" style="margin-bottom: 24px;">
-            <div style="display: flex; align-items: center; gap: 24px; width: 100%; flex-wrap: wrap;">
-                <!-- Module Filter (Level 1: Marker) -->
-                <div style="display: flex; align-items: center; gap: 12px; flex: 1; min-width: 250px;">
-                    <label style="font-size: 14px; font-weight: 500; color: #666; white-space: nowrap;">
-                        <span data-lang="zh">一级模块：</span>
-                        <span data-lang="en" style="display:none;">Module:</span>
-                    </label>
-                    <select id="module-filter" onchange="filterByModuleAndSuite()" style="flex: 1; padding: 8px 12px; border: 1px solid #d9d9d9; border-radius: 6px; font-size: 14px; cursor: pointer; background: white;">
-                        <option value="all">
-                            <span data-lang="zh">全部</span>
-                            <span data-lang="en" style="display:none;">All</span>
-                        </option>
-                        <!-- 动态生成 marker 选项 -->
-                    </select>
-                </div>
-                
-                <!-- Suite Filter (Level 2: Test File) -->
-                <div style="display: flex; align-items: center; gap: 12px; flex: 1; min-width: 250px;">
-                    <label style="font-size: 14px; font-weight: 500; color: #666; white-space: nowrap;">
-                        <span data-lang="zh">二级用例：</span>
-                        <span data-lang="en" style="display:none;">Suite:</span>
-                    </label>
-                    <select id="suite-filter" onchange="filterByModuleAndSuite()" style="flex: 1; padding: 8px 12px; border: 1px solid #d9d9d9; border-radius: 6px; font-size: 14px; cursor: pointer; background: white;">
-                        <option value="all">
-                            <span data-lang="zh">全部</span>
-                            <span data-lang="en" style="display:none;">All</span>
-                        </option>
-                        <!-- 动态生成 test file 选项 -->
-                    </select>
-                </div>
+            <div style="display: flex; align-items: center; gap: 12px; max-width: 400px;">
+                <label style="font-size: 14px; font-weight: 500; color: #666; white-space: nowrap;">
+                    <span data-lang="zh">模块：</span>
+                    <span data-lang="en" style="display:none;">Module:</span>
+                </label>
+                <select id="module-filter" onchange="filterByModule()" style="flex: 1; padding: 8px 12px; border: 1px solid #d9d9d9; border-radius: 6px; font-size: 14px; cursor: pointer; background: white;">
+                    <option value="all">All</option>
+                    <!-- 动态生成 marker 选项 -->
+                </select>
             </div>
         </div>
 
@@ -281,7 +260,6 @@
         let currentLang = 'zh';
         let currentFilter = 'all';
         let currentModuleFilter = 'all';
-        let currentSuiteFilter = 'all';
 
         // Initialize report
         function initReport() {
@@ -375,21 +353,7 @@
                 moduleFilter.appendChild(option);
             });
             
-            // Generate suite filter options (based on test files)
-            const testFiles = new Set();
-            testData.forEach(item => {
-                if (item.test_file) {
-                    testFiles.add(item.test_file);
-                }
-            });
-            
-            const suiteFilter = document.getElementById('suite-filter');
-            Array.from(testFiles).sort().forEach(testFile => {
-                const option = document.createElement('option');
-                option.value = testFile;
-                option.textContent = testFile;
-                suiteFilter.appendChild(option);
-            });
+
         }
 
         // Language toggle
@@ -414,21 +378,19 @@
             applyFilters();
         }
 
-        // Filter cases by module and suite (two-level filter)
-        function filterByModuleAndSuite() {
+        // Filter cases by module
+        function filterByModule() {
             currentModuleFilter = document.getElementById('module-filter').value;
-            currentSuiteFilter = document.getElementById('suite-filter').value;
             applyFilters();
         }
 
-        // Apply all filters (status + module + suite)
+        // Apply all filters (status + module)
         function applyFilters() {
             const rows = document.querySelectorAll('.case-row');
             
             rows.forEach(row => {
                 const status = row.getAttribute('data-status');
                 const markers = JSON.parse(row.getAttribute('data-markers') || '[]');
-                const testFile = row.getAttribute('data-test-file');
                 
                 // Status filter
                 const statusMatch = currentFilter === 'all' || status === currentFilter;
@@ -439,11 +401,8 @@
                     moduleMatch = markers.includes(currentModuleFilter);
                 }
                 
-                // Suite filter (based on test file)
-                const suiteMatch = currentSuiteFilter === 'all' || testFile === currentSuiteFilter;
-                
                 // Show row only if all filters match
-                if (statusMatch && moduleMatch && suiteMatch) {
+                if (statusMatch && moduleMatch) {
                     row.classList.remove('hidden');
                 } else {
                     row.classList.add('hidden');
