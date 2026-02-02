@@ -3,6 +3,7 @@ Contact Create 接口测试用例
 测试 POST /api/v1/cores/{core}/contacts 接口
 """
 import pytest
+import time
 from api.contact_api import ContactAPI
 
 
@@ -35,12 +36,16 @@ class TestContactCreate:
         
         # 2. 准备创建数据（仅必需字段）
         print("\n[Step] 准备创建 Contact 数据（仅必需字段）")
+        
+        # 使用随机 Email 避免重复
+        random_email = f"auto_test_{int(time.time())}@example.com"
+        
         contact_data = {
             "account_id": FIXED_ACCOUNT_ID,
             "first_name": "John",
             "last_name": "Doe",
             "birth_date": "1990-01-01",
-            "email": "john.doe@example.com"
+            "email": random_email
         }
         
         print(f"  Account ID: {FIXED_ACCOUNT_ID}")
@@ -57,9 +62,16 @@ class TestContactCreate:
         assert create_response.status_code == 200, \
             f"Create Contact 接口返回状态码错误: {create_response.status_code}, Response: {create_response.text}"
         
-        # 5. 解析响应（修复：提取 data 字段）
+        # 5. 解析响应（修复：提取 data 字段，增强健壮性）
         print("[Step] 解析响应并验证数据")
         response_body = create_response.json()
+        
+        # 检查是否是 Email 重复错误（code 599）
+        if response_body.get("code") == 599:
+            print("  ⚠ Email 已存在（Code 599），这不应该发生（使用了随机 Email）")
+            print(f"  错误信息: {response_body.get('error_message') or response_body.get('message')}")
+            print(f"  响应体: {response_body}")
+            pytest.fail("Email 重复错误，请检查随机 Email 生成逻辑")
         
         # 检查响应结构
         if "data" in response_body:
@@ -67,9 +79,17 @@ class TestContactCreate:
         else:
             created_contact = response_body
         
+        # 增强健壮性：检查 created_contact 是否为 None
+        if created_contact is None:
+            print("  ❌ created_contact 为 None")
+            print(f"  响应体: {response_body}")
+            print(f"  响应码: {response_body.get('code')}")
+            print(f"  错误信息: {response_body.get('error_message') or response_body.get('message')}")
+            pytest.fail(f"创建失败，data 为 None。响应: {response_body}")
+        
         # 6. 验证返回的 ID 存在
         print("[Step] 验证返回的 Contact ID 存在")
-        assert "id" in created_contact, "响应中缺少 id 字段"
+        assert "id" in created_contact, f"响应中缺少 id 字段。响应: {created_contact}"
         assert created_contact["id"] is not None, "Contact ID 为 null"
         
         # 7. 验证 account_id
