@@ -74,6 +74,9 @@ def pytest_runtest_makereport(item, call):
         nodeid_parts = item.nodeid.split("::")
         module_name = nodeid_parts[0].replace("test_cases/", "").replace("/", " > ").replace(".py", "")
         
+        # 提取测试文件名（不包含路径）
+        test_file = nodeid_parts[0].split("/")[-1].replace(".py", "")
+        
         test_results.append({
             "nodeid": item.nodeid,
             "status": report.outcome,
@@ -81,6 +84,7 @@ def pytest_runtest_makereport(item, call):
             "start_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "markers": markers,
             "module": module_name,
+            "test_file": test_file,
             "extra": extra_data
         })
 

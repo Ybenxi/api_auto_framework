@@ -202,8 +202,9 @@ class TestAccountUpdate:
     def test_update_account_invalid_id(self, login_session):
         """
         测试场景4：使用无效的 account_id 更新
-        验证点：
-        1. 接口返回错误状态码（404 或其他）
+        验证点（基于真实业务行为）：
+        1. 服务器出于安全考虑（防遍历），返回 200 OK
+        2. 响应体包含特定的错误码：code=506, error_message="visibility permission deny"
         """
         # 1. 初始化 API 对象
         account_api = AccountAPI(session=login_session)
@@ -217,9 +218,23 @@ class TestAccountUpdate:
         print(f"\n[Step] 使用无效的账户 ID: {invalid_id}")
         update_response = account_api.update_account(invalid_id, update_data)
         
-        # 3. 验证返回错误状态码
-        print("[Step] 验证返回非 200 状态码")
-        assert update_response.status_code != 200, \
-            f"使用无效 ID 应该返回错误状态码，但实际返回了 {update_response.status_code}"
+        # 3. 验证返回 200 状态码（服务器防遍历设计）
+        print("[Step] 验证返回 200 状态码")
+        assert update_response.status_code == 200, \
+            f"服务器应该返回 200，但实际返回了 {update_response.status_code}"
         
-        print(f"✓ 使用无效 ID 正确返回错误状态码: {update_response.status_code}")
+        # 4. 验证响应体包含错误信息
+        print("[Step] 验证响应体包含错误码")
+        response_body = update_response.json()
+        
+        # 验证响应结构完全匹配
+        expected_response = {
+            "code": 506,
+            "error_message": "visibility permission deny",
+            "data": None
+        }
+        
+        assert response_body == expected_response, \
+            f"响应体不匹配\n期望: {expected_response}\n实际: {response_body}"
+        
+        print(f"✓ 使用无效 ID 正确返回错误信息: code=506, error_message='visibility permission deny'")

@@ -361,3 +361,216 @@ class AccountAPI:
                 "message": f"Failed to parse response: {str(e)}",
                 "raw_response": response.text
             }
+
+    def get_account_contacts(
+        self,
+        account_id: str,
+        name: Optional[str] = None,
+        email: Optional[str] = None,
+        status: Optional[str] = None,
+        page: int = 0,
+        size: int = 10,
+        **kwargs
+    ) -> requests.Response:
+        """
+        获取指定账户关联的 Contacts
+        
+        Args:
+            account_id: Profile Account ID
+            name: Contact 姓名，用于筛选
+            email: Contact 邮箱，用于筛选
+            status: Contact 状态，用于筛选
+            page: 页码，默认为 0
+            size: 每页大小，默认为 10
+            **kwargs: 其他可选参数
+            
+        Returns:
+            requests.Response: 响应对象
+            
+        Example:
+            # 获取所有 Contacts
+            response = account_api.get_account_contacts("1717780644697YVO0G")
+            
+            # 使用筛选条件
+            response = account_api.get_account_contacts(
+                "1717780644697YVO0G",
+                status="Active",
+                page=0,
+                size=20
+            )
+        """
+        url = self.config.get_full_url(f"/accounts/{account_id}/contacts")
+        params = {"page": page, "size": size}
+        
+        # 添加可选参数
+        if name is not None:
+            params["name"] = name
+        if email is not None:
+            params["email"] = email
+        if status is not None:
+            params["status"] = status
+        
+        # 添加其他自定义参数
+        params.update(kwargs)
+        
+        response = self.session.get(url, params=params)
+        return response
+
+    def parse_contacts_response(self, response: requests.Response) -> dict:
+        """
+        解析 Contacts 列表响应
+        
+        Args:
+            response: requests.Response 对象
+            
+        Returns:
+            dict: 包含 content（Contacts 列表）、pageable（分页信息）等字段
+            
+        Example:
+            response = account_api.get_account_contacts("1717780644697YVO0G")
+            parsed = account_api.parse_contacts_response(response)
+            contacts = parsed['content']
+            total = parsed['total_elements']
+        """
+        if response.status_code != 200:
+            return {
+                "error": True,
+                "status_code": response.status_code,
+                "message": response.text
+            }
+        
+        try:
+            data = response.json()
+            # 兼容不同的响应结构
+            if "data" in data:
+                content_data = data["data"]
+            else:
+                content_data = data
+            
+            return {
+                "error": False,
+                "content": content_data.get("content", []),
+                "pageable": content_data.get("pageable", {}),
+                "total_elements": content_data.get("total_elements", 0),
+                "total_pages": content_data.get("total_pages", 0),
+                "size": content_data.get("size", 0),
+                "number": content_data.get("number", 0),
+                "first": content_data.get("first", False),
+                "last": content_data.get("last", False),
+                "empty": content_data.get("empty", True)
+            }
+        except Exception as e:
+            return {
+                "error": True,
+                "message": f"Failed to parse response: {str(e)}",
+                "raw_response": response.text
+            }
+
+    def get_settled_transactions(
+        self,
+        account_id: str,
+        begin_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        security: Optional[str] = None,
+        page: int = 0,
+        size: int = 10,
+        **kwargs
+    ) -> requests.Response:
+        """
+        获取指定账户的 Settled Transactions
+        
+        Args:
+            account_id: Profile Account ID
+            begin_date: 开始日期（settle_date），格式：YYYY-MM-DD
+            end_date: 结束日期（settle_date），格式：YYYY-MM-DD
+            security: 证券模糊查询（security name, symbol 或 CUSIP）
+            page: 页码，默认为 0
+            size: 每页大小，默认为 10
+            **kwargs: 其他可选参数
+            
+        Returns:
+            requests.Response: 响应对象
+            
+        Example:
+            # 获取所有 Settled Transactions
+            response = account_api.get_settled_transactions("1717780644697YVO0G")
+            
+            # 使用日期范围筛选
+            response = account_api.get_settled_transactions(
+                "1717780644697YVO0G",
+                begin_date="2024-01-01",
+                end_date="2024-12-31"
+            )
+            
+            # 使用证券筛选
+            response = account_api.get_settled_transactions(
+                "1717780644697YVO0G",
+                security="AAPL"
+            )
+        """
+        url = self.config.get_full_url(f"/accounts/{account_id}/settled-transactions")
+        params = {"page": page, "size": size}
+        
+        # 添加可选参数
+        if begin_date is not None:
+            params["begin_date"] = begin_date
+        if end_date is not None:
+            params["end_date"] = end_date
+        if security is not None:
+            params["security"] = security
+        
+        # 添加其他自定义参数
+        params.update(kwargs)
+        
+        response = self.session.get(url, params=params)
+        return response
+
+    def parse_transactions_response(self, response: requests.Response) -> dict:
+        """
+        解析 Settled Transactions 列表响应
+        
+        Args:
+            response: requests.Response 对象
+            
+        Returns:
+            dict: 包含 content（Transactions 列表）、pageable（分页信息）等字段
+            
+        Example:
+            response = account_api.get_settled_transactions("1717780644697YVO0G")
+            parsed = account_api.parse_transactions_response(response)
+            transactions = parsed['content']
+            total = parsed['total_elements']
+        """
+        if response.status_code != 200:
+            return {
+                "error": True,
+                "status_code": response.status_code,
+                "message": response.text
+            }
+        
+        try:
+            data = response.json()
+            # 兼容不同的响应结构
+            if "data" in data:
+                content_data = data["data"]
+            else:
+                content_data = data
+            
+            return {
+                "error": False,
+                "content": content_data.get("content", []),
+                "pageable": content_data.get("pageable", {}),
+                "total_elements": content_data.get("total_elements", 0),
+                "total_pages": content_data.get("total_pages", 0),
+                "size": content_data.get("size", 0),
+                "number": content_data.get("number", 0),
+                "first": content_data.get("first", False),
+                "last": content_data.get("last", False),
+                "empty": content_data.get("empty", True)
+            }
+        except Exception as e:
+            return {
+                "error": True,
+                "message": f"Failed to parse response: {str(e)}",
+                "raw_response": response.text
+            }

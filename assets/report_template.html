@@ -198,20 +198,38 @@
             </div>
         </div>
 
-        <!-- Module Filter Dropdown -->
+        <!-- Two-Level Filter: Module + Suite -->
         <div class="tab-filter" style="margin-bottom: 24px;">
-            <div style="display: flex; align-items: center; gap: 12px; width: 100%;">
-                <label style="font-size: 14px; font-weight: 500; color: #666;">
-                    <span data-lang="zh">模块筛选：</span>
-                    <span data-lang="en" style="display:none;">Module Filter:</span>
-                </label>
-                <select id="module-filter" onchange="filterByModule()" style="flex: 1; max-width: 300px; padding: 8px 12px; border: 1px solid #d9d9d9; border-radius: 6px; font-size: 14px; cursor: pointer; background: white;">
-                    <option value="all">
-                        <span data-lang="zh">全部模块</span>
-                        <span data-lang="en" style="display:none;">All Modules</span>
-                    </option>
-                    <!-- 动态生成选项 -->
-                </select>
+            <div style="display: flex; align-items: center; gap: 24px; width: 100%; flex-wrap: wrap;">
+                <!-- Module Filter (Level 1: Marker) -->
+                <div style="display: flex; align-items: center; gap: 12px; flex: 1; min-width: 250px;">
+                    <label style="font-size: 14px; font-weight: 500; color: #666; white-space: nowrap;">
+                        <span data-lang="zh">一级模块：</span>
+                        <span data-lang="en" style="display:none;">Module:</span>
+                    </label>
+                    <select id="module-filter" onchange="filterByModuleAndSuite()" style="flex: 1; padding: 8px 12px; border: 1px solid #d9d9d9; border-radius: 6px; font-size: 14px; cursor: pointer; background: white;">
+                        <option value="all">
+                            <span data-lang="zh">全部</span>
+                            <span data-lang="en" style="display:none;">All</span>
+                        </option>
+                        <!-- 动态生成 marker 选项 -->
+                    </select>
+                </div>
+                
+                <!-- Suite Filter (Level 2: Test File) -->
+                <div style="display: flex; align-items: center; gap: 12px; flex: 1; min-width: 250px;">
+                    <label style="font-size: 14px; font-weight: 500; color: #666; white-space: nowrap;">
+                        <span data-lang="zh">二级用例：</span>
+                        <span data-lang="en" style="display:none;">Suite:</span>
+                    </label>
+                    <select id="suite-filter" onchange="filterByModuleAndSuite()" style="flex: 1; padding: 8px 12px; border: 1px solid #d9d9d9; border-radius: 6px; font-size: 14px; cursor: pointer; background: white;">
+                        <option value="all">
+                            <span data-lang="zh">全部</span>
+                            <span data-lang="en" style="display:none;">All</span>
+                        </option>
+                        <!-- 动态生成 test file 选项 -->
+                    </select>
+                </div>
             </div>
         </div>
 
@@ -263,6 +281,7 @@
         let currentLang = 'zh';
         let currentFilter = 'all';
         let currentModuleFilter = 'all';
+        let currentSuiteFilter = 'all';
 
         // Initialize report
         function initReport() {
@@ -285,6 +304,7 @@
                 row.setAttribute('data-status', item.status);
                 row.setAttribute('data-module', item.module || 'unknown');
                 row.setAttribute('data-markers', JSON.stringify(item.markers || []));
+                row.setAttribute('data-test-file', item.test_file || 'unknown');
                 row.onclick = () => showDetail(index);
                 
                 const statusText = {
@@ -332,20 +352,43 @@
                 options: { cutout: '70%', plugins: { legend: { display: false } } }
             });
 
-            // Generate module filter options
-            const modules = new Set();
+            // Generate module filter options (based on markers)
+            const markers = new Set();
             testData.forEach(item => {
-                if (item.module) {
-                    modules.add(item.module);
+                if (item.markers && item.markers.length > 0) {
+                    item.markers.forEach(marker => {
+                        // 过滤掉 pytest 内置 marker
+                        if (!['parametrize', 'usefixtures', 'filterwarnings', 'skip', 'skipif', 'xfail'].includes(marker)) {
+                            markers.add(marker);
+                        }
+                    });
                 }
             });
             
             const moduleFilter = document.getElementById('module-filter');
-            Array.from(modules).sort().forEach(module => {
+            Array.from(markers).sort().forEach(marker => {
                 const option = document.createElement('option');
-                option.value = module;
-                option.textContent = module;
+                option.value = marker;
+                // 将 marker 名称转换为友好的显示名（首字母大写，下划线替换为空格）
+                const displayName = marker.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+                option.textContent = displayName;
                 moduleFilter.appendChild(option);
+            });
+            
+            // Generate suite filter options (based on test files)
+            const testFiles = new Set();
+            testData.forEach(item => {
+                if (item.test_file) {
+                    testFiles.add(item.test_file);
+                }
+            });
+            
+            const suiteFilter = document.getElementById('suite-filter');
+            Array.from(testFiles).sort().forEach(testFile => {
+                const option = document.createElement('option');
+                option.value = testFile;
+                option.textContent = testFile;
+                suiteFilter.appendChild(option);
             });
         }
 
@@ -371,24 +414,36 @@
             applyFilters();
         }
 
-        // Filter cases by module
-        function filterByModule() {
+        // Filter cases by module and suite (two-level filter)
+        function filterByModuleAndSuite() {
             currentModuleFilter = document.getElementById('module-filter').value;
+            currentSuiteFilter = document.getElementById('suite-filter').value;
             applyFilters();
         }
 
-        // Apply all filters
+        // Apply all filters (status + module + suite)
         function applyFilters() {
             const rows = document.querySelectorAll('.case-row');
             
             rows.forEach(row => {
                 const status = row.getAttribute('data-status');
-                const module = row.getAttribute('data-module');
+                const markers = JSON.parse(row.getAttribute('data-markers') || '[]');
+                const testFile = row.getAttribute('data-test-file');
                 
+                // Status filter
                 const statusMatch = currentFilter === 'all' || status === currentFilter;
-                const moduleMatch = currentModuleFilter === 'all' || module === currentModuleFilter;
                 
-                if (statusMatch && moduleMatch) {
+                // Module filter (based on markers)
+                let moduleMatch = currentModuleFilter === 'all';
+                if (!moduleMatch && markers.length > 0) {
+                    moduleMatch = markers.includes(currentModuleFilter);
+                }
+                
+                // Suite filter (based on test file)
+                const suiteMatch = currentSuiteFilter === 'all' || testFile === currentSuiteFilter;
+                
+                // Show row only if all filters match
+                if (statusMatch && moduleMatch && suiteMatch) {
                     row.classList.remove('hidden');
                 } else {
                     row.classList.add('hidden');
