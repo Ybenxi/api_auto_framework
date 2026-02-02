@@ -1,7 +1,7 @@
 name: Daily Interface Test
 
 on:
-  # 定时触发：每天北京时间凌晨 2:00（UTC 18:00 ）
+  # 定时触发：每天北京时间凌晨 2:00（UTC 18:00）
   schedule:
     - cron: '0 18 * * *'
   
@@ -28,46 +28,132 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          pip install pytest pytest-html pandas openpyxl
+          pip install pytest pytest-html pytest-json-report pandas openpyxl requests
       
       # 4. 运行测试
       - name: Run tests
         id: run_tests
         continue-on-error: true
+        env:
+          ENV: DEV
+          CORE: actc
         run: |
           mkdir -p reports
-          pytest test_cases/ -v --html=reports/report.html --self-contained-html || true
+          pytest test_cases/ -v \
+            --html=reports/temp_report.html \
+            --self-contained-html \
+            --json-report \
+            --json-report-file=reports/report.json || true
           echo "TEST_EXIT_CODE=$?" >> $GITHUB_ENV
       
-      # 5. 生成测试用例列表
+      # 5. 精准抓取最新的 HTML 报告
+      - name: Find and rename latest report
+        if: always()
+        run: |
+          # 查找 reports 目录下最新的 .html 文件
+          LATEST_REPORT=$(ls -t reports/*.html 2>/dev/null | head -1)
+          
+          if [ -n "$LATEST_REPORT" ]; then
+            echo "找到报告文件: $LATEST_REPORT"
+            # 重命名为 final_report.html
+            cp "$LATEST_REPORT" reports/final_report.html
+            echo "已重命名为: reports/final_report.html"
+          else
+            echo "警告: 未找到 HTML 报告文件"
+          fi
+      
+      # 6. 解析测试结果并提取统计信息
+      - name: Parse test results
+        if: always()
+        run: |
+          python3 << 'EOF'
+          import json
+          import os
+          from pathlib import Path
+          
+          # 读取 JSON 报告
+          report_file = Path("reports/report.json")
+          
+          if report_file.exists():
+              with open(report_file, "r", encoding="utf-8") as f:
+                  report_data = json.load(f)
+              
+              # 提取统计信息
+              summary = report_data.get("summary", {})
+              
+              total = summary.get("total", 0)
+              passed = summary.get("passed", 0)
+              failed = summary.get("failed", 0)
+              skipped = summary.get("skipped", 0)
+              
+              # 计算通过率
+              if total > 0:
+                  pass_rate = round((passed / total) * 100, 2)
+              else:
+                  pass_rate = 0.0
+              
+              # 获取环境信息
+              environment = report_data.get("environment", {})
+              python_version = environment.get("Python", "Unknown")
+              platform = environment.get("Platform", "Unknown")
+              
+              # 写入环境变量
+              with open(os.environ["GITHUB_ENV"], "a") as env_file:
+                  env_file.write(f"TEST_TOTAL={total}\n")
+                  env_file.write(f"TEST_PASSED={passed}\n")
+                  env_file.write(f"TEST_FAILED={failed}\n")
+                  env_file.write(f"TEST_SKIPPED={skipped}\n")
+                  env_file.write(f"TEST_PASS_RATE={pass_rate}\n")
+                  env_file.write(f"TEST_PYTHON={python_version}\n")
+                  env_file.write(f"TEST_PLATFORM={platform}\n")
+              
+              print(f"✓ 测试统计信息已提取:")
+              print(f"  Total: {total}")
+              print(f"  Passed: {passed}")
+              print(f"  Failed: {failed}")
+              print(f"  Skipped: {skipped}")
+              print(f"  Pass Rate: {pass_rate}%")
+          else:
+              print("警告: 未找到 report.json 文件")
+              # 设置默认值
+              with open(os.environ["GITHUB_ENV"], "a") as env_file:
+                  env_file.write("TEST_TOTAL=0\n")
+                  env_file.write("TEST_PASSED=0\n")
+                  env_file.write("TEST_FAILED=0\n")
+                  env_file.write("TEST_SKIPPED=0\n")
+                  env_file.write("TEST_PASS_RATE=0.0\n")
+                  env_file.write("TEST_PYTHON=Unknown\n")
+                  env_file.write("TEST_PLATFORM=Unknown\n")
+          EOF
+      
+      # 7. 生成测试用例列表
       - name: Generate test case list
         if: always()
         run: |
           python utils/generate_case_list.py
       
-      # 6. 获取测试统计信息
+      # 8. 获取测试统计信息
       - name: Get test statistics
         if: always()
         id: test_stats
         run: |
-          # 从 pytest 输出中提取统计信息（如果有）
-          if [ -f reports/report.html ]; then
-            echo "REPORT_EXISTS=true" >> $GITHUB_ENV
-          else
-            echo "REPORT_EXISTS=false" >> $GITHUB_ENV
-          fi
-          
           # 获取当前日期
-          echo "TEST_DATE=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
+          echo "TEST_DATE=$(date +'%Y-%m-%d %H:%M:%S')" >> $GITHUB_ENV
           
           # 获取构建状态
           if [ "${{ env.TEST_EXIT_CODE }}" == "0" ]; then
             echo "BUILD_STATUS=✅ Success" >> $GITHUB_ENV
+            echo "BUILD_STATUS_ICON=✅" >> $GITHUB_ENV
           else
             echo "BUILD_STATUS=❌ Failed" >> $GITHUB_ENV
+            echo "BUILD_STATUS_ICON=❌" >> $GITHUB_ENV
           fi
+          
+          # 获取环境信息
+          echo "TEST_ENV=DEV" >> $GITHUB_ENV
+          echo "TEST_CORE=actc" >> $GITHUB_ENV
       
-      # 7. 发送邮件通知
+      # 9. 发送邮件通知
       - name: Send email notification
         if: always()
         uses: dawidd6/action-send-mail@v3
@@ -76,27 +162,196 @@ jobs:
           server_port: 587
           username: ${{ secrets.MAIL_USERNAME }}
           password: ${{ secrets.MAIL_PASSWORD }}
-          subject: '[Auto Test] Ben xi Interface Test Report - ${{ env.TEST_DATE }}'
+          subject: '${{ env.BUILD_STATUS_ICON }} Ben xi Interface Test Report - ${{ env.TEST_DATE }}'
           to: ${{ secrets.MAIL_TO }}
           from: ${{ secrets.MAIL_USERNAME }}
-          body: |
-            Ben xi Interface Test Report
-            ========================================
-            
-            Build Status: ${{ env.BUILD_STATUS }}
-            Test Date: ${{ env.TEST_DATE }}
-            Workflow URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-            
-            ========================================
-            
-            Please check the attached files for detailed test results:
-            - report.html: HTML test report
-            - test_cases.xlsx: Test case list
-            
-            ========================================
-            
-            This is an automated email from GitHub Actions.
+          html_body: |
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <style>
+                    body {
+                        font-family: Arial, sans-serif;
+                        line-height: 1.6;
+                        color: #333;
+                        max-width: 800px;
+                        margin: 0 auto;
+                        padding: 20px;
+                    }
+                    .header {
+                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        color: white;
+                        padding: 30px;
+                        border-radius: 10px;
+                        text-align: center;
+                        margin-bottom: 30px;
+                    }
+                    .header h1 {
+                        margin: 0;
+                        font-size: 28px;
+                    }
+                    .header p {
+                        margin: 10px 0 0 0;
+                        opacity: 0.9;
+                    }
+                    .status-badge {
+                        display: inline-block;
+                        padding: 8px 16px;
+                        border-radius: 20px;
+                        font-weight: bold;
+                        margin-top: 10px;
+                    }
+                    .status-success {
+                        background-color: #10b981;
+                        color: white;
+                    }
+                    .status-failed {
+                        background-color: #ef4444;
+                        color: white;
+                    }
+                    .info-table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        margin: 20px 0;
+                        background: white;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                        border-radius: 8px;
+                        overflow: hidden;
+                    }
+                    .info-table th {
+                        background-color: #4472C4;
+                        color: white;
+                        padding: 12px;
+                        text-align: left;
+                        font-weight: bold;
+                    }
+                    .info-table td {
+                        padding: 12px;
+                        border-bottom: 1px solid #e5e7eb;
+                    }
+                    .info-table tr:last-child td {
+                        border-bottom: none;
+                    }
+                    .info-table tr:nth-child(even) {
+                        background-color: #f9fafb;
+                    }
+                    .metric {
+                        font-size: 24px;
+                        font-weight: bold;
+                        color: #4472C4;
+                    }
+                    .metric-label {
+                        font-size: 14px;
+                        color: #6b7280;
+                        font-weight: normal;
+                    }
+                    .pass-rate {
+                        font-size: 32px;
+                        font-weight: bold;
+                        color: #10b981;
+                    }
+                    .footer {
+                        margin-top: 30px;
+                        padding: 20px;
+                        background-color: #f3f4f6;
+                        border-radius: 8px;
+                        text-align: center;
+                        color: #6b7280;
+                        font-size: 14px;
+                    }
+                    .footer a {
+                        color: #4472C4;
+                        text-decoration: none;
+                    }
+                    .section-title {
+                        font-size: 20px;
+                        font-weight: bold;
+                        color: #1f2937;
+                        margin: 30px 0 15px 0;
+                        padding-bottom: 10px;
+                        border-bottom: 2px solid #4472C4;
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <h1>${{ env.BUILD_STATUS_ICON }} Ben xi Interface Test Report</h1>
+                    <p>Automated Test Execution Report</p>
+                    <div class="status-badge ${{ env.TEST_EXIT_CODE == '0' && 'status-success' || 'status-failed' }}">
+                        ${{ env.BUILD_STATUS }}
+                    </div>
+                </div>
+                
+                <div class="section-title">📊 Test Execution Summary</div>
+                <table class="info-table">
+                    <tr>
+                        <th>Metric</th>
+                        <th>Value</th>
+                    </tr>
+                    <tr>
+                        <td><span class="metric-label">Total Tests</span></td>
+                        <td><span class="metric">${{ env.TEST_TOTAL }}</span></td>
+                    </tr>
+                    <tr>
+                        <td><span class="metric-label">Passed</span></td>
+                        <td><span class="metric" style="color: #10b981;">${{ env.TEST_PASSED }}</span></td>
+                    </tr>
+                    <tr>
+                        <td><span class="metric-label">Failed</span></td>
+                        <td><span class="metric" style="color: #ef4444;">${{ env.TEST_FAILED }}</span></td>
+                    </tr>
+                    <tr>
+                        <td><span class="metric-label">Skipped</span></td>
+                        <td><span class="metric" style="color: #f59e0b;">${{ env.TEST_SKIPPED }}</span></td>
+                    </tr>
+                    <tr>
+                        <td><span class="metric-label">Pass Rate</span></td>
+                        <td><span class="pass-rate">${{ env.TEST_PASS_RATE }}%</span></td>
+                    </tr>
+                </table>
+                
+                <div class="section-title">🔧 Environment Information</div>
+                <table class="info-table">
+                    <tr>
+                        <th>Item</th>
+                        <th>Value</th>
+                    </tr>
+                    <tr>
+                        <td>Environment</td>
+                        <td><strong>${{ env.TEST_ENV }}</strong></td>
+                    </tr>
+                    <tr>
+                        <td>Core</td>
+                        <td><strong>${{ env.TEST_CORE }}</strong></td>
+                    </tr>
+                    <tr>
+                        <td>Python Version</td>
+                        <td>${{ env.TEST_PYTHON }}</td>
+                    </tr>
+                    <tr>
+                        <td>Platform</td>
+                        <td>${{ env.TEST_PLATFORM }}</td>
+                    </tr>
+                    <tr>
+                        <td>Execution Time</td>
+                        <td>${{ env.TEST_DATE }}</td>
+                    </tr>
+                </table>
+                
+                <div class="section-title">📎 Attachments</div>
+                <p>Please check the attached files for detailed test results:</p>
+                <ul>
+                    <li><strong>final_report.html</strong> - Detailed HTML test report with all test cases</li>
+                    <li><strong>test_cases.xlsx</strong> - Complete test case list with API URIs and markers</li>
+                </ul>
+                
+                <div class="footer">
+                    <p>This is an automated email from GitHub Actions</p>
+                    <p><a href="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}">View Workflow Run</a></p>
+                </div>
+            </body>
+            </html>
           attachments: |
-            reports/report.html
+            reports/final_report.html
             test_cases.xlsx
           priority: normal
