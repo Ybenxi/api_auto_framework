@@ -198,6 +198,23 @@
             </div>
         </div>
 
+        <!-- Module Filter Dropdown -->
+        <div class="tab-filter" style="margin-bottom: 24px;">
+            <div style="display: flex; align-items: center; gap: 12px; width: 100%;">
+                <label style="font-size: 14px; font-weight: 500; color: #666;">
+                    <span data-lang="zh">模块筛选：</span>
+                    <span data-lang="en" style="display:none;">Module Filter:</span>
+                </label>
+                <select id="module-filter" onchange="filterByModule()" style="flex: 1; max-width: 300px; padding: 8px 12px; border: 1px solid #d9d9d9; border-radius: 6px; font-size: 14px; cursor: pointer; background: white;">
+                    <option value="all">
+                        <span data-lang="zh">全部模块</span>
+                        <span data-lang="en" style="display:none;">All Modules</span>
+                    </option>
+                    <!-- 动态生成选项 -->
+                </select>
+            </div>
+        </div>
+
         <table class="case-table">
             <thead>
                 <tr>
@@ -245,6 +262,7 @@
         const envInfo = {{ENV_JSON}};
         let currentLang = 'zh';
         let currentFilter = 'all';
+        let currentModuleFilter = 'all';
 
         // Initialize report
         function initReport() {
@@ -265,6 +283,8 @@
                 const row = document.createElement('tr');
                 row.className = `case-row ${item.status}`;
                 row.setAttribute('data-status', item.status);
+                row.setAttribute('data-module', item.module || 'unknown');
+                row.setAttribute('data-markers', JSON.stringify(item.markers || []));
                 row.onclick = () => showDetail(index);
                 
                 const statusText = {
@@ -311,6 +331,22 @@
                 },
                 options: { cutout: '70%', plugins: { legend: { display: false } } }
             });
+
+            // Generate module filter options
+            const modules = new Set();
+            testData.forEach(item => {
+                if (item.module) {
+                    modules.add(item.module);
+                }
+            });
+            
+            const moduleFilter = document.getElementById('module-filter');
+            Array.from(modules).sort().forEach(module => {
+                const option = document.createElement('option');
+                option.value = module;
+                option.textContent = module;
+                moduleFilter.appendChild(option);
+            });
         }
 
         // Language toggle
@@ -323,7 +359,7 @@
             enElements.forEach(el => el.style.display = currentLang === 'en' ? '' : 'none');
         }
 
-        // Filter cases
+        // Filter cases by status
         function filterCases(status) {
             currentFilter = status;
             const rows = document.querySelectorAll('.case-row');
@@ -332,8 +368,27 @@
             tabs.forEach(tab => tab.classList.remove('active'));
             document.querySelector(`[data-filter="${status}"]`).classList.add('active');
             
+            applyFilters();
+        }
+
+        // Filter cases by module
+        function filterByModule() {
+            currentModuleFilter = document.getElementById('module-filter').value;
+            applyFilters();
+        }
+
+        // Apply all filters
+        function applyFilters() {
+            const rows = document.querySelectorAll('.case-row');
+            
             rows.forEach(row => {
-                if (status === 'all' || row.getAttribute('data-status') === status) {
+                const status = row.getAttribute('data-status');
+                const module = row.getAttribute('data-module');
+                
+                const statusMatch = currentFilter === 'all' || status === currentFilter;
+                const moduleMatch = currentModuleFilter === 'all' || module === currentModuleFilter;
+                
+                if (statusMatch && moduleMatch) {
                     row.classList.remove('hidden');
                 } else {
                     row.classList.add('hidden');

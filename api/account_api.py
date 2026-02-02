@@ -217,3 +217,147 @@ class AccountAPI:
                 "message": f"Failed to parse response: {str(e)}",
                 "raw_response": response.text
             }
+
+    def update_account(self, account_id: str, update_data: dict) -> requests.Response:
+        """
+        更新账户信息
+        
+        Args:
+            account_id: 账户 ID
+            update_data: 更新数据字典，可包含以下字段：
+                - mailing_street: 邮寄地址街道
+                - mailing_city: 邮寄地址城市
+                - mailing_state: 邮寄地址州
+                - mailing_postalcode: 邮寄地址邮编
+                - mailing_country: 邮寄地址国家（ISO 3166 标准）
+                - register_street: 注册地址街道
+                - register_city: 注册地址城市
+                - register_state: 注册地址州
+                - register_postalcode: 注册地址邮编
+                - register_country: 注册地址国家（ISO 3166 标准）
+            
+        Returns:
+            requests.Response: 响应对象
+            
+        Example:
+            update_data = {
+                "mailing_city": "New York",
+                "mailing_state": "NY"
+            }
+            response = account_api.update_account("ac3d45sa", update_data)
+            if response.status_code == 200:
+                updated_account = response.json()
+                print(f"Updated: {updated_account['mailing_city']}")
+        """
+        url = self.config.get_full_url(f"/accounts/{account_id}")
+        response = self.session.put(url, json=update_data)
+        return response
+
+    def get_financial_accounts(
+        self,
+        account_id: str,
+        account_number: Optional[str] = None,
+        name: Optional[str] = None,
+        status: Optional[str] = None,
+        page: int = 0,
+        size: int = 10,
+        **kwargs
+    ) -> requests.Response:
+        """
+        获取指定账户关联的 Financial Accounts
+        
+        Args:
+            account_id: Profile Account ID
+            account_number: Financial Account 编号，用于筛选
+            name: Financial Account 名称，用于筛选
+            status: Financial Account 状态，用于筛选
+            page: 页码，默认为 0
+            size: 每页大小，默认为 10
+            **kwargs: 其他额外的查询参数
+            
+        Returns:
+            requests.Response: 响应对象
+            
+        Example:
+            # 获取账户的所有 Financial Accounts
+            response = account_api.get_financial_accounts("WAz8eIbvDR60rouK")
+            
+            # 使用筛选条件
+            response = account_api.get_financial_accounts(
+                "WAz8eIbvDR60rouK",
+                status="Pending",
+                page=0,
+                size=20
+            )
+        """
+        url = self.config.get_full_url(f"/accounts/{account_id}/financial-accounts")
+        
+        # 构建查询参数
+        params = {
+            "page": page,
+            "size": size
+        }
+        
+        # 添加可选参数
+        if account_number is not None:
+            params["account_number"] = account_number
+        if name is not None:
+            params["name"] = name
+        if status is not None:
+            params["status"] = status
+        
+        # 添加其他额外参数
+        params.update(kwargs)
+        
+        response = self.session.get(url, params=params)
+        return response
+
+    def parse_financial_accounts_response(self, response: requests.Response) -> dict:
+        """
+        解析 Financial Accounts 列表响应
+        
+        Args:
+            response: requests.Response 对象
+            
+        Returns:
+            dict: 包含 content（Financial Accounts 列表）、pageable（分页信息）等字段
+            
+        Example:
+            response = account_api.get_financial_accounts("WAz8eIbvDR60rouK")
+            parsed = account_api.parse_financial_accounts_response(response)
+            financial_accounts = parsed['content']
+            total = parsed['total_elements']
+        """
+        if response.status_code != 200:
+            return {
+                "error": True,
+                "status_code": response.status_code,
+                "message": response.text
+            }
+        
+        try:
+            data = response.json()
+            # 兼容不同的响应结构
+            if "data" in data:
+                content_data = data["data"]
+            else:
+                content_data = data
+            
+            return {
+                "error": False,
+                "content": content_data.get("content", []),
+                "pageable": content_data.get("pageable", {}),
+                "total_elements": content_data.get("total_elements", 0),
+                "total_pages": content_data.get("total_pages", 0),
+                "size": content_data.get("size", 0),
+                "number": content_data.get("number", 0),
+                "first": content_data.get("first", False),
+                "last": content_data.get("last", False),
+                "empty": content_data.get("empty", True)
+            }
+        except Exception as e:
+            return {
+                "error": True,
+                "message": f"Failed to parse response: {str(e)}",
+                "raw_response": response.text
+            }

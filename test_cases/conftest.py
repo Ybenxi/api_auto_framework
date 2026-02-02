@@ -67,11 +67,20 @@ def pytest_runtest_makereport(item, call):
         # 获取用例中存储的流量数据
         extra_data = getattr(item, "extra_data", {})
         
+        # 提取 marker 信息
+        markers = [marker.name for marker in item.iter_markers()]
+        
+        # 提取模块名称（从 nodeid 中提取）
+        nodeid_parts = item.nodeid.split("::")
+        module_name = nodeid_parts[0].replace("test_cases/", "").replace("/", " > ").replace(".py", "")
+        
         test_results.append({
             "nodeid": item.nodeid,
             "status": report.outcome,
             "duration": report.duration,
             "start_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "markers": markers,
+            "module": module_name,
             "extra": extra_data
         })
 
