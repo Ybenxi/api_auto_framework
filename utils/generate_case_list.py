@@ -12,51 +12,67 @@ from pathlib import Path
 class TestCaseVisitor(ast.NodeVisitor):
     """
     AST 访问器，用于提取测试用例信息
+    使用 NodeVisitor 模式正确跟踪当前类上下文
     """
     
     def __init__(self, module_name: str):
         self.module_name = module_name
         self.test_cases = []
-        self.current_class = None
-        self.current_class_markers = []
+        self.current_class = None  # 跟踪当前类名
+        self.current_class_markers = []  # 跟踪当前类的 markers
     
     def visit_ClassDef(self, node):
-        """访问类定义节点"""
-        # 保存当前类信息
+        """
+        访问类定义节点
+        记录当前类名，遍历子节点后恢复
+        """
+        # 保存之前的类信息（支持嵌套类）
         old_class = self.current_class
         old_markers = self.current_class_markers
         
-        # 设置当前类
+        # 设置当前类信息
         self.current_class = node.name
-        self.current_class_markers = extract_markers(node)
+        self.current_class_markers = self._extract_markers(node)
         
-        # 继续遍历类的子节点
+        print(f"  [DEBUG] 进入类: {self.current_class}")
+        
+        # 继续遍历类的子节点（方法）
         self.generic_visit(node)
         
         # 恢复之前的类信息
         self.current_class = old_class
         self.current_class_markers = old_markers
+        
+        print(f"  [DEBUG] 离开类: {node.name}")
     
     def visit_FunctionDef(self, node):
-        """访问函数定义节点"""
+        """
+        访问函数定义节点
+        只处理以 test_ 开头的测试函数
+        """
         # 只处理测试函数
         if node.name.startswith("test_"):
             # 提取 Docstring
-            description = extract_docstring(node)
+            description = self._extract_docstring(node)
             
             # 提取 API URI
-            api_uri = extract_api_uri(node)
+            api_uri = self._extract_api_uri(node)
             
             # 提取方法级别的 markers
-            method_markers = extract_markers(node)
+            method_markers = self._extract_markers(node)
             
             # 合并类和方法的 markers
             all_markers = list(set(self.current_class_markers + method_markers))
             
+            # 获取当前类名（如果在类中）
+            class_name = self.current_class if self.current_class else ""
+            
+            print(f"    [DEBUG] 找到测试函数: {node.name}, 类: {class_name}, URI: {api_uri}")
+            
             # 添加到测试用例列表
             self.test_cases.append({
                 "Module": self.module_name,
-                "Class": self.current_class if self.current_class else "",
+                "Class": class_name,
                 "Function": node.name,
                 "Description": description,
                 "API URI": api_uri,
@@ -65,6 +81,113 @@ class TestCaseVisitor(ast.NodeVisitor):
         
         # 不需要继续遍历函数内部
         pass
+    
+    def _extract_docstring(self, node: ast.AST) -> str:
+        """
+        提取函数或类的 Docstring
+        
+        Args:
+            node: AST 节点
+            
+        Returns:
+            Docstring 内容（去除首尾空格）
+        """
+        docstring = ast.get_docstring(node)
+        
+        if docstring:
+            # 去除首尾空格和多余的换行
+            docstring = docstring.strip()
+            
+            # 提取第一行作为描述（通常是测试场景）
+            lines = docstring.split("\n")
+            
+            # 查找 "测试场景：" 开头的行
+            for line in lines:
+                line = line.strip()
+                if line.startswith("测试场景：") or line.startswith("测试场景:"):
+                    return line.replace("测试场景：", "").replace("测试场景:", "").strip()
+            
+            # 如果没有找到，返回第一行
+            return lines[0].strip()
+        
+        return ""
+    
+    def _extract_api_uri(self, node: ast.AST) -> str:
+        """
+        从 Docstring 中提取 API URI
+        
+        Args:
+            node: AST 节点
+            
+        Returns:
+            API URI（如 /api/v1/cores/actc/contacts）
+        """
+        docstring = ast.get_docstring(node)
+        
+        if docstring:
+            # 尝试匹配多种格式的 URI
+            patterns = [
+                r'Path:\s*([/\w\-{}:]+)',  # Path: /api/v1/...
+                r'path:\s*([/\w\-{}:]+)',  # path: /api/v1/...
+                r'URI:\s*([/\w\-{}:]+)',   # URI: /api/v1/...
+                r'uri:\s*([/\w\-{}:]+)',   # uri: /api/v1/...
+                r'URL:\s*([/\w\-{}:]+)',   # URL: /api/v1/...
+                r'url:\s*([/\w\-{}:]+)',   # url: /api/v1/...
+                r'接口:\s*([/\w\-{}:]+)',  # 接口: /api/v1/...
+                r'接口地址:\s*([/\w\-{}:]+)',  # 接口地址: /api/v1/...
+                r'接口路径:\s*([/\w\-{}:]+)',  # 接口路径: /api/v1/...
+                r'测试\s+([A-Z]+)\s+([/\w\-{}:]+)',  # 测试 GET /api/v1/...
+            ]
+            
+            for pattern in patterns:
+                match = re.search(pattern, docstring, re.IGNORECASE)
+                if match:
+                    # 如果是最后一个模式（包含 HTTP 方法），返回完整的 URI
+                    if len(match.groups()) > 1:
+                        return match.group(2)
+                    else:
+                        return match.group(1)
+        
+        return ""
+    
+    def _extract_markers(self, node: ast.AST) -> list:
+        """
+        提取 Pytest markers
+        
+        Args:
+            node: AST 节点
+            
+        Returns:
+            Marker 列表（如 ["contact", "list_api"]）
+        """
+        markers = []
+        
+        # 遍历装饰器
+        if hasattr(node, "decorator_list"):
+            for decorator in node.decorator_list:
+                # 处理 @pytest.mark.xxx 形式
+                if isinstance(decorator, ast.Attribute):
+                    if isinstance(decorator.value, ast.Attribute):
+                        # pytest.mark.xxx
+                        if (hasattr(decorator.value, "attr") and 
+                            decorator.value.attr == "mark" and
+                            hasattr(decorator.value, "value") and
+                            isinstance(decorator.value.value, ast.Name) and
+                            decorator.value.value.id == "pytest"):
+                            markers.append(decorator.attr)
+                
+                # 处理 @pytest.mark.xxx() 形式（带括号）
+                elif isinstance(decorator, ast.Call):
+                    if isinstance(decorator.func, ast.Attribute):
+                        if isinstance(decorator.func.value, ast.Attribute):
+                            if (hasattr(decorator.func.value, "attr") and 
+                                decorator.func.value.attr == "mark" and
+                                hasattr(decorator.func.value, "value") and
+                                isinstance(decorator.func.value.value, ast.Name) and
+                                decorator.func.value.value.id == "pytest"):
+                                markers.append(decorator.func.attr)
+        
+        return markers
 
 
 def extract_test_cases(test_cases_dir: str = "test_cases") -> list:
@@ -92,7 +215,7 @@ def extract_test_cases(test_cases_dir: str = "test_cases") -> list:
     print(f"[INFO] 开始扫描测试用例目录: {test_cases_path}")
     
     # 遍历所有 test_*.py 文件
-    for test_file in test_cases_path.rglob("test_*.py"):
+    for test_file in sorted(test_cases_path.rglob("test_*.py")):
         print(f"[INFO] 扫描文件: {test_file}")
         
         try:
@@ -112,122 +235,17 @@ def extract_test_cases(test_cases_dir: str = "test_cases") -> list:
             
             # 添加到总列表
             all_test_cases.extend(visitor.test_cases)
+            
+            print(f"  [INFO] 找到 {len(visitor.test_cases)} 个测试用例")
         
         except Exception as e:
             print(f"[ERROR] 解析文件 {test_file} 失败: {e}")
+            import traceback
+            traceback.print_exc()
     
     print(f"[INFO] 扫描完成，共找到 {len(all_test_cases)} 个测试用例")
     
     return all_test_cases
-
-
-def extract_docstring(node: ast.AST) -> str:
-    """
-    提取函数或类的 Docstring
-    
-    Args:
-        node: AST 节点
-        
-    Returns:
-        Docstring 内容（去除首尾空格）
-    """
-    docstring = ast.get_docstring(node)
-    
-    if docstring:
-        # 去除首尾空格和多余的换行
-        docstring = docstring.strip()
-        
-        # 提取第一行作为描述（通常是测试场景）
-        lines = docstring.split("\n")
-        
-        # 查找 "测试场景：" 开头的行
-        for line in lines:
-            line = line.strip()
-            if line.startswith("测试场景：") or line.startswith("测试场景:"):
-                return line.replace("测试场景：", "").replace("测试场景:", "").strip()
-        
-        # 如果没有找到，返回第一行
-        return lines[0].strip()
-    
-    return ""
-
-
-def extract_api_uri(node: ast.AST) -> str:
-    """
-    从 Docstring 中提取 API URI
-    
-    Args:
-        node: AST 节点
-        
-    Returns:
-        API URI（如 /api/v1/cores/actc/contacts）
-    """
-    docstring = ast.get_docstring(node)
-    
-    if docstring:
-        # 尝试匹配多种格式的 URI
-        patterns = [
-            r'Path:\s*([/\w\-{}]+)',  # Path: /api/v1/...
-            r'path:\s*([/\w\-{}]+)',  # path: /api/v1/...
-            r'URI:\s*([/\w\-{}]+)',   # URI: /api/v1/...
-            r'uri:\s*([/\w\-{}]+)',   # uri: /api/v1/...
-            r'URL:\s*([/\w\-{}]+)',   # URL: /api/v1/...
-            r'url:\s*([/\w\-{}]+)',   # url: /api/v1/...
-            r'接口:\s*([/\w\-{}]+)',  # 接口: /api/v1/...
-            r'接口路径:\s*([/\w\-{}]+)',  # 接口路径: /api/v1/...
-            r'测试\s+([A-Z]+)\s+([/\w\-{}]+)',  # 测试 GET /api/v1/...
-        ]
-        
-        for pattern in patterns:
-            match = re.search(pattern, docstring)
-            if match:
-                # 如果是最后一个模式（包含 HTTP 方法），返回完整的 URI
-                if len(match.groups()) > 1:
-                    return match.group(2)
-                else:
-                    return match.group(1)
-    
-    return ""
-
-
-def extract_markers(node: ast.AST) -> list:
-    """
-    提取 Pytest markers
-    
-    Args:
-        node: AST 节点
-        
-    Returns:
-        Marker 列表（如 ["contact", "list_api"]）
-    """
-    markers = []
-    
-    # 遍历装饰器
-    if hasattr(node, "decorator_list"):
-        for decorator in node.decorator_list:
-            # 处理 @pytest.mark.xxx 形式
-            if isinstance(decorator, ast.Attribute):
-                if isinstance(decorator.value, ast.Attribute):
-                    # pytest.mark.xxx
-                    if (hasattr(decorator.value, "attr") and 
-                        decorator.value.attr == "mark" and
-                        hasattr(decorator.value, "value") and
-                        isinstance(decorator.value.value, ast.Name) and
-                        decorator.value.value.id == "pytest"):
-                        markers.append(decorator.attr)
-            
-            # 处理 @pytest.mark.xxx() 形式（带括号）
-            elif isinstance(decorator, ast.Call):
-                if isinstance(decorator.func, ast.Attribute):
-                    if isinstance(decorator.func.value, ast.Attribute):
-                        if (hasattr(decorator.func.value, "attr") and 
-                            decorator.func.value.attr == "mark" and
-                            hasattr(decorator.func.value, "value") and
-                            isinstance(decorator.func.value.value, ast.Name) and
-                            decorator.func.value.value.id == "pytest"):
-                            markers.append(decorator.func.attr)
-    
-    return markers
 
 
 def generate_excel(test_cases: list, output_file: str = "test_cases.xlsx"):
@@ -255,12 +273,12 @@ def generate_excel(test_cases: list, output_file: str = "test_cases.xlsx"):
         worksheet = writer.sheets["Test Cases"]
         
         # 设置列宽
-        worksheet.column_dimensions["A"].width = 30  # Module
-        worksheet.column_dimensions["B"].width = 30  # Class
-        worksheet.column_dimensions["C"].width = 50  # Function
+        worksheet.column_dimensions["A"].width = 35  # Module
+        worksheet.column_dimensions["B"].width = 35  # Class
+        worksheet.column_dimensions["C"].width = 55  # Function
         worksheet.column_dimensions["D"].width = 80  # Description
-        worksheet.column_dimensions["E"].width = 50  # API URI
-        worksheet.column_dimensions["F"].width = 30  # Markers
+        worksheet.column_dimensions["E"].width = 55  # API URI
+        worksheet.column_dimensions["F"].width = 35  # Markers
         
         # 设置表头样式
         from openpyxl.styles import Font, PatternFill, Alignment
@@ -288,7 +306,7 @@ def main():
     主函数
     """
     print("=" * 60)
-    print("测试用例扫描工具")
+    print("测试用例扫描工具 v2.0")
     print("=" * 60)
     
     # 扫描测试用例
