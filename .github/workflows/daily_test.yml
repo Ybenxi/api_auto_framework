@@ -12,6 +12,11 @@ jobs:
   test:
     runs-on: ubuntu-latest
     
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      ENV: DEV
+      CORE: actc
+    
     steps:
       # 1. Checkout 代码
       - name: Checkout code
@@ -34,9 +39,6 @@ jobs:
       - name: Run tests
         id: run_tests
         continue-on-error: true
-        env:
-          ENV: DEV
-          CORE: actc
         run: |
           mkdir -p reports
           pytest test_cases/ -v \
