@@ -51,7 +51,8 @@ class TestContactDetail:
         
         # 5. 解析响应
         print("[Step] 解析响应并验证数据")
-        contact_detail = detail_response.json()
+        response_body = detail_response.json()
+        contact_detail = response_body.get("data") if "data" in response_body else response_body
         
         # 6. 验证 ID 一致
         print("[Step] 验证返回的 ID 与请求的 ID 一致")
@@ -109,7 +110,8 @@ class TestContactDetail:
         
         # 5. 解析响应
         print("[Step] 解析响应并验证所有字段")
-        contact_detail = detail_response.json()
+        response_body = detail_response.json()
+        contact_detail = response_body.get("data") if "data" in response_body else response_body
         
         # 6. 验证所有字段（包括可选字段）
         print("[Step] 验证所有字段存在")
@@ -165,7 +167,8 @@ class TestContactDetail:
         try:
             response_body = detail_response.json()
             error_code = response_body.get("code")
-            error_message = response_body.get("message")
+            # 修复：错误信息字段可能是 error_message 或 message
+            error_message = response_body.get("error_message") or response_body.get("message")
             
             print(f"  错误码: {error_code}")
             print(f"  错误信息: {error_message}")
@@ -217,7 +220,8 @@ class TestContactDetail:
         
         # 5. 验证响应数据结构
         print("[Step] 验证响应数据结构")
-        contact_detail = detail_response.json()
+        response_body = detail_response.json()
+        contact_detail = response_body.get("data") if "data" in response_body else response_body
         
         # 验证是 JSON 对象（不是数组）
         assert isinstance(contact_detail, dict), "响应应该是 JSON 对象，不是数组"
@@ -266,7 +270,8 @@ class TestContactDetail:
         
         # 5. 验证 ssn_tin 字段
         print("[Step] 验证 ssn_tin 字段")
-        contact_detail = detail_response.json()
+        response_body = detail_response.json()
+        contact_detail = response_body.get("data") if "data" in response_body else response_body
         
         assert "ssn_tin" in contact_detail, "响应中缺少 ssn_tin 字段"
         

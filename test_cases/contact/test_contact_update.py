@@ -61,7 +61,8 @@ class TestContactUpdate:
         
         # 6. 解析响应并验证更新结果
         print("[Step] 解析响应并验证更新结果")
-        updated_contact = update_response.json()
+        response_body = update_response.json()
+        updated_contact = response_body.get("data") if "data" in response_body else response_body
         
         assert updated_contact.get("first_name") == new_first_name, \
             f"first_name 未更新: 期望 {new_first_name}, 实际 {updated_contact.get('first_name')}"
@@ -117,7 +118,8 @@ class TestContactUpdate:
         
         # 6. 解析响应并验证更新结果
         print("[Step] 解析响应并验证更新结果")
-        updated_contact = update_response.json()
+        response_body = update_response.json()
+        updated_contact = response_body.get("data") if "data" in response_body else response_body
         
         assert updated_contact.get("phone") == new_phone, \
             f"phone 未更新: 期望 {new_phone}, 实际 {updated_contact.get('phone')}"
@@ -174,7 +176,8 @@ class TestContactUpdate:
         
         # 6. 解析响应并验证所有更新字段
         print("[Step] 解析响应并验证所有更新字段")
-        updated_contact = update_response.json()
+        response_body = update_response.json()
+        updated_contact = response_body.get("data") if "data" in response_body else response_body
         
         assert updated_contact.get("first_name") == update_data["first_name"], \
             f"first_name 未更新"
@@ -240,7 +243,8 @@ class TestContactUpdate:
         
         # 6. 解析响应并验证更新结果
         print("[Step] 解析响应并验证地址字段更新")
-        updated_contact = update_response.json()
+        response_body = update_response.json()
+        updated_contact = response_body.get("data") if "data" in response_body else response_body
         
         assert updated_contact.get("permanent_address") == update_data["permanent_address"], \
             f"permanent_address 未更新"
@@ -286,7 +290,8 @@ class TestContactUpdate:
         try:
             response_body = update_response.json()
             error_code = response_body.get("code")
-            error_message = response_body.get("message")
+            # 修复：错误信息字段可能是 error_message 或 message
+            error_message = response_body.get("error_message") or response_body.get("message")
             
             print(f"  错误码: {error_code}")
             print(f"  错误信息: {error_message}")
