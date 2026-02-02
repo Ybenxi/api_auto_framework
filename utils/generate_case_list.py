@@ -20,6 +20,7 @@ class TestCaseVisitor(ast.NodeVisitor):
         self.test_cases = []
         self.current_class = None  # 跟踪当前类名
         self.current_class_markers = []  # 跟踪当前类的 markers
+        self.module_uri = ""  # 模块级别的 URI
     
     def visit_ClassDef(self, node):
         """
@@ -55,8 +56,10 @@ class TestCaseVisitor(ast.NodeVisitor):
             # 提取 Docstring
             description = self._extract_docstring(node)
             
-            # 提取 API URI
+            # 提取 API URI（优先使用函数级别，其次使用模块级别）
             api_uri = self._extract_api_uri(node)
+            if not api_uri:
+                api_uri = self.module_uri  # 使用模块 URI 作为默认值
             
             # 提取方法级别的 markers
             method_markers = self._extract_markers(node)
@@ -229,8 +232,30 @@ def extract_test_cases(test_cases_dir: str = "test_cases") -> list:
             # 获取相对路径作为 Module 名称
             module_name = str(test_file.relative_to(test_cases_path))
             
+            # 提取模块级别的 Docstring 中的 URI
+            module_docstring = ast.get_docstring(tree)
+            module_uri = ""
+            if module_docstring:
+                # 尝试匹配 URI
+                uri_patterns = [
+                    r'GET\s+([/\w\-{}:]+)',  # GET /api/v1/...
+                    r'POST\s+([/\w\-{}:]+)',  # POST /api/v1/...
+                    r'PUT\s+([/\w\-{}:]+)',  # PUT /api/v1/...
+                    r'DELETE\s+([/\w\-{}:]+)',  # DELETE /api/v1/...
+                    r'Path:\s*([/\w\-{}:]+)',  # Path: /api/v1/...
+                    r'测试\s+[A-Z]+\s+([/\w\-{}:]+)',  # 测试 GET /api/v1/...
+                ]
+                
+                for pattern in uri_patterns:
+                    match = re.search(pattern, module_docstring)
+                    if match:
+                        module_uri = match.group(1)
+                        print(f"  [DEBUG] 从模块 Docstring 提取 URI: {module_uri}")
+                        break
+            
             # 使用访问器遍历 AST
             visitor = TestCaseVisitor(module_name)
+            visitor.module_uri = module_uri  # 传递模块 URI
             visitor.visit(tree)
             
             # 添加到总列表
