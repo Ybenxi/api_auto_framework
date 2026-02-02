@@ -2,8 +2,8 @@ import pytest
 import requests
 import os
 import json
-import time
 from datetime import datetime
+from urllib.parse import urlparse, parse_qs
 from api.auth_api import auth_api
 from config.config import config
 
@@ -57,18 +57,14 @@ def login_session():
     print("\n[Teardown] 正在关闭会话...")
     session.close()
 
-# --- 流量捕获逻辑 ---
-# 我们可以通过 monkeypatch 或自定义 Session 来捕获流量
-# 为了简单起见，我们在 API 类中手动记录，或者在这里拦截
-
+# --- 流量捕获逻辑（修复版）---
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
 def pytest_runtest_makereport(item, call):
     outcome = yield
     report = outcome.get_result()
     
     if report.when == 'call':
-        # 获取用例中存储的流量数据 (如果 API 类中存了的话)
-        # 这里假设我们将流量数据存放在 item 对象的 extra_data 属性中
+        # 获取用例中存储的流量数据
         extra_data = getattr(item, "extra_data", {})
         
         test_results.append({
@@ -82,9 +78,14 @@ def pytest_runtest_makereport(item, call):
 def pytest_sessionfinish(session, exitstatus):
     """
     测试结束时，将结果注入 HTML 模板
+    使用时间戳命名报告文件，避免覆盖
     """
     template_path = os.path.join(os.path.dirname(__file__), "..", "assets", "report_template.html")
-    report_path = os.path.join(os.path.dirname(__file__), "..", "reports", "benxi_report_v2.html")
+    
+    # 生成带时间戳的报告文件名
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    report_filename = f"benxi_report_{timestamp}.html"
+    report_path = os.path.join(os.path.dirname(__file__), "..", "reports", report_filename)
     
     if not os.path.exists(os.path.dirname(report_path)):
         os.makedirs(os.path.dirname(report_path))
@@ -94,19 +95,23 @@ def pytest_sessionfinish(session, exitstatus):
             template_content = f.read()
         
         # 注入数据
-        env_info = {"env": os.getenv("ENV", "DEV")}
-        final_html = template_content.replace("{{RESULTS_JSON}}", json.dumps(test_results))
-        final_html = final_html.replace("{{ENV_JSON}}", json.dumps(env_info))
+        env_info = {
+            "env": os.getenv("ENV", "DEV"),
+            "core": config.core
+        }
+        final_html = template_content.replace("{{RESULTS_JSON}}", json.dumps(test_results, ensure_ascii=False))
+        final_html = final_html.replace("{{ENV_JSON}}", json.dumps(env_info, ensure_ascii=False))
         
         with open(report_path, 'w', encoding='utf-8') as f:
             f.write(final_html)
         print(f"\n[Report] Ben xi report v2.0 已生成: {report_path}")
 
-# --- 自动拦截 Requests 流量的辅助工具 ---
+# --- 自动拦截 Requests 流量的辅助工具（修复版）---
 @pytest.fixture(autouse=True)
 def capture_traffic(request, login_session):
     """
     自动拦截用例中的 requests 调用并记录
+    修复版：正确捕获 GET 请求的 Query Params 和 POST 请求的 Body
     """
     # 获取原始的 request 方法
     original_method = login_session.request
@@ -115,26 +120,52 @@ def capture_traffic(request, login_session):
         # 执行原始请求
         response = original_method(method, url, **kwargs)
         
-        # 记录流量数据
+        # 记录流量数据（修复版）
         try:
-            res_body = response.json()
-        except:
-            res_body = response.text
+            # 解析响应 body
+            try:
+                res_body = response.json()
+            except:
+                res_body = response.text
 
-        traffic = {
-            "request": {
-                "method": method,
-                "url": url,
-                "body": kwargs.get('json') or kwargs.get('data') or {}
-            },
-            "response": {
-                "status_code": response.status_code,
-                "body": res_body
+            # 构建请求参数（修复重点）
+            req_body = {}
+            
+            if method.upper() == "GET":
+                # GET 请求：提取 URL 中的 Query Parameters
+                parsed_url = urlparse(url)
+                query_params = parse_qs(parsed_url.query)
+                # 将列表值转换为单个值（如果只有一个元素）
+                req_body = {k: v[0] if len(v) == 1 else v for k, v in query_params.items()}
+                
+                # 如果 kwargs 中有 params，也合并进来
+                if 'params' in kwargs and kwargs['params']:
+                    req_body.update(kwargs['params'])
+            else:
+                # POST/PUT/PATCH 请求：提取 JSON Body 或 Data
+                if 'json' in kwargs and kwargs['json']:
+                    req_body = kwargs['json']
+                elif 'data' in kwargs and kwargs['data']:
+                    req_body = kwargs['data']
+
+            traffic = {
+                "request": {
+                    "method": method.upper(),
+                    "url": url,
+                    "body": req_body
+                },
+                "response": {
+                    "status_code": response.status_code,
+                    "body": res_body
+                }
             }
-        }
-        # 将流量挂载到当前测试用例的 item 对象上
-        # pytest_runtest_makereport 钩子会读取此数据
-        request.node.extra_data = traffic
+            
+            # 将流量挂载到当前测试用例的 item 对象上
+            request.node.extra_data = traffic
+        except Exception as e:
+            print(f"[Warning] 流量捕获失败: {e}")
+            request.node.extra_data = {}
+        
         return response
 
     # 使用 monkeypatch 思想，在当前 fixture 作用域内替换 session 的方法

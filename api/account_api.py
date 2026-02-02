@@ -20,6 +20,7 @@ class AccountAPI:
             session: requests.Session 对象，如果传入则使用该 session 保持认证状态
         """
         self.base_url = config.base_url
+        self.config = config
         # 如果传入了 session，则使用该 session 发送请求，保持 Auth 状态
         self.session = session or requests.Session()
 
@@ -65,7 +66,8 @@ class AccountAPI:
             # 使用字符串筛选
             response = account_api.list_accounts(name="Example", page=1, size=20)
         """
-        url = f"{self.base_url}/api/v1/cores/actc/accounts"
+        # 使用 config 的方法构建完整 URL
+        url = self.config.get_full_url("/accounts")
         
         # 构建查询参数字典
         params = {
@@ -99,7 +101,7 @@ class AccountAPI:
         
         return response
 
-    def get_account_by_id(self, account_id: str) -> requests.Response:
+    def get_account_detail(self, account_id: str) -> requests.Response:
         """
         根据 ID 获取单个账户详情
         
@@ -108,8 +110,15 @@ class AccountAPI:
             
         Returns:
             requests.Response: 响应对象
+            
+        Example:
+            response = account_api.get_account_detail("ac3d45sa")
+            if response.status_code == 200:
+                account = response.json()
+                print(f"Account: {account['account_name']}")
         """
-        url = f"{self.base_url}/api/v1/cores/actc/accounts/{account_id}"
+        # 使用 config 的方法构建完整 URL
+        url = self.config.get_full_url(f"/accounts/{account_id}")
         response = self.session.get(url)
         return response
 
@@ -157,6 +166,50 @@ class AccountAPI:
                 "first": content_data.get("first", False),
                 "last": content_data.get("last", False),
                 "empty": content_data.get("empty", True)
+            }
+        except Exception as e:
+            return {
+                "error": True,
+                "message": f"Failed to parse response: {str(e)}",
+                "raw_response": response.text
+            }
+
+    def parse_detail_response(self, response: requests.Response) -> dict:
+        """
+        解析账户详情响应
+        
+        Args:
+            response: requests.Response 对象
+            
+        Returns:
+            dict: 包含 error 标识和账户详情数据
+            
+        Example:
+            response = account_api.get_account_detail("ac3d45sa")
+            parsed = account_api.parse_detail_response(response)
+            if not parsed['error']:
+                account = parsed['data']
+        """
+        if response.status_code != 200:
+            return {
+                "error": True,
+                "status_code": response.status_code,
+                "message": response.text
+            }
+        
+        try:
+            data = response.json()
+            # 兼容不同的响应结构
+            if "data" in data:
+                # 如果响应有 data 包装层
+                account_data = data["data"]
+            else:
+                # 如果响应直接是账户数据
+                account_data = data
+            
+            return {
+                "error": False,
+                "data": account_data
             }
         except Exception as e:
             return {

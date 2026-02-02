@@ -5,6 +5,25 @@
 from enum import Enum
 
 
+class CoreType(str, Enum):
+    """
+    Core 类型枚举
+    不同的 Core 对应不同的 API 路径前缀
+    """
+    AUSTIN_CAPITAL = "actc"
+    MODERN_RAILS = "modern-rails"
+    STEARNS_BANK = "stearns_bank"
+    ODT = "odt"
+    YIELD = "yield"
+    FAMILY_WEALTH = "familywealth"
+    FINTECH = "fintech"
+    ACCLOUD = "accloud"
+
+    def __str__(self):
+        """返回枚举的实际值"""
+        return self.value
+
+
 class BusinessEntityType(str, Enum):
     """
     业务实体类型枚举
