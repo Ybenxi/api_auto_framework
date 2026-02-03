@@ -87,12 +87,14 @@
         .module-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; background: #e6f7ff; color: #1890ff; margin-right: 8px; }
         
         /* Group Headers */
-        .group-header { background: linear-gradient(135deg, #f0f2f5 0%, #e6e8eb 100%); font-weight: 600; color: #1f1f1f; cursor: default; }
-        .group-header:hover { transform: none !important; box-shadow: 0 1px 2px rgba(0,0,0,0.03) !important; }
-        .group-header td { padding: 12px 16px !important; border-left: 4px solid var(--primary-color) !important; }
-        .file-header { background: #fafafa; font-weight: 500; color: #595959; font-size: 13px; cursor: default; }
+        .group-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); font-weight: 700; color: white; cursor: default; font-size: 15px; text-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+        .group-header:hover { transform: none !important; box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important; }
+        .group-header td { padding: 14px 20px !important; border-left: none !important; }
+        .file-header { background: linear-gradient(135deg, #f5f7fa 0%, #e8ebf0 100%); font-weight: 600; color: #262626; font-size: 14px; cursor: default; border-left: 4px solid #4472C4 !important; }
         .file-header:hover { transform: none !important; box-shadow: 0 1px 2px rgba(0,0,0,0.03) !important; }
-        .file-header td { padding: 10px 16px !important; padding-left: 32px !important; border-left: 3px solid #d9d9d9 !important; }
+        .file-header td { padding: 12px 20px !important; padding-left: 40px !important; }
+        .file-header td::before { content: '📄 '; font-size: 16px; margin-right: 8px; }
+        .test-count { color: #8c8c8c; font-weight: normal; font-size: 13px; margin-left: 8px; }
         
         /* API Path */
         .api-path { font-family: 'Fira Code', 'Consolas', monospace; font-size: 12px; color: #8c8c8c; background: #f5f5f5; padding: 4px 8px; border-radius: 4px; word-break: break-all; }
@@ -341,22 +343,27 @@
             // Render grouped data with headers
             let globalIndex = 0;
             Object.keys(groupedData).sort().forEach(module => {
-                // Module header row (optional, can be hidden if not needed)
+                // Module header row
                 const moduleHeaderRow = document.createElement('tr');
                 moduleHeaderRow.className = 'group-header';
-                moduleHeaderRow.innerHTML = `<td colspan="6" style="font-size: 15px;">📦 ${module}</td>`;
+                moduleHeaderRow.innerHTML = `<td colspan="6">📦 ${module}</td>`;
                 listBody.appendChild(moduleHeaderRow);
                 
                 Object.keys(groupedData[module]).sort().forEach(testFile => {
+                    // Sort test cases within the file by nodeid to maintain original order
+                    const sortedTestCases = groupedData[module][testFile].sort((a, b) => {
+                        return (a.nodeid || '').localeCompare(b.nodeid || '');
+                    });
+                    
                     // Test file header row
                     const fileHeaderRow = document.createElement('tr');
                     fileHeaderRow.className = 'file-header';
-                    const testCount = groupedData[module][testFile].length;
-                    fileHeaderRow.innerHTML = `<td colspan="6">📄 ${testFile} <span style="color: #8c8c8c; font-weight: normal;">(${testCount} tests)</span></td>`;
+                    const testCount = sortedTestCases.length;
+                    fileHeaderRow.innerHTML = `<td colspan="6">${testFile} <span class="test-count">(${testCount} tests)</span></td>`;
                     listBody.appendChild(fileHeaderRow);
                     
-                    // Test case rows
-                    groupedData[module][testFile].forEach(item => {
+                    // Test case rows (already sorted)
+                    sortedTestCases.forEach(item => {
                         const row = document.createElement('tr');
                         row.className = `case-row ${item.status}`;
                         row.setAttribute('data-status', item.status);

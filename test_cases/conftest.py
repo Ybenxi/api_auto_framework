@@ -146,9 +146,21 @@ def translate_docstring_to_english(zh_text: str) -> str:
         "成功更新": "Successfully Update",
         "使用必需字段创建": "Create with Required Fields",
         "使用所有字段创建": "Create with All Fields",
+        "创建后立即查询详情": "Create then Query Detail Immediately",
+        "创建后立即在列表中查询": "Create then Query in List Immediately",
         "缺少必需字段": "Missing Required Fields",
+        "缺少必需字段时创建失败": "Create Failed with Missing Required Fields",
         "使用无效": "With Invalid",
         "使用不存在": "With Non-existent",
+        "同时更新多个字段": "Update Multiple Fields",
+        
+        # 特定描述
+        "包括可选字段": "Including Optional Fields",
+        "包含加密的": "With Encrypted",
+        "并包含加密的": "With Encrypted",
+        "无效的 email 格式": "Invalid Email Format",
+        "无效的 phone 格式": "Invalid Phone Format",
+        "非 E.164 格式": "Non-E.164 Format",
         
         # 资源类型
         "账户": "Account",
@@ -163,6 +175,7 @@ def translate_docstring_to_english(zh_text: str) -> str:
         
         # 验证点
         "验证点": "Verification Points",
+        "验证数据一致性": "Verify Data Consistency",
         "接口": "API",
         "数据一致性": "Data Consistency",
         "对比": "Compare",
@@ -176,6 +189,13 @@ def translate_docstring_to_english(zh_text: str) -> str:
         "创建后立即查询": "Query Immediately After Creation",
         "空字符串边界值测试": "Empty String Boundary Test",
         "立即在列表中查询": "Query in List Immediately",
+        
+        # 动词和连词
+        "并": "and",
+        "与": "and",
+        "或": "or",
+        "的": "",
+        "了": "",
         
         # 其他常用词
         "更新": "Update",
@@ -191,8 +211,14 @@ def translate_docstring_to_english(zh_text: str) -> str:
         "不包含": "Not Contains",
         "边界值": "Boundary Value",
         "格式": "Format",
-        "无效的": "Invalid",
+        "无效": "Invalid",
         "错误": "Error",
+        "所有": "All",
+        "全部": "All",
+        "多个": "Multiple",
+        "单个": "Single",
+        "字段": "Fields",
+        "加密": "Encrypted",
         
         # 标点符号
         "：": ": ",
@@ -206,6 +232,9 @@ def translate_docstring_to_english(zh_text: str) -> str:
     # 按照映射表长度降序排序，优先匹配长字符串
     for zh, en in sorted(translations.items(), key=lambda x: len(x[0]), reverse=True):
         result = result.replace(zh, en)
+    
+    # 清理多余空格
+    result = re.sub(r'\s+', ' ', result).strip()
     
     return result
 
