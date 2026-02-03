@@ -18,6 +18,7 @@ MODULE_NAME_MAPPING = {
     "profile_account": "Profile Account",
     "financial_account": "Financial Account",
     "sub_account": "Sub Account",
+    "fbo_account": "FBO Account",
     "tenant": "Tenant"
 }
 

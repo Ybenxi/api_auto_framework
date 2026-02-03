@@ -89,3 +89,19 @@ class RiskLevel(str, Enum):
     def __str__(self):
         """返回枚举的实际值"""
         return self.value
+
+
+class FboAccountStatus(str, Enum):
+    """
+    FBO Account 状态枚举
+    对应 API 文档中的 status 字段
+    """
+    OPEN = "Open"
+    CLOSED = "Closed"
+    PENDING = "Pending"
+    DISCONNECT = "Disconnect"
+    ON_HOLD = "OnHold"
+
+    def __str__(self):
+        """返回枚举的实际值"""
+        return self.value
