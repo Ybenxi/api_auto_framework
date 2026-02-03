@@ -113,6 +113,103 @@ def get_module_docstring(item) -> str:
     return ""
 
 
+def translate_docstring_to_english(zh_text: str) -> str:
+    """
+    将中文测试场景描述转换为英文
+    使用模式匹配和映射表
+    """
+    if not zh_text:
+        return ""
+    
+    # 中英文映射表
+    translations = {
+        # 测试场景标识
+        "测试场景": "Test Scenario",
+        
+        # 操作类型
+        "基础列表查询": "Basic List Query",
+        "验证接口可用性": "Verify API Availability",
+        "名称筛选查询": "Filter by Name",
+        "名称筛选": "Name Filter",
+        "枚举类型筛选": "Enum Type Filter",
+        "多条件组合筛选": "Multiple Filters Combined",
+        "分页功能验证": "Pagination Verification",
+        "状态筛选": "Status Filter",
+        "空结果验证": "Empty Result Verification",
+        "响应字段完整性验证": "Response Fields Completeness",
+        "字段完整性验证": "Fields Completeness Verification",
+        "排序功能验证": "Sorting Verification",
+        
+        # CRUD 操作
+        "成功获取": "Successfully Retrieve",
+        "成功创建": "Successfully Create",
+        "成功更新": "Successfully Update",
+        "使用必需字段创建": "Create with Required Fields",
+        "使用所有字段创建": "Create with All Fields",
+        "缺少必需字段": "Missing Required Fields",
+        "使用无效": "With Invalid",
+        "使用不存在": "With Non-existent",
+        
+        # 资源类型
+        "账户": "Account",
+        "联系人": "Contact",
+        "详情": "Detail",
+        "列表": "List",
+        "关联": "Related",
+        "地址": "Address",
+        "邮寄地址": "Mailing Address",
+        "注册地址": "Register Address",
+        "部分字段": "Partial Fields",
+        
+        # 验证点
+        "验证点": "Verification Points",
+        "接口": "API",
+        "数据一致性": "Data Consistency",
+        "对比": "Compare",
+        "响应": "Response",
+        "结构": "Structure",
+        "数据结构": "Data Structure",
+        
+        # 特定场景
+        "按姓名排序": "Sorting by Name",
+        "按账户名称排序": "Sorting by Account Name",
+        "创建后立即查询": "Query Immediately After Creation",
+        "空字符串边界值测试": "Empty String Boundary Test",
+        "立即在列表中查询": "Query in List Immediately",
+        
+        # 其他常用词
+        "更新": "Update",
+        "创建": "Create",
+        "筛选": "Filter",
+        "查询": "Query",
+        "获取": "Retrieve",
+        "验证": "Verify",
+        "测试": "Test",
+        "成功": "Success",
+        "失败": "Failed",
+        "包含": "Contains",
+        "不包含": "Not Contains",
+        "边界值": "Boundary Value",
+        "格式": "Format",
+        "无效的": "Invalid",
+        "错误": "Error",
+        
+        # 标点符号
+        "：": ": ",
+        "，": ", ",
+        "（": " (",
+        "）": ")",
+        "、": " & "
+    }
+    
+    result = zh_text
+    # 按照映射表长度降序排序，优先匹配长字符串
+    for zh, en in sorted(translations.items(), key=lambda x: len(x[0]), reverse=True):
+        result = result.replace(zh, en)
+    
+    return result
+
+
 @pytest.fixture(scope="session", autouse=True)
 def login_session():
     """
@@ -182,9 +279,12 @@ def pytest_runtest_makereport(item, call):
         test_file = nodeid_parts[0].split("/")[-1].replace(".py", "")
         
         # 提取 docstring 信息
-        docstring_summary = extract_docstring_summary(item)
+        docstring_summary_zh = extract_docstring_summary(item)
         full_docstring = get_full_docstring(item)
         module_docstring = get_module_docstring(item)
+        
+        # 生成英文版本的 docstring
+        docstring_summary_en = translate_docstring_to_english(docstring_summary_zh)
         
         # 提取 API 路径（优先从方法 docstring，其次从模块 docstring）
         api_path = extract_api_path_from_docstring(full_docstring)
@@ -203,7 +303,9 @@ def pytest_runtest_makereport(item, call):
             "module": module_name,
             "test_file": test_file,
             "test_func_name": test_func_name,
-            "docstring_summary": docstring_summary,
+            "docstring_summary_zh": docstring_summary_zh,
+            "docstring_summary_en": docstring_summary_en,
+            "docstring_summary": docstring_summary_zh,  # 保持向后兼容
             "api_path": api_path,
             "extra": extra_data
         })
@@ -228,8 +330,15 @@ def pytest_sessionfinish(session, exitstatus):
         with open(template_path, 'r', encoding='utf-8') as f:
             template_content = f.read()
         
-        # 按模块排序测试结果
-        sorted_results = sorted(test_results, key=lambda x: (x.get("module", ""), x.get("nodeid", "")))
+        # 三级排序：模块 -> 测试文件 -> nodeid（保持文件内用例顺序）
+        sorted_results = sorted(
+            test_results, 
+            key=lambda x: (
+                x.get("module", ""),      # 第1级：模块名称
+                x.get("test_file", ""),   # 第2级：测试文件名
+                x.get("nodeid", "")       # 第3级：nodeid（用例在文件中的顺序）
+            )
+        )
         
         # 注入数据
         env_info = {

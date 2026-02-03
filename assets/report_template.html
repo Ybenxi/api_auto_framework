@@ -4,8 +4,7 @@
     <meta charset="UTF-8">
     <title>Ben xi report - 自动化测试报告 v3.0</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/atom-one-dark.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
     <style>
@@ -87,6 +86,14 @@
         /* Module Badge */
         .module-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; background: #e6f7ff; color: #1890ff; margin-right: 8px; }
         
+        /* Group Headers */
+        .group-header { background: linear-gradient(135deg, #f0f2f5 0%, #e6e8eb 100%); font-weight: 600; color: #1f1f1f; cursor: default; }
+        .group-header:hover { transform: none !important; box-shadow: 0 1px 2px rgba(0,0,0,0.03) !important; }
+        .group-header td { padding: 12px 16px !important; border-left: 4px solid var(--primary-color) !important; }
+        .file-header { background: #fafafa; font-weight: 500; color: #595959; font-size: 13px; cursor: default; }
+        .file-header:hover { transform: none !important; box-shadow: 0 1px 2px rgba(0,0,0,0.03) !important; }
+        .file-header td { padding: 10px 16px !important; padding-left: 32px !important; border-left: 3px solid #d9d9d9 !important; }
+        
         /* API Path */
         .api-path { font-family: 'Fira Code', 'Consolas', monospace; font-size: 12px; color: #8c8c8c; background: #f5f5f5; padding: 4px 8px; border-radius: 4px; word-break: break-all; }
 
@@ -127,9 +134,9 @@
             <button class="btn" onclick="toggleLanguage()">
                 <span id="lang-toggle">中/En</span>
             </button>
-            <button class="btn" onclick="exportPDF()">
-                <span data-lang="zh">导出 PDF</span>
-                <span data-lang="en" style="display:none;">Export PDF</span>
+            <button class="btn" onclick="exportExcel()">
+                <span data-lang="zh">导出 Excel</span>
+                <span data-lang="en" style="display:none;">Export Excel</span>
             </button>
         </div>
     </div>
@@ -311,46 +318,81 @@
             const listBody = document.getElementById('case-list');
             const modules = new Set();
 
-            // Data is already sorted by module in Python
+            // Group data by module and test file
+            const groupedData = {};
             testData.forEach((item, index) => {
                 stats[item.status]++;
                 stats.totalDuration += item.duration;
                 
-                // Collect unique modules
-                if (item.module) {
-                    modules.add(item.module);
+                const module = item.module || 'Unknown';
+                const testFile = item.test_file || 'unknown';
+                
+                modules.add(module);
+                
+                if (!groupedData[module]) {
+                    groupedData[module] = {};
                 }
+                if (!groupedData[module][testFile]) {
+                    groupedData[module][testFile] = [];
+                }
+                groupedData[module][testFile].push({ ...item, originalIndex: index });
+            });
+
+            // Render grouped data with headers
+            let globalIndex = 0;
+            Object.keys(groupedData).sort().forEach(module => {
+                // Module header row (optional, can be hidden if not needed)
+                const moduleHeaderRow = document.createElement('tr');
+                moduleHeaderRow.className = 'group-header';
+                moduleHeaderRow.innerHTML = `<td colspan="6" style="font-size: 15px;">📦 ${module}</td>`;
+                listBody.appendChild(moduleHeaderRow);
                 
-                const row = document.createElement('tr');
-                row.className = `case-row ${item.status}`;
-                row.setAttribute('data-status', item.status);
-                row.setAttribute('data-module', item.module || 'Unknown');
-                row.setAttribute('data-markers', JSON.stringify(item.markers || []));
-                row.setAttribute('data-test-file', item.test_file || 'unknown');
-                row.setAttribute('data-api-path', item.api_path || '');
-                row.setAttribute('data-test-name', item.test_func_name || '');
-                row.setAttribute('data-docstring', item.docstring_summary || '');
-                row.onclick = () => showDetail(index);
-                
-                const statusText = {
-                    'passed': '<span data-lang="zh">通过</span><span data-lang="en" style="display:none;">PASSED</span>',
-                    'failed': '<span data-lang="zh">失败</span><span data-lang="en" style="display:none;">FAILED</span>',
-                    'skipped': '<span data-lang="zh">跳过</span><span data-lang="en" style="display:none;">SKIPPED</span>'
-                };
-                
-                // Display test name: prefer docstring summary, fallback to function name
-                const displayName = item.docstring_summary || item.test_func_name || item.nodeid.split('::').pop();
-                const apiPathDisplay = item.api_path ? `<span class="api-path">${item.api_path}</span>` : '<span style="color: #bfbfbf;">-</span>';
-                
-                row.innerHTML = `
-                    <td><span class="status-tag status-${item.status}">${statusText[item.status] || item.status.toUpperCase()}</span></td>
-                    <td><span class="module-badge">${item.module || 'Unknown'}</span></td>
-                    <td style="font-weight: 500;">${displayName}</td>
-                    <td>${apiPathDisplay}</td>
-                    <td style="color: #8c8c8c; font-size: 13px;">${item.start_time}</td>
-                    <td style="font-weight: 600;">${item.duration.toFixed(3)}s</td>
-                `;
-                listBody.appendChild(row);
+                Object.keys(groupedData[module]).sort().forEach(testFile => {
+                    // Test file header row
+                    const fileHeaderRow = document.createElement('tr');
+                    fileHeaderRow.className = 'file-header';
+                    const testCount = groupedData[module][testFile].length;
+                    fileHeaderRow.innerHTML = `<td colspan="6">📄 ${testFile} <span style="color: #8c8c8c; font-weight: normal;">(${testCount} tests)</span></td>`;
+                    listBody.appendChild(fileHeaderRow);
+                    
+                    // Test case rows
+                    groupedData[module][testFile].forEach(item => {
+                        const row = document.createElement('tr');
+                        row.className = `case-row ${item.status}`;
+                        row.setAttribute('data-status', item.status);
+                        row.setAttribute('data-module', module);
+                        row.setAttribute('data-markers', JSON.stringify(item.markers || []));
+                        row.setAttribute('data-test-file', testFile);
+                        row.setAttribute('data-api-path', item.api_path || '');
+                        row.setAttribute('data-test-name', item.test_func_name || '');
+                        row.setAttribute('data-docstring', item.docstring_summary_zh || item.docstring_summary || '');
+                        row.setAttribute('data-original-index', item.originalIndex);
+                        row.onclick = () => showDetail(item.originalIndex);
+                        
+                        const statusText = {
+                            'passed': '<span data-lang="zh">通过</span><span data-lang="en" style="display:none;">PASSED</span>',
+                            'failed': '<span data-lang="zh">失败</span><span data-lang="en" style="display:none;">FAILED</span>',
+                            'skipped': '<span data-lang="zh">跳过</span><span data-lang="en" style="display:none;">SKIPPED</span>'
+                        };
+                        
+                        // Display test name: use bilingual docstring based on current language
+                        const displayName = currentLang === 'zh' 
+                            ? (item.docstring_summary_zh || item.docstring_summary || item.test_func_name)
+                            : (item.docstring_summary_en || item.test_func_name);
+                        const apiPathDisplay = item.api_path ? `<span class="api-path">${item.api_path}</span>` : '<span style="color: #bfbfbf;">-</span>';
+                        
+                        row.innerHTML = `
+                            <td><span class="status-tag status-${item.status}">${statusText[item.status] || item.status.toUpperCase()}</span></td>
+                            <td style="padding-left: 48px;"><span class="module-badge">${module}</span></td>
+                            <td style="font-weight: 500;">${displayName}</td>
+                            <td>${apiPathDisplay}</td>
+                            <td style="color: #8c8c8c; font-size: 13px;">${item.start_time}</td>
+                            <td style="font-weight: 600;">${item.duration.toFixed(3)}s</td>
+                        `;
+                        listBody.appendChild(row);
+                        globalIndex++;
+                    });
+                });
             });
 
             // Update stats
@@ -405,6 +447,24 @@
             // Update search placeholder
             const searchInput = document.getElementById('search-input');
             searchInput.placeholder = currentLang === 'zh' ? '搜索用例名称或 API 路径...' : 'Search test name or API path...';
+            
+            // Re-render test case names with new language
+            const rows = document.querySelectorAll('.case-row');
+            rows.forEach(row => {
+                const originalIndex = parseInt(row.getAttribute('data-original-index'));
+                if (!isNaN(originalIndex)) {
+                    const item = testData[originalIndex];
+                    const displayName = currentLang === 'zh' 
+                        ? (item.docstring_summary_zh || item.docstring_summary || item.test_func_name)
+                        : (item.docstring_summary_en || item.test_func_name);
+                    
+                    // Update the test case name cell (3rd cell, index 2)
+                    const cells = row.querySelectorAll('td');
+                    if (cells.length > 2) {
+                        cells[2].innerHTML = `<span style="font-weight: 500;">${displayName}</span>`;
+                    }
+                }
+            });
         }
 
         // Filter cases by status
@@ -432,34 +492,75 @@
 
         // Apply all filters (status + module + search)
         function applyFilters() {
-            const rows = document.querySelectorAll('.case-row');
+            const allRows = document.querySelectorAll('tr');
+            const visibleModules = new Set();
+            const visibleFiles = new Map(); // module -> Set(files)
             
-            rows.forEach(row => {
-                const status = row.getAttribute('data-status');
-                const module = row.getAttribute('data-module');
-                const apiPath = row.getAttribute('data-api-path').toLowerCase();
-                const testName = row.getAttribute('data-test-name').toLowerCase();
-                const docstring = row.getAttribute('data-docstring').toLowerCase();
-                
-                // Status filter
-                const statusMatch = currentFilter === 'all' || status === currentFilter;
-                
-                // Module filter (based on module name from folder)
-                const moduleMatch = currentModuleFilter === 'all' || module === currentModuleFilter;
-                
-                // Search filter (search in test name, docstring, and API path)
-                let searchMatch = true;
-                if (currentSearchText) {
-                    searchMatch = testName.includes(currentSearchText) || 
-                                  docstring.includes(currentSearchText) || 
-                                  apiPath.includes(currentSearchText);
+            // First pass: determine which test case rows match filters
+            allRows.forEach(row => {
+                if (row.classList.contains('case-row')) {
+                    const status = row.getAttribute('data-status');
+                    const module = row.getAttribute('data-module');
+                    const testFile = row.getAttribute('data-test-file');
+                    const apiPath = (row.getAttribute('data-api-path') || '').toLowerCase();
+                    const testName = (row.getAttribute('data-test-name') || '').toLowerCase();
+                    const docstring = (row.getAttribute('data-docstring') || '').toLowerCase();
+                    
+                    // Status filter
+                    const statusMatch = currentFilter === 'all' || status === currentFilter;
+                    
+                    // Module filter
+                    const moduleMatch = currentModuleFilter === 'all' || module === currentModuleFilter;
+                    
+                    // Search filter
+                    let searchMatch = true;
+                    if (currentSearchText) {
+                        searchMatch = testName.includes(currentSearchText) || 
+                                      docstring.includes(currentSearchText) || 
+                                      apiPath.includes(currentSearchText);
+                    }
+                    
+                    // Show row only if all filters match
+                    if (statusMatch && moduleMatch && searchMatch) {
+                        row.classList.remove('hidden');
+                        visibleModules.add(module);
+                        if (!visibleFiles.has(module)) {
+                            visibleFiles.set(module, new Set());
+                        }
+                        visibleFiles.get(module).add(testFile);
+                    } else {
+                        row.classList.add('hidden');
+                    }
                 }
-                
-                // Show row only if all filters match
-                if (statusMatch && moduleMatch && searchMatch) {
-                    row.classList.remove('hidden');
-                } else {
-                    row.classList.add('hidden');
+            });
+            
+            // Second pass: show/hide group headers based on visible test cases
+            allRows.forEach(row => {
+                if (row.classList.contains('group-header')) {
+                    const headerText = row.textContent.trim();
+                    const module = headerText.replace('📦 ', '').trim();
+                    if (visibleModules.has(module)) {
+                        row.classList.remove('hidden');
+                    } else {
+                        row.classList.add('hidden');
+                    }
+                } else if (row.classList.contains('file-header')) {
+                    const headerText = row.textContent.trim();
+                    const match = headerText.match(/📄 ([\w_]+)/);
+                    if (match) {
+                        const testFile = match[1];
+                        let shouldShow = false;
+                        visibleFiles.forEach((files, module) => {
+                            if (files.has(testFile)) {
+                                shouldShow = true;
+                            }
+                        });
+                        if (shouldShow) {
+                            row.classList.remove('hidden');
+                        } else {
+                            row.classList.add('hidden');
+                        }
+                    }
                 }
             });
         }
@@ -470,8 +571,10 @@
             const modal = document.getElementById('detailModal');
             const body = document.getElementById('modal-body');
             
-            // Set modal title to docstring summary (or function name as fallback)
-            const titleText = data.docstring_summary || data.test_func_name || data.nodeid.split('::').pop();
+            // Set modal title to bilingual docstring
+            const titleText = currentLang === 'zh'
+                ? (data.docstring_summary_zh || data.docstring_summary || data.test_func_name)
+                : (data.docstring_summary_en || data.test_func_name);
             document.getElementById('modal-title').textContent = titleText;
             
             let extraHtml = '';
@@ -547,39 +650,71 @@
             hljs.highlightAll();
         }
 
-        // Export to PDF
-        async function exportPDF() {
+        // Export to Excel (using English version for audit)
+        function exportExcel() {
             const button = event.target.closest('button');
             const originalText = button.innerHTML;
-            button.innerHTML = currentLang === 'zh' ? '生成中...' : 'Generating...';
+            button.innerHTML = currentLang === 'zh' ? '导出中...' : 'Exporting...';
             button.disabled = true;
 
             try {
-                const { jsPDF } = window.jspdf;
-                const pdf = new jsPDF('p', 'mm', 'a4');
+                // 准备导出数据（仅使用英文版本）
+                const exportData = testData.map(item => ({
+                    'Module': item.module || 'Unknown',
+                    'Test File': item.test_file || '',
+                    'Test Case': item.docstring_summary_en || item.test_func_name || '',
+                    'API Path': item.api_path || '',
+                    'Status': item.status.toUpperCase(),
+                    'Duration (s)': parseFloat(item.duration.toFixed(3)),
+                    'Execution Time': item.start_time,
+                    'Request Method': item.extra?.request?.method || '',
+                    'Request URL': item.extra?.request?.url || '',
+                    'Request Params': JSON.stringify(item.extra?.request?.body || {}),
+                    'Response Code': item.extra?.response?.status_code || '',
+                    'Response Body': JSON.stringify(item.extra?.response?.body || {})
+                }));
                 
-                // Capture dashboard
-                const dashboard = document.querySelector('.dashboard');
-                const dashboardCanvas = await html2canvas(dashboard, { scale: 2 });
-                const dashboardImg = dashboardCanvas.toDataURL('image/png');
-                pdf.addImage(dashboardImg, 'PNG', 10, 10, 190, (dashboardCanvas.height * 190) / dashboardCanvas.width);
+                // 创建工作簿
+                const wb = XLSX.utils.book_new();
+                const ws = XLSX.utils.json_to_sheet(exportData);
                 
-                // Capture tab filter
-                const tabFilter = document.querySelector('.tab-filter');
-                const tabCanvas = await html2canvas(tabFilter, { scale: 2 });
-                const tabImg = tabCanvas.toDataURL('image/png');
-                const yOffset = 10 + (dashboardCanvas.height * 190) / dashboardCanvas.width + 5;
-                pdf.addImage(tabImg, 'PNG', 10, yOffset, 190, (tabCanvas.height * 190) / tabCanvas.width);
+                // 设置列宽
+                ws['!cols'] = [
+                    {wch: 20},  // Module
+                    {wch: 35},  // Test File
+                    {wch: 60},  // Test Case
+                    {wch: 45},  // API Path
+                    {wch: 10},  // Status
+                    {wch: 12},  // Duration
+                    {wch: 20},  // Execution Time
+                    {wch: 12},  // Request Method
+                    {wch: 70},  // Request URL
+                    {wch: 50},  // Request Params
+                    {wch: 15},  // Response Code
+                    {wch: 80}   // Response Body
+                ];
                 
-                // Save PDF
-                const filename = `Ben_xi_report_${new Date().getTime()}.pdf`;
-                pdf.save(filename);
+                // 添加工作表
+                XLSX.utils.book_append_sheet(wb, ws, 'Test Results');
+                
+                // 生成文件名（包含环境和日期）
+                const date = new Date();
+                const dateStr = `${date.getFullYear()}${String(date.getMonth()+1).padStart(2,'0')}${String(date.getDate()).padStart(2,'0')}`;
+                const filename = `Test_Report_${envInfo.env}_${envInfo.core}_${dateStr}.xlsx`;
+                
+                // 下载文件
+                XLSX.writeFile(wb, filename);
                 
                 button.innerHTML = originalText;
                 button.disabled = false;
+                
+                // 显示成功提示
+                alert(currentLang === 'zh' 
+                    ? `Excel 报告已导出: ${filename}` 
+                    : `Excel report exported: ${filename}`);
             } catch (error) {
-                console.error('PDF export failed:', error);
-                alert(currentLang === 'zh' ? 'PDF 导出失败，请查看控制台' : 'PDF export failed, check console');
+                console.error('Excel export failed:', error);
+                alert(currentLang === 'zh' ? 'Excel 导出失败，请查看控制台' : 'Excel export failed, check console');
                 button.innerHTML = originalText;
                 button.disabled = false;
             }
