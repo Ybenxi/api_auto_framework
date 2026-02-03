@@ -28,46 +28,61 @@ jobs:
         with:
           python-version: '3.9'
       
-      # 3. 安装依赖 (关键修复：确保安装了 pytest-json-report 和 openpyxl)
+      # 3. 安装依赖
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          # 显式安装关键依赖，防止 requirements.txt 漏写
           pip install pytest pytest-html pytest-json-report pandas openpyxl requests
       
-      # 4. 运行测试 (关键：生成 json-report 用于数据解析)
+      # 4. 运行测试（移除 --html 参数，让 conftest.py 生成报告）
       - name: Run tests
         id: run_tests
         continue-on-error: true
         run: |
           mkdir -p reports
-          # 注意：移除 --html 参数，让 conftest.py 自己生成带时间戳的报告
           pytest test_cases/ -v \
             --json-report \
             --json-report-file=reports/report.json || true
-          
-          # 记录退出码
           echo "TEST_EXIT_CODE=$?" >> $GITHUB_ENV
       
-      # 5. 精准抓取并重命名最新的 HTML 报告 (修复附件为空的问题)
+      # 5. 调试 - 列出生成的文件
+      - name: Debug - List generated files
+        if: always()
+        run: |
+          echo "=========================================="
+          echo "列出 reports 目录下的所有文件："
+          echo "=========================================="
+          ls -lh reports/
+          echo ""
+          echo "=========================================="
+          echo "report.json 内容："
+          echo "=========================================="
+          if [ -f reports/report.json ]; then
+            cat reports/report.json | head -100
+          else
+            echo "report.json 不存在"
+          fi
+      
+      # 6. 精准抓取最新的 HTML 报告
       - name: Find and rename latest report
         if: always()
         run: |
-          # 查找 reports 目录下最新的 .html 文件 (排除 report.json)
+          # 查找 reports 目录下最新的 .html 文件
           LATEST_REPORT=$(ls -t reports/*.html 2>/dev/null | head -1)
           
           if [ -n "$LATEST_REPORT" ]; then
-            echo "找到最新报告文件: $LATEST_REPORT"
-            # 重命名为 final_report.html，方便邮件插件读取
+            echo "找到报告文件: $LATEST_REPORT"
+            # 重命名为 final_report.html
             cp "$LATEST_REPORT" reports/final_report.html
             echo "已重命名为: reports/final_report.html"
           else
             echo "警告: 未找到 HTML 报告文件"
+            # 创建一个空的报告文件，避免发送邮件时报错
             echo "<html><body><h1>No report generated</h1></body></html>" > reports/final_report.html
           fi
       
-      # 6. 解析测试结果并提取统计信息
+      # 7. 解析测试结果并提取统计信息（增强版）
       - name: Parse test results
         if: always()
         run: |
@@ -85,6 +100,7 @@ jobs:
               
               # 提取统计信息
               summary = report_data.get("summary", {})
+              
               total = summary.get("total", 0)
               passed = summary.get("passed", 0)
               failed = summary.get("failed", 0)
@@ -96,10 +112,29 @@ jobs:
               else:
                   pass_rate = 0.0
               
-              # 获取环境信息
+              # 获取环境信息（增强版：尝试多种字段名称）
               environment = report_data.get("environment", {})
-              python_version = environment.get("Python", "3.9")
-              platform = environment.get("Platform", "Linux")
+              
+              # 调试输出
+              print(f"[DEBUG] Environment data: {environment}")
+              
+              # 尝试多种字段名称获取 Python 版本
+              python_version = (
+                  environment.get("Python") or 
+                  environment.get("python") or 
+                  environment.get("Python version") or
+                  environment.get("python_version") or
+                  "3.9.25"  # 默认值
+              )
+              
+              # 尝试多种字段名称获取平台信息
+              platform = (
+                  environment.get("Platform") or 
+                  environment.get("platform") or 
+                  environment.get("OS") or
+                  environment.get("os") or
+                  "Linux"  # 默认值
+              )
               
               # 写入环境变量
               with open(os.environ["GITHUB_ENV"], "a") as env_file:
@@ -110,29 +145,43 @@ jobs:
                   env_file.write(f"TEST_PASS_RATE={pass_rate}\n")
                   env_file.write(f"TEST_PYTHON={python_version}\n")
                   env_file.write(f"TEST_PLATFORM={platform}\n")
+              
+              print(f"✓ 测试统计信息已提取:")
+              print(f"  Total: {total}")
+              print(f"  Passed: {passed}")
+              print(f"  Failed: {failed}")
+              print(f"  Skipped: {skipped}")
+              print(f"  Pass Rate: {pass_rate}%")
+              print(f"  Python: {python_version}")
+              print(f"  Platform: {platform}")
           else:
-              print("警告: 未找到 report.json")
+              print("警告: 未找到 report.json 文件")
+              # 设置默认值
               with open(os.environ["GITHUB_ENV"], "a") as env_file:
-                  env_file.write("TEST_TOTAL=0\nTEST_PASSED=0\nTEST_FAILED=0\nTEST_SKIPPED=0\nTEST_PASS_RATE=0.0\n")
+                  env_file.write("TEST_TOTAL=0\n")
+                  env_file.write("TEST_PASSED=0\n")
+                  env_file.write("TEST_FAILED=0\n")
+                  env_file.write("TEST_SKIPPED=0\n")
+                  env_file.write("TEST_PASS_RATE=0.0\n")
+                  env_file.write("TEST_PYTHON=3.9.25\n")
+                  env_file.write("TEST_PLATFORM=Linux\n")
           EOF
       
-      # 7. 生成测试用例 Excel 列表
+      # 8. 生成测试用例列表
       - name: Generate test case list
         if: always()
         run: |
-          # 确保 utils 脚本存在
-          if [ -f utils/generate_case_list.py ]; then
-            python utils/generate_case_list.py
-          else
-            echo "Warning: utils/generate_case_list.py not found"
-            touch test_cases.xlsx # 创建空文件防止发邮件报错
-          fi
+          python utils/generate_case_list.py
       
-      # 8. 准备构建状态图标
-      - name: Prepare status icon
+      # 9. 获取测试统计信息
+      - name: Get test statistics
         if: always()
+        id: test_stats
         run: |
+          # 获取当前日期
           echo "TEST_DATE=$(date +'%Y-%m-%d %H:%M:%S')" >> $GITHUB_ENV
+          
+          # 获取构建状态
           if [ "${{ env.TEST_EXIT_CODE }}" == "0" ]; then
             echo "BUILD_STATUS=✅ Success" >> $GITHUB_ENV
             echo "BUILD_STATUS_ICON=✅" >> $GITHUB_ENV
@@ -140,8 +189,12 @@ jobs:
             echo "BUILD_STATUS=❌ Failed" >> $GITHUB_ENV
             echo "BUILD_STATUS_ICON=❌" >> $GITHUB_ENV
           fi
+          
+          # 获取环境信息
+          echo "TEST_ENV=DEV" >> $GITHUB_ENV
+          echo "TEST_CORE=actc" >> $GITHUB_ENV
       
-      # 9. 发送邮件 (样式已修复：白底黑字 Header)
+      # 10. 发送邮件通知（修复白色字体）
       - name: Send email notification
         if: always()
         uses: dawidd6/action-send-mail@v3
@@ -159,131 +212,181 @@ jobs:
             <head>
                 <style>
                     body {
-                        font-family: 'Helvetica Neue', Arial, sans-serif;
+                        font-family: Arial, sans-serif;
                         line-height: 1.6;
                         color: #333;
                         max-width: 800px;
                         margin: 0 auto;
                         padding: 20px;
-                        background-color: #ffffff;
                     }
-                    /* Header 样式重构：白底黑字 */
                     .header {
-                        background: #ffffff;
-                        padding: 20px 0;
-                        border-bottom: 3px solid #4472C4;
-                        text-align: left;
+                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        color: #ffffff;
+                        padding: 30px;
+                        border-radius: 10px;
+                        text-align: center;
                         margin-bottom: 30px;
                     }
                     .header h1 {
                         margin: 0;
-                        font-size: 32px;
-                        color: #000000;  /* 黑色文字 */
-                        font-weight: 800;
-                        letter-spacing: -0.5px;
+                        font-size: 28px;
+                        color: #ffffff;
                     }
                     .header p {
-                        margin: 5px 0 0 0;
-                        font-size: 16px;
-                        color: #000000; /* 副标题也改为黑色或深灰，清晰可见 */
-                        font-weight: 500;
+                        margin: 10px 0 0 0;
+                        opacity: 0.9;
+                        color: #ffffff;
                     }
-                    /* 状态徽章 */
                     .status-badge {
                         display: inline-block;
-                        padding: 6px 12px;
-                        border-radius: 4px;
+                        padding: 8px 16px;
+                        border-radius: 20px;
                         font-weight: bold;
-                        font-size: 14px;
-                        margin-bottom: 15px;
-                        text-transform: uppercase;
+                        margin-top: 10px;
+                        color: #ffffff;
                     }
                     .status-success {
-                        background-color: #d1fae5;
-                        color: #065f46;
-                        border: 1px solid #10b981;
+                        background-color: #10b981;
+                        color: #ffffff;
                     }
                     .status-failed {
-                        background-color: #fee2e2;
-                        color: #991b1b;
-                        border: 1px solid #ef4444;
+                        background-color: #ef4444;
+                        color: #ffffff;
                     }
-                    /* 表格样式 */
                     .info-table {
                         width: 100%;
                         border-collapse: collapse;
                         margin: 20px 0;
                         background: white;
-                        border: 1px solid #e5e7eb;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                        border-radius: 8px;
+                        overflow: hidden;
                     }
                     .info-table th {
-                        background-color: #f3f4f6;
-                        color: #1f2937;
+                        background-color: #4472C4;
+                        color: white;
                         padding: 12px;
                         text-align: left;
                         font-weight: bold;
-                        border-bottom: 2px solid #e5e7eb;
                     }
                     .info-table td {
                         padding: 12px;
                         border-bottom: 1px solid #e5e7eb;
                     }
-                    .metric { font-size: 18px; font-weight: bold; color: #1f2937; }
-                    .metric-label { font-size: 14px; color: #6b7280; }
-                    .pass-rate { font-size: 24px; font-weight: bold; color: #10b981; }
-                    .section-title {
-                        font-size: 18px;
+                    .info-table tr:last-child td {
+                        border-bottom: none;
+                    }
+                    .info-table tr:nth-child(even) {
+                        background-color: #f9fafb;
+                    }
+                    .metric {
+                        font-size: 24px;
                         font-weight: bold;
-                        color: #111827;
-                        margin: 30px 0 10px 0;
-                        padding-left: 10px;
-                        border-left: 4px solid #4472C4;
+                        color: #4472C4;
+                    }
+                    .metric-label {
+                        font-size: 14px;
+                        color: #6b7280;
+                        font-weight: normal;
+                    }
+                    .pass-rate {
+                        font-size: 32px;
+                        font-weight: bold;
+                        color: #10b981;
                     }
                     .footer {
-                        margin-top: 40px;
-                        padding-top: 20px;
-                        border-top: 1px solid #e5e7eb;
+                        margin-top: 30px;
+                        padding: 20px;
+                        background-color: #f3f4f6;
+                        border-radius: 8px;
                         text-align: center;
-                        color: #9ca3af;
-                        font-size: 12px;
+                        color: #6b7280;
+                        font-size: 14px;
                     }
-                    .footer a { color: #4472C4; text-decoration: none; }
+                    .footer a {
+                        color: #4472C4;
+                        text-decoration: none;
+                    }
+                    .section-title {
+                        font-size: 20px;
+                        font-weight: bold;
+                        color: #1f2937;
+                        margin: 30px 0 15px 0;
+                        padding-bottom: 10px;
+                        border-bottom: 2px solid #4472C4;
+                    }
                 </style>
             </head>
             <body>
                 <div class="header">
-                    <span class="status-badge ${{ env.TEST_EXIT_CODE == '0' && 'status-success' || 'status-failed' }}">
-                        ${{ env.BUILD_STATUS_ICON }} ${{ env.BUILD_STATUS }}
-                    </span>
-                    <h1>Ben xi Interface Test Report</h1>
+                    <h1>${{ env.BUILD_STATUS_ICON }} Ben xi Interface Test Report</h1>
                     <p>Automated Test Execution Report</p>
+                    <div class="status-badge ${{ env.TEST_EXIT_CODE == '0' && 'status-success' || 'status-failed' }}">
+                        ${{ env.BUILD_STATUS }}
+                    </div>
                 </div>
                 
                 <div class="section-title">📊 Test Execution Summary</div>
                 <table class="info-table">
-                    <tr><th>Metric</th><th>Value</th></tr>
-                    <tr><td><span class="metric-label">Total Tests</span></td><td><span class="metric">${{ env.TEST_TOTAL }}</span></td></tr>
-                    <tr><td><span class="metric-label">Passed</span></td><td><span class="metric" style="color: #059669;">${{ env.TEST_PASSED }}</span></td></tr>
-                    <tr><td><span class="metric-label">Failed</span></td><td><span class="metric" style="color: #dc2626;">${{ env.TEST_FAILED }}</span></td></tr>
-                    <tr><td><span class="metric-label">Skipped</span></td><td><span class="metric" style="color: #d97706;">${{ env.TEST_SKIPPED }}</span></td></tr>
-                    <tr><td><span class="metric-label">Pass Rate</span></td><td><span class="pass-rate">${{ env.TEST_PASS_RATE }}%</span></td></tr>
+                    <tr>
+                        <th>Metric</th>
+                        <th>Value</th>
+                    </tr>
+                    <tr>
+                        <td><span class="metric-label">Total Tests</span></td>
+                        <td><span class="metric">${{ env.TEST_TOTAL }}</span></td>
+                    </tr>
+                    <tr>
+                        <td><span class="metric-label">Passed</span></td>
+                        <td><span class="metric" style="color: #10b981;">${{ env.TEST_PASSED }}</span></td>
+                    </tr>
+                    <tr>
+                        <td><span class="metric-label">Failed</span></td>
+                        <td><span class="metric" style="color: #ef4444;">${{ env.TEST_FAILED }}</span></td>
+                    </tr>
+                    <tr>
+                        <td><span class="metric-label">Skipped</span></td>
+                        <td><span class="metric" style="color: #f59e0b;">${{ env.TEST_SKIPPED }}</span></td>
+                    </tr>
+                    <tr>
+                        <td><span class="metric-label">Pass Rate</span></td>
+                        <td><span class="pass-rate">${{ env.TEST_PASS_RATE }}%</span></td>
+                    </tr>
                 </table>
                 
                 <div class="section-title">🔧 Environment Information</div>
                 <table class="info-table">
-                    <tr><th>Item</th><th>Value</th></tr>
-                    <tr><td>Environment</td><td><strong>${{ env.TEST_ENV }}</strong></td></tr>
-                    <tr><td>Core</td><td><strong>${{ env.TEST_CORE }}</strong></td></tr>
-                    <tr><td>Python Version</td><td><strong>${{ env.TEST_PYTHON }}</strong></td></tr>
-                    <tr><td>Platform</td><td><strong>${{ env.TEST_PLATFORM }}</strong></td></tr>
-                    <tr><td>Execution Time</td><td><strong>${{ env.TEST_DATE }}</strong></td></tr>
+                    <tr>
+                        <th>Item</th>
+                        <th>Value</th>
+                    </tr>
+                    <tr>
+                        <td>Environment</td>
+                        <td><strong>${{ env.TEST_ENV }}</strong></td>
+                    </tr>
+                    <tr>
+                        <td>Core</td>
+                        <td><strong>${{ env.TEST_CORE }}</strong></td>
+                    </tr>
+                    <tr>
+                        <td>Python Version</td>
+                        <td><strong>${{ env.TEST_PYTHON }}</strong></td>
+                    </tr>
+                    <tr>
+                        <td>Platform</td>
+                        <td><strong>${{ env.TEST_PLATFORM }}</strong></td>
+                    </tr>
+                    <tr>
+                        <td>Execution Time</td>
+                        <td><strong>${{ env.TEST_DATE }}</strong></td>
+                    </tr>
                 </table>
                 
                 <div class="section-title">📎 Attachments</div>
-                <p style="margin-bottom: 10px; color: #4b5563;">Please check the attached files for detailed test results:</p>
-                <ul style="color: #374151;">
-                    <li style="margin-bottom: 5px;"><strong>final_report.html</strong> - Detailed HTML test report</li>
-                    <li><strong>test_cases.xlsx</strong> - Complete test case list</li>
+                <p>Please check the attached files for detailed test results:</p>
+                <ul>
+                    <li><strong>final_report.html</strong> - Detailed HTML test report with all test cases</li>
+                    <li><strong>test_cases.xlsx</strong> - Complete test case list with API URIs and markers</li>
                 </ul>
                 
                 <div class="footer">
