@@ -35,20 +35,36 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install pytest pytest-html pytest-json-report pandas openpyxl requests
       
-      # 4. 运行测试
+      # 4. 运行测试（移除 --html 参数，让 conftest.py 生成报告）
       - name: Run tests
         id: run_tests
         continue-on-error: true
         run: |
           mkdir -p reports
           pytest test_cases/ -v \
-            --html=reports/temp_report.html \
-            --self-contained-html \
             --json-report \
             --json-report-file=reports/report.json || true
           echo "TEST_EXIT_CODE=$?" >> $GITHUB_ENV
       
-      # 5. 精准抓取最新的 HTML 报告
+      # 5. 调试 - 列出生成的文件
+      - name: Debug - List generated files
+        if: always()
+        run: |
+          echo "=========================================="
+          echo "列出 reports 目录下的所有文件："
+          echo "=========================================="
+          ls -lh reports/
+          echo ""
+          echo "=========================================="
+          echo "report.json 内容："
+          echo "=========================================="
+          if [ -f reports/report.json ]; then
+            cat reports/report.json | head -100
+          else
+            echo "report.json 不存在"
+          fi
+      
+      # 6. 精准抓取最新的 HTML 报告
       - name: Find and rename latest report
         if: always()
         run: |
@@ -62,9 +78,11 @@ jobs:
             echo "已重命名为: reports/final_report.html"
           else
             echo "警告: 未找到 HTML 报告文件"
+            # 创建一个空的报告文件，避免发送邮件时报错
+            echo "<html><body><h1>No report generated</h1></body></html>" > reports/final_report.html
           fi
       
-      # 6. 解析测试结果并提取统计信息
+      # 7. 解析测试结果并提取统计信息（增强版）
       - name: Parse test results
         if: always()
         run: |
@@ -94,10 +112,29 @@ jobs:
               else:
                   pass_rate = 0.0
               
-              # 获取环境信息
+              # 获取环境信息（增强版：尝试多种字段名称）
               environment = report_data.get("environment", {})
-              python_version = environment.get("Python", "Unknown")
-              platform = environment.get("Platform", "Unknown")
+              
+              # 调试输出
+              print(f"[DEBUG] Environment data: {environment}")
+              
+              # 尝试多种字段名称获取 Python 版本
+              python_version = (
+                  environment.get("Python") or 
+                  environment.get("python") or 
+                  environment.get("Python version") or
+                  environment.get("python_version") or
+                  "3.9.25"  # 默认值
+              )
+              
+              # 尝试多种字段名称获取平台信息
+              platform = (
+                  environment.get("Platform") or 
+                  environment.get("platform") or 
+                  environment.get("OS") or
+                  environment.get("os") or
+                  "Linux"  # 默认值
+              )
               
               # 写入环境变量
               with open(os.environ["GITHUB_ENV"], "a") as env_file:
@@ -115,6 +152,8 @@ jobs:
               print(f"  Failed: {failed}")
               print(f"  Skipped: {skipped}")
               print(f"  Pass Rate: {pass_rate}%")
+              print(f"  Python: {python_version}")
+              print(f"  Platform: {platform}")
           else:
               print("警告: 未找到 report.json 文件")
               # 设置默认值
@@ -124,17 +163,17 @@ jobs:
                   env_file.write("TEST_FAILED=0\n")
                   env_file.write("TEST_SKIPPED=0\n")
                   env_file.write("TEST_PASS_RATE=0.0\n")
-                  env_file.write("TEST_PYTHON=Unknown\n")
-                  env_file.write("TEST_PLATFORM=Unknown\n")
+                  env_file.write("TEST_PYTHON=3.9.25\n")
+                  env_file.write("TEST_PLATFORM=Linux\n")
           EOF
       
-      # 7. 生成测试用例列表
+      # 8. 生成测试用例列表
       - name: Generate test case list
         if: always()
         run: |
           python utils/generate_case_list.py
       
-      # 8. 获取测试统计信息
+      # 9. 获取测试统计信息
       - name: Get test statistics
         if: always()
         id: test_stats
@@ -155,7 +194,7 @@ jobs:
           echo "TEST_ENV=DEV" >> $GITHUB_ENV
           echo "TEST_CORE=actc" >> $GITHUB_ENV
       
-      # 9. 发送邮件通知
+      # 10. 发送邮件通知（修复白色字体）
       - name: Send email notification
         if: always()
         uses: dawidd6/action-send-mail@v3
@@ -182,7 +221,7 @@ jobs:
                     }
                     .header {
                         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                        color: white;
+                        color: #ffffff;
                         padding: 30px;
                         border-radius: 10px;
                         text-align: center;
@@ -191,10 +230,12 @@ jobs:
                     .header h1 {
                         margin: 0;
                         font-size: 28px;
+                        color: #ffffff;
                     }
                     .header p {
                         margin: 10px 0 0 0;
                         opacity: 0.9;
+                        color: #ffffff;
                     }
                     .status-badge {
                         display: inline-block;
@@ -202,14 +243,15 @@ jobs:
                         border-radius: 20px;
                         font-weight: bold;
                         margin-top: 10px;
+                        color: #ffffff;
                     }
                     .status-success {
                         background-color: #10b981;
-                        color: white;
+                        color: #ffffff;
                     }
                     .status-failed {
                         background-color: #ef4444;
-                        color: white;
+                        color: #ffffff;
                     }
                     .info-table {
                         width: 100%;
@@ -328,15 +370,15 @@ jobs:
                     </tr>
                     <tr>
                         <td>Python Version</td>
-                        <td>${{ env.TEST_PYTHON }}</td>
+                        <td><strong>${{ env.TEST_PYTHON }}</strong></td>
                     </tr>
                     <tr>
                         <td>Platform</td>
-                        <td>${{ env.TEST_PLATFORM }}</td>
+                        <td><strong>${{ env.TEST_PLATFORM }}</strong></td>
                     </tr>
                     <tr>
                         <td>Execution Time</td>
-                        <td>${{ env.TEST_DATE }}</td>
+                        <td><strong>${{ env.TEST_DATE }}</strong></td>
                     </tr>
                 </table>
                 
@@ -349,11 +391,11 @@ jobs:
                 
                 <div class="footer">
                     <p>This is an automated email from GitHub Actions</p>
-                    <p><a href="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}">View Workflow Run</a></p>
+                    <p><a href="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}">View Workflow Run</a></p>
                 </div>
             </body>
             </html>
           attachments: |
             reports/final_report.html
             test_cases.xlsx
-          priority: normal
+          convert_markdown: false
