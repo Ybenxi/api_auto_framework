@@ -2,6 +2,8 @@ import pytest
 import requests
 import os
 import json
+import re
+import inspect
 from datetime import datetime
 from urllib.parse import urlparse, parse_qs
 from api.auth_api import auth_api
@@ -9,6 +11,106 @@ from config.config import config
 
 # 用于存储所有测试结果和捕获的流量
 test_results = []
+
+# 模块名称映射（基于文件夹名称）
+MODULE_NAME_MAPPING = {
+    "contact": "Contact",
+    "profile_account": "Profile Account",
+    "financial_account": "Financial Account",
+    "sub_account": "Sub Account"
+}
+
+
+def extract_module_from_nodeid(nodeid: str) -> str:
+    """
+    从 nodeid 中提取模块名称
+    例如: test_cases/contact/test_contact_list.py -> Contact
+    """
+    parts = nodeid.split("/")
+    if len(parts) >= 2 and parts[0] == "test_cases":
+        folder_name = parts[1]
+        return MODULE_NAME_MAPPING.get(folder_name, folder_name.replace("_", " ").title())
+    return "Unknown"
+
+
+def extract_api_path_from_docstring(docstring: str) -> str:
+    """
+    从 docstring 中提取 API 路径
+    支持格式：
+    - 测试 GET /api/v1/cores/{core}/contacts 接口
+    - Path: /api/v1/...
+    - URI: /api/v1/...
+    """
+    if not docstring:
+        return ""
+    
+    # 匹配模式1: "测试 GET/POST/PUT/DELETE /api/..." 或 "GET /api/..."
+    pattern1 = r'(?:测试\s+)?(?:GET|POST|PUT|DELETE|PATCH)\s+(/api/[^\s]+)'
+    match = re.search(pattern1, docstring, re.IGNORECASE)
+    if match:
+        return match.group(1)
+    
+    # 匹配模式2: "Path: /..." 或 "URI: /..."
+    pattern2 = r'(?:Path|URI|Endpoint):\s*(/[^\s]+)'
+    match = re.search(pattern2, docstring, re.IGNORECASE)
+    if match:
+        return match.group(1)
+    
+    # 匹配模式3: 直接匹配 /api/v1/... 路径
+    pattern3 = r'(/api/v\d+/[^\s]+)'
+    match = re.search(pattern3, docstring)
+    if match:
+        return match.group(1)
+    
+    return ""
+
+
+def extract_docstring_summary(item) -> str:
+    """
+    提取测试用例的 docstring 摘要（第一行非空内容）
+    """
+    try:
+        # 获取测试函数的 docstring
+        func = item.obj if hasattr(item, 'obj') else None
+        if func and func.__doc__:
+            lines = func.__doc__.strip().split('\n')
+            for line in lines:
+                line = line.strip()
+                if line:
+                    return line
+    except Exception:
+        pass
+    return ""
+
+
+def get_full_docstring(item) -> str:
+    """
+    获取测试用例的完整 docstring
+    """
+    try:
+        func = item.obj if hasattr(item, 'obj') else None
+        if func and func.__doc__:
+            return func.__doc__.strip()
+        
+        # 尝试从类级别获取 docstring
+        if hasattr(item, 'cls') and item.cls and item.cls.__doc__:
+            return item.cls.__doc__.strip()
+    except Exception:
+        pass
+    return ""
+
+
+def get_module_docstring(item) -> str:
+    """
+    获取测试模块（文件）的 docstring
+    """
+    try:
+        if hasattr(item, 'module') and item.module and item.module.__doc__:
+            return item.module.__doc__.strip()
+    except Exception:
+        pass
+    return ""
+
 
 @pytest.fixture(scope="session", autouse=True)
 def login_session():
@@ -57,7 +159,8 @@ def login_session():
     print("\n[Teardown] 正在关闭会话...")
     session.close()
 
-# --- 流量捕获逻辑（修复版）---
+
+# --- 流量捕获逻辑（增强版）---
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
 def pytest_runtest_makereport(item, call):
     outcome = yield
@@ -70,12 +173,25 @@ def pytest_runtest_makereport(item, call):
         # 提取 marker 信息
         markers = [marker.name for marker in item.iter_markers()]
         
-        # 提取模块名称（从 nodeid 中提取）
-        nodeid_parts = item.nodeid.split("::")
-        module_name = nodeid_parts[0].replace("test_cases/", "").replace("/", " > ").replace(".py", "")
+        # 提取模块名称（从文件夹名称映射）
+        module_name = extract_module_from_nodeid(item.nodeid)
         
         # 提取测试文件名（不包含路径）
+        nodeid_parts = item.nodeid.split("::")
         test_file = nodeid_parts[0].split("/")[-1].replace(".py", "")
+        
+        # 提取 docstring 信息
+        docstring_summary = extract_docstring_summary(item)
+        full_docstring = get_full_docstring(item)
+        module_docstring = get_module_docstring(item)
+        
+        # 提取 API 路径（优先从方法 docstring，其次从模块 docstring）
+        api_path = extract_api_path_from_docstring(full_docstring)
+        if not api_path:
+            api_path = extract_api_path_from_docstring(module_docstring)
+        
+        # 提取测试函数名（用于显示）
+        test_func_name = item.nodeid.split("::")[-1]
         
         test_results.append({
             "nodeid": item.nodeid,
@@ -85,8 +201,12 @@ def pytest_runtest_makereport(item, call):
             "markers": markers,
             "module": module_name,
             "test_file": test_file,
+            "test_func_name": test_func_name,
+            "docstring_summary": docstring_summary,
+            "api_path": api_path,
             "extra": extra_data
         })
+
 
 def pytest_sessionfinish(session, exitstatus):
     """
@@ -107,17 +227,27 @@ def pytest_sessionfinish(session, exitstatus):
         with open(template_path, 'r', encoding='utf-8') as f:
             template_content = f.read()
         
+        # 按模块排序测试结果
+        sorted_results = sorted(test_results, key=lambda x: (x.get("module", ""), x.get("nodeid", "")))
+        
         # 注入数据
         env_info = {
             "env": os.getenv("ENV", "DEV"),
             "core": config.core
         }
-        final_html = template_content.replace("{{RESULTS_JSON}}", json.dumps(test_results, ensure_ascii=False))
+        final_html = template_content.replace("{{RESULTS_JSON}}", json.dumps(sorted_results, ensure_ascii=False))
         final_html = final_html.replace("{{ENV_JSON}}", json.dumps(env_info, ensure_ascii=False))
         
         with open(report_path, 'w', encoding='utf-8') as f:
             f.write(final_html)
-        print(f"\n[Report] Ben xi report v2.0 已生成: {report_path}")
+        print(f"\n[Report] Ben xi report v3.0 已生成: {report_path}")
+        
+        # 同时生成一个固定名称的报告（用于 CI/CD）
+        latest_report_path = os.path.join(os.path.dirname(__file__), "..", "reports", "final_report.html")
+        with open(latest_report_path, 'w', encoding='utf-8') as f:
+            f.write(final_html)
+        print(f"[Report] 最新报告已更新: {latest_report_path}")
+
 
 # --- 自动拦截 Requests 流量的辅助工具（修复版）---
 @pytest.fixture(autouse=True)
