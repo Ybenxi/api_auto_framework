@@ -220,5 +220,3 @@ class TestFinancialAccountListFinancialAccounts:
         assert parsed.get("total_elements") == 0, "total_elements 应该为 0"
         
         print("✓ 空结果验证成功，接口正确返回空列表")
-        else:
-            print("  跳过字段验证（列表为空）")
