@@ -16,7 +16,7 @@ class TestSubAccountRetrieveRelatedFboAccounts:
 
     def test_retrieve_related_fbo_accounts_success(self, login_session):
         """
-        测试场景：成功获取 Sub Account 相关的 FBO Accounts
+        测试场景1：成功获取 Sub Account 相关的 FBO Accounts
         验证点：
         1. 先获取列表，取第一个 Sub Account ID
         2. 调用 FBO Accounts 接口返回 200
@@ -60,7 +60,7 @@ class TestSubAccountRetrieveRelatedFboAccounts:
 
     def test_retrieve_related_fbo_accounts_with_status_filter(self, login_session):
         """
-        测试场景：使用 status 筛选 FBO Accounts
+        测试场景2：使用 status 筛选 FBO Accounts
         验证点：
         1. 接口返回 200
         2. 返回数据结构正确
@@ -96,7 +96,7 @@ class TestSubAccountRetrieveRelatedFboAccounts:
 
     def test_retrieve_related_fbo_accounts_pagination(self, login_session):
         """
-        测试场景：验证 FBO Accounts 列表分页功能
+        测试场景3：验证 FBO Accounts 列表分页功能
         验证点：
         1. 接口返回 200
         2. 分页信息正确
@@ -132,7 +132,7 @@ class TestSubAccountRetrieveRelatedFboAccounts:
 
     def test_retrieve_related_fbo_accounts_response_fields(self, login_session):
         """
-        测试场景：验证 FBO Account 响应字段完整性
+        测试场景4：验证 FBO Account 响应字段完整性
         验证点：
         1. 接口返回 200
         2. FBO Account 对象包含必需字段

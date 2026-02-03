@@ -16,7 +16,7 @@ class TestFinancialAccountRetrieveRelatedSubAccounts:
 
     def test_retrieve_related_sub_accounts_success(self, login_session):
         """
-        测试场景：成功获取 Financial Account 相关的 Sub Accounts
+        测试场景1：成功获取 Financial Account 相关的 Sub Accounts
         验证点：
         1. 先获取列表，取第一个 Financial Account ID
         2. 调用 Sub Accounts 接口返回 200
@@ -60,7 +60,7 @@ class TestFinancialAccountRetrieveRelatedSubAccounts:
 
     def test_retrieve_related_sub_accounts_with_name_filter(self, login_session):
         """
-        测试场景：使用 name 筛选 Sub Accounts
+        测试场景2：使用 name 筛选 Sub Accounts
         验证点：
         1. 接口返回 200
         2. 返回数据结构正确
@@ -96,7 +96,7 @@ class TestFinancialAccountRetrieveRelatedSubAccounts:
 
     def test_retrieve_related_sub_accounts_with_status_filter(self, login_session):
         """
-        测试场景：使用 status 筛选 Sub Accounts
+        测试场景3：使用 status 筛选 Sub Accounts
         验证点：
         1. 接口返回 200
         2. 返回数据结构正确
@@ -132,7 +132,7 @@ class TestFinancialAccountRetrieveRelatedSubAccounts:
 
     def test_retrieve_related_sub_accounts_pagination(self, login_session):
         """
-        测试场景：验证 Sub Accounts 列表分页功能
+        测试场景4：验证 Sub Accounts 列表分页功能
         验证点：
         1. 接口返回 200
         2. 分页信息正确
@@ -168,7 +168,7 @@ class TestFinancialAccountRetrieveRelatedSubAccounts:
 
     def test_retrieve_related_sub_accounts_response_fields(self, login_session):
         """
-        测试场景：验证 Sub Account 响应字段完整性
+        测试场景5：验证 Sub Account 响应字段完整性
         验证点：
         1. 接口返回 200
         2. Sub Account 对象包含必需字段

@@ -15,7 +15,7 @@ class TestContactList:
 
     def test_list_contacts_success(self, login_session):
         """
-        测试场景：成功获取 Contacts 列表
+        测试场景1：成功获取 Contacts 列表
         验证点：
         1. 接口返回 200
         2. 返回数据结构正确（包含 content、pageable 等字段）
@@ -57,7 +57,7 @@ class TestContactList:
 
     def test_list_contacts_with_status_filter(self, login_session):
         """
-        测试场景：使用 status 筛选 Contacts
+        测试场景2：使用 status 筛选 Contacts
         验证点：
         1. 接口返回 200
         2. 返回数据结构正确
@@ -92,7 +92,7 @@ class TestContactList:
 
     def test_list_contacts_with_name_filter(self, login_session):
         """
-        测试场景：使用 name 筛选 Contacts
+        测试场景3：使用 name 筛选 Contacts
         验证点：
         1. 接口返回 200
         2. 返回数据结构正确
@@ -127,7 +127,7 @@ class TestContactList:
 
     def test_list_contacts_with_email_filter(self, login_session):
         """
-        测试场景：使用 email 筛选 Contacts
+        测试场景4：使用 email 筛选 Contacts
         验证点：
         1. 接口返回 200
         2. 返回数据结构正确
@@ -162,7 +162,7 @@ class TestContactList:
 
     def test_list_contacts_pagination(self, login_session):
         """
-        测试场景：验证分页功能
+        测试场景5：验证分页功能
         验证点：
         1. 接口返回 200
         2. 分页信息正确（page、size）
@@ -197,7 +197,7 @@ class TestContactList:
 
     def test_list_contacts_empty_result(self, login_session):
         """
-        测试场景：使用不存在的筛选条件，验证空结果处理
+        测试场景6：使用不存在的筛选条件，验证空结果处理
         验证点：
         1. 接口返回 200
         2. content 为空数组
@@ -229,7 +229,7 @@ class TestContactList:
 
     def test_list_contacts_response_fields(self, login_session):
         """
-        测试场景：验证响应字段完整性
+        测试场景7：验证响应字段完整性
         验证点：
         1. 接口返回 200
         2. Contact 对象包含必需字段（id, account_id, name, email, status 等）
@@ -267,3 +267,41 @@ class TestContactList:
             print(f"✓ 字段完整性验证通过")
         else:
             print("  跳过字段验证（列表为空）")
+
+    def test_list_contacts_sorting_by_name(self, login_session):
+        """
+        测试场景8：排序功能验证 - 按姓名排序
+        验证点：
+        1. 使用 sort 参数进行排序
+        2. 验证返回的列表按指定字段排序
+        """
+        contact_api = ContactAPI(session=login_session)
+        
+        # 调用接口，按 name 升序排序
+        print("\n[Step] 调用 List Contacts 接口（按 name 升序排序）")
+        response = contact_api.list_contacts(size=20, **{"sort": "name,asc"})
+        
+        # 验证状态码
+        print("[Step] 验证 HTTP 状态码为 200")
+        assert response.status_code == 200, f"接口返回状态码错误: {response.status_code}"
+        
+        # 解析响应
+        print("[Step] 解析响应并验证排序")
+        parsed = contact_api.parse_list_response(response)
+        assert not parsed.get("error"), f"响应解析失败: {parsed.get('message')}"
+        
+        contacts = parsed["content"]
+        
+        if len(contacts) >= 2:
+            # 验证排序逻辑（名称应该按字母顺序升序）
+            for i in range(len(contacts) - 1):
+                current_name = contacts[i].get("name", "").lower()
+                next_name = contacts[i + 1].get("name", "").lower()
+                assert current_name <= next_name, \
+                    f"排序不正确: {current_name} 应该在 {next_name} 之前"
+            
+            print(f"✓ 排序验证成功（升序），共 {len(contacts)} 个 Contacts")
+            print(f"  第一个: {contacts[0].get('name')}")
+            print(f"  最后一个: {contacts[-1].get('name')}")
+        else:
+            print(f"⚠ Contacts 数量不足，无法验证排序（当前 {len(contacts)} 个）")

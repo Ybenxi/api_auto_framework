@@ -24,7 +24,7 @@ class TestContactCreate:
 
     def test_create_contact_with_required_fields(self, login_session):
         """
-        测试场景：使用必需字段创建 Contact
+        测试场景1：使用必需字段创建 Contact
         验证点：
         1. 接口返回 200
         2. 返回的 Contact ID 存在
@@ -42,8 +42,8 @@ class TestContactCreate:
         
         contact_data = {
             "account_id": FIXED_ACCOUNT_ID,
-            "first_name": "John",
-            "last_name": "Doe",
+            "first_name": "Auto TestYan",
+            "last_name": "Contact Basic",
             "birth_date": "1990-01-01",
             "email": random_email
         }
@@ -117,7 +117,7 @@ class TestContactCreate:
 
     def test_create_contact_with_all_fields(self, login_session):
         """
-        测试场景：使用所有字段创建 Contact（包括可选字段）
+        测试场景2：使用所有字段创建 Contact（包括可选字段）
         验证点：
         1. 接口返回 200 或 599（SSN 重复）
         2. 返回的 Contact ID 存在（如果成功）
@@ -130,9 +130,9 @@ class TestContactCreate:
         print("\n[Step] 准备创建 Contact 数据（包含所有字段）")
         contact_data = {
             "account_id": FIXED_ACCOUNT_ID,
-            "first_name": "Jane",
-            "last_name": "Smith",
-            "middle_name": "Marie",
+            "first_name": "Auto TestYan",
+            "last_name": "Contact Full",
+            "middle_name": "AllFields",
             "birth_date": "1985-05-15",
             "email": "jane.smith@example.com",
             "ssn_tin": ENCRYPTED_SSN,
@@ -221,7 +221,7 @@ class TestContactCreate:
 
     def test_create_contact_with_ssn(self, login_session):
         """
-        测试场景：创建 Contact 并包含加密的 SSN
+        测试场景3：创建 Contact 并包含加密的 SSN
         验证点：
         1. 接口返回 200 或 599（SSN 重复）
         2. 返回的 Contact ID 存在（如果成功）
@@ -234,8 +234,8 @@ class TestContactCreate:
         print("\n[Step] 准备创建 Contact 数据（包含加密 SSN）")
         contact_data = {
             "account_id": FIXED_ACCOUNT_ID,
-            "first_name": "SSN",
-            "last_name": "Test",
+            "first_name": "Auto TestYan",
+            "last_name": "Contact SSN",
             "birth_date": "1992-03-20",
             "email": "ssn.test@example.com",
             "ssn_tin": ENCRYPTED_SSN
@@ -288,7 +288,7 @@ class TestContactCreate:
 
     def test_create_contact_missing_required_field(self, login_session):
         """
-        测试场景：缺少必需字段（如 first_name）
+        测试场景4：缺少必需字段（如 first_name）
         验证点：
         1. 接口返回 200（Soft 200）
         2. 响应中 code != 200 或 data 中不包含有效 ID
@@ -301,7 +301,7 @@ class TestContactCreate:
         contact_data = {
             "account_id": FIXED_ACCOUNT_ID,
             # "first_name": "Missing",  # 故意缺少
-            "last_name": "Field",
+            "last_name": "Contact Missing",
             "birth_date": "1990-01-01",
             "email": "missing.field@example.com"
         }
@@ -333,7 +333,7 @@ class TestContactCreate:
 
     def test_create_contact_invalid_email_format(self, login_session):
         """
-        测试场景：使用无效的 email 格式
+        测试场景5：使用无效的 email 格式
         验证点：
         1. 接口返回 200（Soft 200）
         2. 响应中 code != 200 或包含错误信息
@@ -345,8 +345,8 @@ class TestContactCreate:
         print("\n[Step] 准备创建 Contact 数据（无效的 email）")
         contact_data = {
             "account_id": FIXED_ACCOUNT_ID,
-            "first_name": "Invalid",
-            "last_name": "Email",
+            "first_name": "Auto TestYan",
+            "last_name": "Contact InvalidEmail",
             "birth_date": "1990-01-01",
             "email": "invalid-email-format"  # 无效格式
         }
@@ -372,7 +372,7 @@ class TestContactCreate:
 
     def test_create_contact_invalid_phone_format(self, login_session):
         """
-        测试场景：使用无效的 phone 格式（非 E.164 格式）
+        测试场景6：使用无效的 phone 格式（非 E.164 格式）
         验证点：
         1. 接口返回 200（Soft 200）
         2. 响应中 code != 200 或包含错误信息
@@ -384,8 +384,8 @@ class TestContactCreate:
         print("\n[Step] 准备创建 Contact 数据（无效的 phone 格式）")
         contact_data = {
             "account_id": FIXED_ACCOUNT_ID,
-            "first_name": "Invalid",
-            "last_name": "Phone",
+            "first_name": "Auto TestYan",
+            "last_name": "Contact InvalidPhone",
             "birth_date": "1990-01-01",
             "email": "invalid.phone@example.com",
             "phone": "123456789"  # 非 E.164 格式
@@ -408,3 +408,116 @@ class TestContactCreate:
                 print(f"✓ Phone 格式验证生效（返回错误码 {response_body.get('code')}）")
             else:
                 print(f"⚠ API 未验证 phone 格式")
+
+    def test_create_contact_then_retrieve_detail(self, login_session):
+        """
+        测试场景7：创建 Contact 后立即查询详情，验证数据一致性
+        验证点：
+        1. 创建 Contact 成功
+        2. 立即调用 Detail 接口获取详情
+        3. 验证所有字段值与创建时传入的数据一致
+        """
+        # 初始化 API 对象
+        contact_api = ContactAPI(session=login_session)
+        
+        # 准备创建数据（使用唯一email避免冲突）
+        print("\n[Step] 准备创建 Contact 数据")
+        random_email = f"auto_test_verify_{int(time.time())}@example.com"
+        
+        contact_data = {
+            "account_id": FIXED_ACCOUNT_ID,
+            "first_name": "Auto TestYan",
+            "last_name": "Contact Verify",
+            "birth_date": "1995-08-20",
+            "email": random_email,
+            "phone": "+14155559876"
+        }
+        
+        # 调用 Create 接口
+        print("[Step] 调用 Create Contact 接口")
+        create_response = contact_api.create_contact(contact_data)
+        
+        # 验证创建成功
+        assert create_response.status_code == 200, \
+            f"Create 失败: {create_response.status_code}"
+        
+        response_body = create_response.json()
+        
+        # 跳过 Email/SSN 重复的情况
+        if response_body.get("code") == 599:
+            pytest.skip("Email 或 SSN 已存在，跳过一致性测试")
+        
+        created_contact = response_body.get("data") or response_body
+        contact_id = created_contact.get("id")
+        
+        assert contact_id is not None, "创建的 Contact ID 为 None"
+        
+        # 立即调用 Detail 接口
+        print(f"[Step] 立即查询 Contact 详情 (ID: {contact_id})")
+        detail_response = contact_api.get_contact_detail(contact_id)
+        
+        assert detail_response.status_code == 200, \
+            f"Detail 接口失败: {detail_response.status_code}"
+        
+        detail_body = detail_response.json()
+        detail_contact = detail_body.get("data") or detail_body
+        
+        # 验证字段一致性
+        print("[Step] 验证创建和详情数据一致性")
+        assert detail_contact.get("account_id") == contact_data["account_id"], \
+            "account_id 不一致"
+        assert detail_contact.get("first_name") == contact_data["first_name"], \
+            "first_name 不一致"
+        assert detail_contact.get("last_name") == contact_data["last_name"], \
+            "last_name 不一致"
+        assert detail_contact.get("email") == contact_data["email"], \
+            "email 不一致"
+        assert detail_contact.get("phone") == contact_data["phone"], \
+            "phone 不一致"
+        
+        print(f"✓ 创建后立即查询验证通过，数据完全一致")
+        print(f"  Contact ID: {contact_id}")
+        print(f"  Name: {detail_contact.get('name')}")
+        print(f"  Email: {detail_contact.get('email')}")
+
+    def test_create_contact_with_empty_strings(self, login_session):
+        """
+        测试场景8：空字符串边界值测试
+        验证点：
+        1. first_name 和 last_name 传入空字符串
+        2. 验证 API 是否拒绝空字符串（返回错误）或接受为有效值
+        """
+        contact_api = ContactAPI(session=login_session)
+        
+        # 准备创建数据（first_name 为空字符串）
+        print("\n[Step] 准备创建 Contact 数据（first_name 为空字符串）")
+        random_email = f"auto_test_empty_{int(time.time())}@example.com"
+        
+        contact_data = {
+            "account_id": FIXED_ACCOUNT_ID,
+            "first_name": "",  # 空字符串
+            "last_name": "Contact EmptyTest",
+            "birth_date": "1990-01-01",
+            "email": random_email
+        }
+        
+        # 调用 Create 接口
+        print("[Step] 调用 Create Contact 接口")
+        create_response = contact_api.create_contact(contact_data)
+        
+        # 验证响应
+        print("[Step] 验证 API 对空字符串的处理")
+        print(f"  状态码: {create_response.status_code}")
+        
+        if create_response.status_code == 200:
+            response_body = create_response.json()
+            print(f"  响应: {response_body}")
+            
+            if response_body.get("code") != 200:
+                print(f"✓ API 拒绝空字符串（返回错误码 {response_body.get('code')}）")
+            else:
+                # API 接受了空字符串
+                print(f"⚠ API 接受了空字符串作为 first_name")
+                print(f"  建议：first_name 应该有非空验证")
+        else:
+            print(f"✓ API 拒绝空字符串（返回 HTTP 状态码 {create_response.status_code}）")

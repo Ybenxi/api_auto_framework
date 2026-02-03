@@ -25,6 +25,7 @@
         .navbar .brand::before { content: '🚀'; margin-right: 12px; font-size: 24px; }
         .navbar-right { display: flex; align-items: center; gap: 16px; }
         .env-badge { background: rgba(255,255,255,0.2); padding: 6px 16px; border-radius: 20px; font-size: 13px; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.3); }
+        .time-badge { background: rgba(255,255,255,0.15); padding: 6px 16px; border-radius: 20px; font-size: 13px; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.25); }
         .btn { background: rgba(255,255,255,0.15); color: white; border: 1px solid rgba(255,255,255,0.3); padding: 6px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; transition: all 0.3s; backdrop-filter: blur(10px); }
         .btn:hover { background: rgba(255,255,255,0.25); transform: translateY(-1px); }
         
@@ -117,7 +118,10 @@
         <div class="navbar-right">
             <div class="env-badge">
                 <span data-lang="zh">环境</span><span data-lang="en" style="display:none;">ENV</span>: 
-                <strong id="env-tag">DEV</strong> | 
+                <strong id="env-tag">DEV</strong>
+            </div>
+            <div class="time-badge">
+                <span data-lang="zh">报告生成时间</span><span data-lang="en" style="display:none;">Report Time</span>: 
                 <span id="gen-time"></span>
             </div>
             <button class="btn" onclick="toggleLanguage()">
@@ -224,10 +228,7 @@
                     <span data-lang="en" style="display:none;">Module:</span>
                 </label>
                 <select id="module-filter" class="filter-select" onchange="filterByModule()">
-                    <option value="all">
-                        <span data-lang="zh">全部模块</span>
-                        <span data-lang="en">All Modules</span>
-                    </option>
+                    <option value="all">ALL modules</option>
                     <!-- 动态生成模块选项 -->
                 </select>
             </div>

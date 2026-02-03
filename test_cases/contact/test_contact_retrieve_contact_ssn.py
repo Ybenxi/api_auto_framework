@@ -20,7 +20,7 @@ class TestContactSSN:
 
     def test_get_contact_ssn_connectivity(self, login_session):
         """
-        测试场景：验证 SSN 接口连通性
+        测试场景1：验证 SSN 接口连通性
         验证点：
         1. 接口路径正确（不是 404）
         2. 接口可访问（200 OK 或预期错误码）
@@ -75,7 +75,7 @@ class TestContactSSN:
 
     def test_get_contact_ssn_with_dummy_secret(self, login_session):
         """
-        测试场景：使用 Dummy Secret 调用 SSN 接口
+        测试场景2：使用 Dummy Secret 调用 SSN 接口
         验证点：
         1. 接口返回错误状态码或错误信息（因为 Secret 无效）
         2. 验证 API 对无效 Secret 的处理
@@ -123,7 +123,7 @@ class TestContactSSN:
 
     def test_get_contact_ssn_invalid_contact_id(self, login_session):
         """
-        测试场景：使用无效的 Contact ID 查询 SSN
+        测试场景3：使用无效的 Contact ID 查询 SSN
         验证点：
         1. 接口返回 200（防遍历设计）
         2. 返回错误码 506 和错误信息 "visibility permission deny"
@@ -163,7 +163,7 @@ class TestContactSSN:
 
     def test_get_contact_ssn_missing_secret_param(self, login_session):
         """
-        测试场景：缺少 secret 参数
+        测试场景4：缺少 secret 参数
         验证点：
         1. 接口返回 400 或其他错误状态码
         2. 错误信息提示缺少必需参数
@@ -206,7 +206,7 @@ class TestContactSSN:
 
     def test_get_contact_ssn_response_structure(self, login_session):
         """
-        测试场景：验证 SSN 接口响应数据结构
+        测试场景5：验证 SSN 接口响应数据结构
         验证点：
         1. 接口返回 JSON 格式
         2. 响应包含 ssn 字段（如果 Secret 正确）或错误信息

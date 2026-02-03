@@ -18,7 +18,7 @@ class TestSubAccountCreateASubAccount:
 
     def test_create_sub_account_success(self, login_session):
         """
-        测试场景：成功创建 Sub Account
+        测试场景1：成功创建 Sub Account
         验证点：
         1. 先获取一个 Financial Account ID
         2. 创建 Sub Account 返回 200/201
@@ -44,7 +44,7 @@ class TestSubAccountCreateASubAccount:
         print(f"  使用 Financial Account ID: {financial_account_id}")
         
         # 3. 准备创建数据
-        unique_name = f"Test Sub Account {uuid.uuid4().hex[:8]}"
+        unique_name = f"Auto TestYan Sub Account {uuid.uuid4().hex[:8]}"
         sub_account_data = {
             "financial_account_id": financial_account_id,
             "name": unique_name,
@@ -77,59 +77,77 @@ class TestSubAccountCreateASubAccount:
 
     def test_create_sub_account_missing_required_fields(self, login_session):
         """
-        测试场景：缺少必需字段时创建失败
-        验证点：
+        测试场景2：缺少必需字段时创建失败
+        验证点（基于真实业务行为）：
         1. 不提供 financial_account_id
-        2. 接口返回错误状态码
+        2. 服务器返回 200 OK + 响应体包含业务错误码
         """
         sa_api = SubAccountAPI(session=login_session)
         
         print("\n[Step] 尝试创建缺少必需字段的 Sub Account")
         sub_account_data = {
-            "name": "Test Sub Account Without FA ID"
+            "name": "Auto TestYan Sub Account Without FA ID"
             # 缺少 financial_account_id
         }
         
         create_response = sa_api.create_sub_account(sub_account_data)
         
-        print(f"[Step] 验证返回错误状态码")
+        print(f"[Step] 验证返回 200 状态码（统一错误处理设计）")
         print(f"  状态码: {create_response.status_code}")
+        assert create_response.status_code == 200, \
+            f"服务器应该返回 200，但实际返回了 {create_response.status_code}"
         
-        # 应该返回 400 或其他错误码
-        assert create_response.status_code != 200 and create_response.status_code != 201, \
-            f"缺少必需字段应该返回错误，但返回了: {create_response.status_code}"
+        # 验证响应体包含业务错误码
+        print(f"[Step] 验证响应体包含业务错误码")
+        response_body = create_response.json()
+        print(f"  响应: {response_body}")
         
-        print(f"✓ 缺少必需字段测试完成")
+        # 验证不是成功的 code=200
+        assert response_body.get("code") != 200, \
+            f"缺少必需字段应该返回业务错误码，但返回了 code=200"
+        assert response_body.get("data") is None, \
+            f"缺少必需字段时 data 应该为 None"
+        
+        print(f"✓ 缺少必需字段测试完成，业务错误码: {response_body.get('code')}")
 
     def test_create_sub_account_with_invalid_financial_account_id(self, login_session):
         """
-        测试场景：使用无效的 Financial Account ID 创建
-        验证点：
+        测试场景3：使用无效的 Financial Account ID 创建
+        验证点（基于真实业务行为）：
         1. 提供无效的 financial_account_id
-        2. 接口返回错误状态码
+        2. 服务器返回 200 OK + 响应体包含业务错误码
         """
         sa_api = SubAccountAPI(session=login_session)
         
         print("\n[Step] 尝试使用无效 Financial Account ID 创建 Sub Account")
         sub_account_data = {
             "financial_account_id": "invalid_fa_id_12345",
-            "name": "Test Sub Account With Invalid FA ID"
+            "name": "Auto TestYan Sub Account Invalid FA ID"
         }
         
         create_response = sa_api.create_sub_account(sub_account_data)
         
-        print(f"[Step] 验证返回错误状态码")
+        print(f"[Step] 验证返回 200 状态码（统一错误处理设计）")
         print(f"  状态码: {create_response.status_code}")
+        assert create_response.status_code == 200, \
+            f"服务器应该返回 200，但实际返回了 {create_response.status_code}"
         
-        # 应该返回错误码
-        assert create_response.status_code != 200 and create_response.status_code != 201, \
-            f"无效 FA ID 应该返回错误，但返回了: {create_response.status_code}"
+        # 验证响应体包含业务错误码
+        print(f"[Step] 验证响应体包含业务错误码")
+        response_body = create_response.json()
+        print(f"  响应: {response_body}")
         
-        print(f"✓ 无效 Financial Account ID 测试完成")
+        # 验证不是成功的 code=200
+        assert response_body.get("code") != 200, \
+            f"无效 FA ID 应该返回业务错误码，但返回了 code=200"
+        assert response_body.get("data") is None, \
+            f"无效 FA ID 时 data 应该为 None"
+        
+        print(f"✓ 无效 Financial Account ID 测试完成，业务错误码: {response_body.get('code')}")
 
     def test_create_sub_account_response_structure(self, login_session):
         """
-        测试场景：验证创建响应的数据结构
+        测试场景4：验证创建响应的数据结构
         验证点：
         1. 成功创建后返回完整的 Sub Account 信息
         """
@@ -150,7 +168,7 @@ class TestSubAccountCreateASubAccount:
         financial_account_id = fa_accounts[0].get("id")
         
         # 创建 Sub Account
-        unique_name = f"Test Sub Account {uuid.uuid4().hex[:8]}"
+        unique_name = f"Auto TestYan Sub Account {uuid.uuid4().hex[:8]}"
         sub_account_data = {
             "financial_account_id": financial_account_id,
             "name": unique_name
@@ -178,3 +196,76 @@ class TestSubAccountCreateASubAccount:
         else:
             print(f"  创建失败，状态码: {create_response.status_code}")
             pytest.skip("创建失败，跳过响应结构验证")
+
+    def test_create_sub_account_then_verify_in_list(self, login_session):
+        """
+        测试场景5：创建 Sub Account 后立即在列表中查询，验证数据一致性
+        验证点：
+        1. 创建 Sub Account 成功
+        2. 立即调用 List 接口，使用 name 筛选
+        3. 验证列表中包含刚创建的 Sub Account
+        4. 验证字段值一致
+        """
+        sa_api = SubAccountAPI(session=login_session)
+        fa_api = FinancialAccountAPI(session=login_session)
+        
+        # 获取 Financial Account ID
+        print("\n[Step] 获取 Financial Account ID")
+        fa_response = fa_api.list_financial_accounts(page=0, size=1)
+        assert fa_response.status_code == 200
+        
+        fa_parsed = fa_api.parse_list_response(fa_response)
+        fa_accounts = fa_parsed.get("content", [])
+        
+        if len(fa_accounts) == 0:
+            pytest.skip("没有可用的 Financial Account 进行测试")
+        
+        financial_account_id = fa_accounts[0].get("id")
+        
+        # 创建 Sub Account（使用唯一名称）
+        unique_name = f"Auto TestYan Sub Account Verify {uuid.uuid4().hex[:8]}"
+        sub_account_data = {
+            "financial_account_id": financial_account_id,
+            "name": unique_name
+        }
+        
+        print(f"[Step] 创建 Sub Account: {unique_name}")
+        create_response = sa_api.create_sub_account(sub_account_data)
+        
+        assert create_response.status_code in [200, 201], \
+            f"创建失败: {create_response.status_code}"
+        
+        response_body = create_response.json()
+        created = response_body.get("data") or response_body
+        created_id = created.get("id")
+        
+        assert created_id is not None, "创建的 Sub Account ID 为 None"
+        
+        # 立即调用 List 接口筛选
+        print(f"[Step] 立即在列表中查询刚创建的 Sub Account")
+        list_response = sa_api.list_sub_accounts(name=unique_name)
+        
+        assert list_response.status_code == 200, f"List 接口失败: {list_response.status_code}"
+        
+        parsed_list = sa_api.parse_list_response(list_response)
+        assert not parsed_list.get("error"), f"List 响应解析失败"
+        
+        sub_accounts = parsed_list["content"]
+        
+        # 验证列表中包含刚创建的 Sub Account
+        print("[Step] 验证列表中包含刚创建的 Sub Account")
+        found = False
+        for sa in sub_accounts:
+            if sa.get("id") == created_id:
+                found = True
+                # 验证字段一致性
+                assert sa.get("name") == unique_name, "name 不一致"
+                assert sa.get("financial_account_id") == financial_account_id, \
+                    "financial_account_id 不一致"
+                break
+        
+        assert found, f"列表中未找到刚创建的 Sub Account (ID: {created_id})"
+        
+        print(f"✓ 创建后立即查询验证通过，数据完全一致")
+        print(f"  Sub Account ID: {created_id}")
+        print(f"  Name: {unique_name}")

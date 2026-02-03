@@ -16,7 +16,7 @@ class TestFinancialAccountRetrieveRelatedPositions:
 
     def test_retrieve_related_positions_success(self, login_session):
         """
-        测试场景：成功获取 Financial Account 相关的持仓（Holdings）
+        测试场景1：成功获取 Financial Account 相关的持仓（Holdings）
         验证点：
         1. 先获取列表，取第一个 Financial Account ID
         2. 调用持仓接口返回 200
@@ -60,7 +60,7 @@ class TestFinancialAccountRetrieveRelatedPositions:
 
     def test_retrieve_related_positions_with_symbol_filter(self, login_session):
         """
-        测试场景：使用 symbol 筛选持仓
+        测试场景2：使用 symbol 筛选持仓
         验证点：
         1. 接口返回 200
         2. 返回数据结构正确
@@ -96,7 +96,7 @@ class TestFinancialAccountRetrieveRelatedPositions:
 
     def test_retrieve_related_positions_with_cusip_filter(self, login_session):
         """
-        测试场景：使用 cusip 筛选持仓
+        测试场景3：使用 cusip 筛选持仓
         验证点：
         1. 接口返回 200
         2. 返回数据结构正确
@@ -132,7 +132,7 @@ class TestFinancialAccountRetrieveRelatedPositions:
 
     def test_retrieve_related_positions_pagination(self, login_session):
         """
-        测试场景：验证持仓列表分页功能
+        测试场景4：验证持仓列表分页功能
         验证点：
         1. 接口返回 200
         2. 分页信息正确
@@ -168,7 +168,7 @@ class TestFinancialAccountRetrieveRelatedPositions:
 
     def test_retrieve_related_positions_response_fields(self, login_session):
         """
-        测试场景：验证持仓响应字段完整性
+        测试场景5：验证持仓响应字段完整性
         验证点：
         1. 接口返回 200
         2. 持仓对象包含必需字段

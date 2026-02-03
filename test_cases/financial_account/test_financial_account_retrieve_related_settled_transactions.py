@@ -16,7 +16,7 @@ class TestFinancialAccountRetrieveRelatedSettledTransactions:
 
     def test_retrieve_settled_transactions_success(self, login_session):
         """
-        测试场景：成功获取 Financial Account 相关的已结算交易
+        测试场景1：成功获取 Financial Account 相关的已结算交易
         验证点：
         1. 先获取列表，取第一个 Financial Account ID
         2. 调用已结算交易接口返回 200
@@ -60,7 +60,7 @@ class TestFinancialAccountRetrieveRelatedSettledTransactions:
 
     def test_retrieve_settled_transactions_with_date_filter(self, login_session):
         """
-        测试场景：使用日期筛选已结算交易
+        测试场景2：使用日期筛选已结算交易
         验证点：
         1. 接口返回 200
         2. 返回数据结构正确
@@ -97,7 +97,7 @@ class TestFinancialAccountRetrieveRelatedSettledTransactions:
 
     def test_retrieve_settled_transactions_with_security_filter(self, login_session):
         """
-        测试场景：使用证券名称/代码筛选已结算交易
+        测试场景3：使用证券名称/代码筛选已结算交易
         验证点：
         1. 接口返回 200
         2. 返回数据结构正确
@@ -133,7 +133,7 @@ class TestFinancialAccountRetrieveRelatedSettledTransactions:
 
     def test_retrieve_settled_transactions_pagination(self, login_session):
         """
-        测试场景：验证已结算交易列表分页功能
+        测试场景4：验证已结算交易列表分页功能
         验证点：
         1. 接口返回 200
         2. 分页信息正确
@@ -169,7 +169,7 @@ class TestFinancialAccountRetrieveRelatedSettledTransactions:
 
     def test_retrieve_settled_transactions_response_fields(self, login_session):
         """
-        测试场景：验证已结算交易响应字段完整性
+        测试场景5：验证已结算交易响应字段完整性
         验证点：
         1. 接口返回 200
         2. 交易对象包含必需字段

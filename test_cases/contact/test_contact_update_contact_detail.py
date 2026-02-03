@@ -15,7 +15,7 @@ class TestContactUpdate:
 
     def test_update_contact_first_name(self, login_session):
         """
-        测试场景：更新 Contact 的 first_name
+        测试场景1：更新 Contact 的 first_name
         验证点：
         1. 接口返回 200
         2. 返回的 first_name 已更新
@@ -74,7 +74,7 @@ class TestContactUpdate:
 
     def test_update_contact_phone(self, login_session):
         """
-        测试场景：更新 Contact 的 phone
+        测试场景2：更新 Contact 的 phone
         验证点：
         1. 接口返回 200
         2. 返回的 phone 已更新
@@ -131,7 +131,7 @@ class TestContactUpdate:
 
     def test_update_contact_multiple_fields(self, login_session):
         """
-        测试场景：同时更新多个字段（first_name, last_name, phone）
+        测试场景3：同时更新多个字段（first_name, last_name, phone）
         验证点：
         1. 接口返回 200
         2. 所有更新的字段都生效
@@ -196,7 +196,7 @@ class TestContactUpdate:
 
     def test_update_contact_address_fields(self, login_session):
         """
-        测试场景：更新地址相关字段（permanent_address, mailing_street）
+        测试场景4：更新地址相关字段（permanent_address, mailing_street）
         验证点：
         1. 接口返回 200
         2. 地址字段更新成功
@@ -258,7 +258,7 @@ class TestContactUpdate:
 
     def test_update_contact_invalid_id(self, login_session):
         """
-        测试场景：使用无效的 Contact ID 更新
+        测试场景5：使用无效的 Contact ID 更新
         验证点：
         1. 接口返回 200（防遍历设计）
         2. 返回错误码 506 和错误信息 "visibility permission deny"
@@ -309,7 +309,7 @@ class TestContactUpdate:
 
     def test_update_contact_invalid_phone_format(self, login_session):
         """
-        测试场景：使用无效的 phone 格式更新
+        测试场景6：使用无效的 phone 格式更新
         验证点：
         1. 接口返回 400 或其他错误状态码
         2. 错误信息提示 phone 格式错误
@@ -354,7 +354,7 @@ class TestContactUpdate:
 
     def test_update_contact_empty_data(self, login_session):
         """
-        测试场景：使用空数据更新（不更新任何字段）
+        测试场景7：使用空数据更新（不更新任何字段）
         验证点：
         1. 接口返回 200 或 400
         2. 验证 API 对空数据的处理

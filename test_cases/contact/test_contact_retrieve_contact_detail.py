@@ -15,7 +15,7 @@ class TestContactDetail:
 
     def test_get_contact_detail_success(self, login_session):
         """
-        测试场景：成功获取 Contact 详情
+        测试场景1：成功获取 Contact 详情
         验证点：
         1. 接口返回 200
         2. 返回的 Contact 包含完整字段（id, account_id, name, email, status 等）
@@ -76,7 +76,7 @@ class TestContactDetail:
 
     def test_get_contact_detail_with_all_fields(self, login_session):
         """
-        测试场景：获取 Contact 详情，验证所有字段
+        测试场景2：获取 Contact 详情，验证所有字段
         验证点：
         1. 接口返回 200
         2. 返回的 Contact 包含所有字段（包括可选字段）
@@ -140,7 +140,7 @@ class TestContactDetail:
 
     def test_get_contact_detail_invalid_id(self, login_session):
         """
-        测试场景：使用无效的 Contact ID
+        测试场景3：使用无效的 Contact ID
         验证点：
         1. 接口返回 200（防遍历设计）
         2. 返回错误码 506 和错误信息 "visibility permission deny"
@@ -186,7 +186,7 @@ class TestContactDetail:
 
     def test_get_contact_detail_response_structure(self, login_session):
         """
-        测试场景：验证响应数据结构
+        测试场景4：验证响应数据结构
         验证点：
         1. 接口返回 200
         2. 响应是 JSON 对象（不是数组）
@@ -236,7 +236,7 @@ class TestContactDetail:
 
     def test_get_contact_detail_ssn_field(self, login_session):
         """
-        测试场景：验证 ssn_tin 字段
+        测试场景5：验证 ssn_tin 字段
         验证点：
         1. 接口返回 200
         2. ssn_tin 字段存在

@@ -16,7 +16,7 @@ class TestFinancialAccountRetrieveRelatedMoneyMovementTransactions:
 
     def test_retrieve_related_transactions_success(self, login_session):
         """
-        测试场景：成功获取 Financial Account 相关的 Money Movement Transactions
+        测试场景1：成功获取 Financial Account 相关的 Money Movement Transactions
         验证点：
         1. 先获取列表，取第一个 Financial Account ID
         2. 调用交易接口返回 200
@@ -60,7 +60,7 @@ class TestFinancialAccountRetrieveRelatedMoneyMovementTransactions:
 
     def test_retrieve_related_transactions_with_status_filter(self, login_session):
         """
-        测试场景：使用 status 筛选交易
+        测试场景2：使用 status 筛选交易
         验证点：
         1. 接口返回 200
         2. 返回数据结构正确
@@ -96,7 +96,7 @@ class TestFinancialAccountRetrieveRelatedMoneyMovementTransactions:
 
     def test_retrieve_related_transactions_with_transaction_type_filter(self, login_session):
         """
-        测试场景：使用 transaction_type 筛选交易
+        测试场景3：使用 transaction_type 筛选交易
         验证点：
         1. 接口返回 200
         2. 返回数据结构正确
@@ -132,7 +132,7 @@ class TestFinancialAccountRetrieveRelatedMoneyMovementTransactions:
 
     def test_retrieve_related_transactions_with_payment_type_filter(self, login_session):
         """
-        测试场景：使用 payment_type 筛选交易
+        测试场景4：使用 payment_type 筛选交易
         验证点：
         1. 接口返回 200
         2. 返回数据结构正确
@@ -168,7 +168,7 @@ class TestFinancialAccountRetrieveRelatedMoneyMovementTransactions:
 
     def test_retrieve_related_transactions_pagination(self, login_session):
         """
-        测试场景：验证交易列表分页功能
+        测试场景5：验证交易列表分页功能
         验证点：
         1. 接口返回 200
         2. 分页信息正确

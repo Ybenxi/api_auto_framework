@@ -16,7 +16,7 @@ class TestSubAccountListSubAccounts:
 
     def test_list_sub_accounts_success(self, login_session):
         """
-        测试场景：成功获取 Sub Accounts 列表
+        测试场景1：成功获取 Sub Accounts 列表
         验证点：
         1. 接口返回 200
         2. 返回数据结构正确（包含 content、pageable 等字段）
@@ -58,7 +58,7 @@ class TestSubAccountListSubAccounts:
 
     def test_list_sub_accounts_with_status_filter(self, login_session):
         """
-        测试场景：使用 status 筛选 Sub Accounts
+        测试场景2：使用 status 筛选 Sub Accounts
         验证点：
         1. 接口返回 200
         2. 返回数据结构正确
@@ -85,7 +85,7 @@ class TestSubAccountListSubAccounts:
 
     def test_list_sub_accounts_with_name_filter(self, login_session):
         """
-        测试场景：使用 name 筛选 Sub Accounts
+        测试场景3：使用 name 筛选 Sub Accounts
         验证点：
         1. 接口返回 200
         2. 返回数据结构正确
@@ -109,7 +109,7 @@ class TestSubAccountListSubAccounts:
 
     def test_list_sub_accounts_pagination(self, login_session):
         """
-        测试场景：验证分页功能
+        测试场景4：验证分页功能
         验证点：
         1. 接口返回 200
         2. 分页信息正确（page、size）
@@ -138,7 +138,7 @@ class TestSubAccountListSubAccounts:
 
     def test_list_sub_accounts_response_fields(self, login_session):
         """
-        测试场景：验证响应字段完整性
+        测试场景5：验证响应字段完整性
         验证点：
         1. 接口返回 200
         2. Sub Account 对象包含必需字段
@@ -170,5 +170,33 @@ class TestSubAccountListSubAccounts:
                     print(f"  - {field}: (not present)")
             
             print(f"✓ 字段完整性验证完成")
+
+    def test_list_sub_accounts_empty_result(self, login_session):
+        """
+        测试场景6：空结果验证
+        验证点：
+        1. 使用不存在的筛选条件时，接口返回 200
+        2. 返回的 content 是空列表
+        3. total_elements 为 0
+        """
+        sa_api = SubAccountAPI(session=login_session)
+        
+        # 使用不太可能存在的筛选条件
+        print("\n[Step] 使用不存在的名称查询")
+        response = sa_api.list_sub_accounts(name="NONEXISTENT_SUB_ACCOUNT_999999")
+        
+        # 验证状态码
+        print("[Step] 验证 HTTP 状态码为 200")
+        assert response.status_code == 200, f"接口返回状态码错误: {response.status_code}"
+        
+        # 解析响应
+        print("[Step] 验证返回空列表")
+        parsed = sa_api.parse_list_response(response)
+        assert not parsed.get("error"), f"响应解析失败: {parsed.get('message')}"
+        
+        assert len(parsed["content"]) == 0, "期望返回空列表，但实际有数据"
+        assert parsed.get("total_elements") == 0, "total_elements 应该为 0"
+        
+        print("✓ 空结果验证成功，接口正确返回空列表")
         else:
             print("  跳过字段验证（列表为空）")

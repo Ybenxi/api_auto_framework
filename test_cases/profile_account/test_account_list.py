@@ -3,8 +3,17 @@
 覆盖多种测试场景，包括基础查询、筛选、分页、枚举类型等
 """
 import pytest
-from api.account_api import AccountAPI
 from data.enums import BusinessEntityType, AccountStatus
+from utils.assertions import (
+    assert_status_ok,
+    assert_response_parsed,
+    assert_list_structure,
+    assert_enum_filter,
+    assert_string_contains_filter,
+    assert_pagination,
+    assert_empty_result,
+    assert_fields_present
+)
 
 
 class TestAccountList:
@@ -12,7 +21,7 @@ class TestAccountList:
     账户列表接口测试用例集
     """
 
-    def test_list_accounts_basic(self, login_session):
+    def test_list_accounts_basic(self, account_api):
         """
         测试场景1：基础列表查询 - 验证接口可用性
         验证点：
@@ -21,134 +30,92 @@ class TestAccountList:
         3. content 是一个列表
         4. 响应结构完整（包含分页信息）
         """
-        # 1. 初始化 API 对象
-        account_api = AccountAPI(session=login_session)
-        
-        # 2. 调用接口
-        print("\n[Step] 调用账户列表接口（无筛选条件）")
+        # 调用接口
         response = account_api.list_accounts()
         
-        # 3. 断言 HTTP 状态码
-        print("[Step] 验证 HTTP 状态码为 200")
-        assert response.status_code == 200, f"接口返回状态码错误: {response.status_code}"
+        # 断言 HTTP 状态码
+        assert_status_ok(response)
         
-        # 4. 解析响应
-        print("[Step] 解析响应数据")
+        # 解析响应并验证
         parsed = account_api.parse_list_response(response)
-        assert not parsed.get("error"), f"响应解析失败: {parsed.get('message')}"
-        
-        # 5. 验证数据结构
-        print("[Step] 验证响应数据结构")
-        assert "content" in parsed, "响应中缺少 content 字段"
-        assert isinstance(parsed["content"], list), "content 字段不是列表类型"
-        assert "total_elements" in parsed, "响应中缺少 total_elements 字段"
+        assert_response_parsed(parsed)
+        assert_list_structure(parsed, has_pagination=True)
         
         # 打印统计信息
         print(f"✓ 成功获取到 {len(parsed['content'])} 个账户，总计 {parsed['total_elements']} 个")
 
     @pytest.mark.parametrize("search_name", ["Example", "Test", "Account"])
-    def test_list_accounts_filter_by_name(self, login_session, search_name):
+    def test_list_accounts_filter_by_name(self, account_api, search_name):
         """
         测试场景2：名称筛选查询 - 验证筛选逻辑
         验证点：
         1. 接口返回成功
         2. 返回的所有账户名称都包含搜索关键词（不区分大小写）
         """
-        # 1. 初始化 API 对象
-        account_api = AccountAPI(session=login_session)
-        
-        # 2. 调用接口并传入筛选参数
-        print(f"\n[Step] 调用接口并筛选名称包含 '{search_name}' 的账户")
+        # 调用接口并传入筛选参数
         response = account_api.list_accounts(name=search_name)
         
-        # 3. 断言状态码
-        print("[Step] 验证 HTTP 状态码为 200")
-        assert response.status_code == 200, f"接口返回状态码错误: {response.status_code}"
-        
-        # 4. 解析响应
-        print("[Step] 解析响应并验证筛选结果")
+        # 断言状态码和解析响应
+        assert_status_ok(response)
         parsed = account_api.parse_list_response(response)
-        assert not parsed.get("error"), f"响应解析失败: {parsed.get('message')}"
+        assert_response_parsed(parsed)
         
         accounts = parsed["content"]
         
         # 如果返回了数据，验证筛选逻辑
         if len(accounts) > 0:
-            for account in accounts:
-                account_name = account.get("account_name", "")
-                assert search_name.lower() in account_name.lower(), \
-                    f"账户名称 '{account_name}' 不包含搜索关键词 '{search_name}'"
+            assert_string_contains_filter(accounts, "account_name", search_name, case_sensitive=False)
             print(f"✓ 筛选成功，找到 {len(accounts)} 个包含 '{search_name}' 的账户")
         else:
             print(f"⚠ 未找到包含 '{search_name}' 的账户（可能是正常情况）")
 
-    def test_list_accounts_filter_by_entity_type(self, login_session):
+    def test_list_accounts_filter_by_entity_type(self, account_api):
         """
         测试场景3：枚举类型筛选 - 使用 BusinessEntityType 枚举
         验证点：
         1. 枚举类可以正常传递给 API
         2. 返回的所有账户的 business_entity_type 都是 LLC
         """
-        # 1. 初始化 API 对象
-        account_api = AccountAPI(session=login_session)
-        
-        # 2. 使用枚举类型调用接口
-        print(f"\n[Step] 使用枚举类型 BusinessEntityType.LLC 筛选账户")
+        # 使用枚举类型调用接口
         response = account_api.list_accounts(business_entity_type=BusinessEntityType.LLC)
         
-        # 3. 断言状态码
-        print("[Step] 验证 HTTP 状态码为 200")
-        assert response.status_code == 200, f"接口返回状态码错误: {response.status_code}"
-        
-        # 4. 解析响应并验证
-        print("[Step] 验证返回的账户类型都是 LLC")
+        # 断言状态码和解析响应
+        assert_status_ok(response)
         parsed = account_api.parse_list_response(response)
-        assert not parsed.get("error"), f"响应解析失败: {parsed.get('message')}"
+        assert_response_parsed(parsed)
         
         accounts = parsed["content"]
         
         if len(accounts) > 0:
-            for account in accounts:
-                entity_type = account.get("business_entity_type")
-                # 注意：API 可能返回 null，这里只验证非 null 的情况
-                if entity_type is not None:
-                    assert entity_type == BusinessEntityType.LLC.value, \
-                        f"账户 {account.get('account_number')} 的类型是 '{entity_type}'，不是 'LLC'"
+            # 验证所有账户的 business_entity_type 都是 LLC（允许 None，跳过验证）
+            assert_enum_filter(accounts, "business_entity_type", BusinessEntityType.LLC, allow_none=True)
             print(f"✓ 筛选成功，找到 {len(accounts)} 个 LLC 类型的账户")
         else:
             print("⚠ 未找到 LLC 类型的账户（可能是正常情况）")
 
-    def test_list_accounts_multiple_filters(self, login_session):
+    def test_list_accounts_multiple_filters(self, account_api):
         """
         测试场景4：多条件组合筛选
         验证点：
         1. 可以同时传递多个筛选参数
         2. 接口正常返回结果
         """
-        # 1. 初始化 API 对象
-        account_api = AccountAPI(session=login_session)
-        
-        # 2. 使用多个筛选条件
-        print("\n[Step] 使用多个筛选条件查询账户")
+        # 使用多个筛选条件
         response = account_api.list_accounts(
             status=AccountStatus.ACTIVE,
             business_entity_type=BusinessEntityType.LLC,
             name="Example"
         )
         
-        # 3. 断言状态码
-        print("[Step] 验证 HTTP 状态码为 200")
-        assert response.status_code == 200, f"接口返回状态码错误: {response.status_code}"
-        
-        # 4. 解析响应
-        print("[Step] 解析响应数据")
+        # 断言状态码和解析响应
+        assert_status_ok(response)
         parsed = account_api.parse_list_response(response)
-        assert not parsed.get("error"), f"响应解析失败: {parsed.get('message')}"
+        assert_response_parsed(parsed)
         
         print(f"✓ 组合筛选成功，找到 {len(parsed['content'])} 个符合条件的账户")
 
     @pytest.mark.parametrize("page_size", [5, 10, 20])
-    def test_list_accounts_pagination(self, login_session, page_size):
+    def test_list_accounts_pagination(self, account_api, page_size):
         """
         测试场景5：分页功能验证
         验证点：
@@ -156,28 +123,16 @@ class TestAccountList:
         2. 返回的数据量不超过指定大小
         3. 分页信息正确
         """
-        # 1. 初始化 API 对象
-        account_api = AccountAPI(session=login_session)
-        
-        # 2. 使用分页参数
-        print(f"\n[Step] 请求第 1 页，每页 {page_size} 条数据")
+        # 使用分页参数
         response = account_api.list_accounts(page=0, size=page_size)
         
-        # 3. 断言状态码
-        print("[Step] 验证 HTTP 状态码为 200")
-        assert response.status_code == 200, f"接口返回状态码错误: {response.status_code}"
-        
-        # 4. 验证分页信息
-        print("[Step] 验证分页参数生效")
+        # 断言状态码和解析响应
+        assert_status_ok(response)
         parsed = account_api.parse_list_response(response)
-        assert not parsed.get("error"), f"响应解析失败: {parsed.get('message')}"
-        
-        # 验证返回的数据量不超过指定大小
-        assert len(parsed["content"]) <= page_size, \
-            f"返回的数据量 {len(parsed['content'])} 超过了指定的每页大小 {page_size}"
+        assert_response_parsed(parsed)
         
         # 验证分页信息
-        assert parsed["size"] == page_size, f"分页信息中的 size 不正确"
+        assert_pagination(parsed, expected_size=page_size, expected_page=0)
         
         print(f"✓ 分页验证成功，请求 {page_size} 条，实际返回 {len(parsed['content'])} 条")
 
@@ -186,42 +141,31 @@ class TestAccountList:
         AccountStatus.INACTIVE,
         AccountStatus.PENDING
     ])
-    def test_list_accounts_filter_by_status(self, login_session, account_status):
+    def test_list_accounts_filter_by_status(self, account_api, account_status):
         """
         测试场景6：状态筛选 - 使用枚举类型
         验证点：
         1. 枚举类型可以正常使用
         2. 接口正常返回
         """
-        # 1. 初始化 API 对象
-        account_api = AccountAPI(session=login_session)
-        
-        # 2. 使用状态枚举筛选
-        print(f"\n[Step] 筛选状态为 {account_status.value} 的账户")
+        # 使用状态枚举筛选
         response = account_api.list_accounts(status=account_status)
         
-        # 3. 断言状态码
-        print("[Step] 验证 HTTP 状态码为 200")
-        assert response.status_code == 200, f"接口返回状态码错误: {response.status_code}"
-        
-        # 4. 解析响应
-        print("[Step] 解析响应数据")
+        # 断言状态码和解析响应
+        assert_status_ok(response)
         parsed = account_api.parse_list_response(response)
-        assert not parsed.get("error"), f"响应解析失败: {parsed.get('message')}"
+        assert_response_parsed(parsed)
         
         accounts = parsed["content"]
         
         if len(accounts) > 0:
-            for account in accounts:
-                actual_status = account.get("account_status")
-                if actual_status is not None:
-                    assert actual_status == account_status.value, \
-                        f"账户状态不匹配，期望 {account_status.value}，实际 {actual_status}"
+            # 验证所有账户的状态都匹配（允许 None，跳过验证）
+            assert_enum_filter(accounts, "account_status", account_status, allow_none=True)
             print(f"✓ 找到 {len(accounts)} 个状态为 {account_status.value} 的账户")
         else:
             print(f"⚠ 未找到状态为 {account_status.value} 的账户")
 
-    def test_list_accounts_empty_result(self, login_session):
+    def test_list_accounts_empty_result(self, account_api):
         """
         测试场景7：空结果验证
         验证点：
@@ -229,49 +173,33 @@ class TestAccountList:
         2. 返回的 content 是空列表
         3. total_elements 为 0
         """
-        # 1. 初始化 API 对象
-        account_api = AccountAPI(session=login_session)
-        
-        # 2. 使用不太可能存在的筛选条件
-        print("\n[Step] 使用不存在的账户编号查询")
+        # 使用不太可能存在的筛选条件
         response = account_api.list_accounts(account_number="NONEXISTENT-999999")
         
-        # 3. 断言状态码
-        print("[Step] 验证 HTTP 状态码为 200")
-        assert response.status_code == 200, f"接口返回状态码错误: {response.status_code}"
-        
-        # 4. 验证空结果
-        print("[Step] 验证返回空列表")
+        # 断言状态码和解析响应
+        assert_status_ok(response)
         parsed = account_api.parse_list_response(response)
-        assert not parsed.get("error"), f"响应解析失败: {parsed.get('message')}"
+        assert_response_parsed(parsed)
         
-        assert len(parsed["content"]) == 0, "期望返回空列表，但实际有数据"
-        assert parsed.get("empty", False) == True, "empty 字段应该为 True"
+        # 验证空结果
+        assert_empty_result(parsed)
         
         print("✓ 空结果验证成功，接口正确返回空列表")
 
-    def test_account_response_fields(self, login_session):
+    def test_account_response_fields(self, account_api):
         """
         测试场景8：响应字段完整性验证
         验证点：
         1. 返回的账户对象包含必需字段
         2. 字段类型正确
         """
-        # 1. 初始化 API 对象
-        account_api = AccountAPI(session=login_session)
-        
-        # 2. 获取账户列表
-        print("\n[Step] 获取账户列表")
+        # 获取账户列表
         response = account_api.list_accounts(size=1)
         
-        # 3. 断言状态码
-        print("[Step] 验证 HTTP 状态码为 200")
-        assert response.status_code == 200, f"接口返回状态码错误: {response.status_code}"
-        
-        # 4. 验证字段完整性
-        print("[Step] 验证账户对象字段完整性")
+        # 断言状态码和解析响应
+        assert_status_ok(response)
         parsed = account_api.parse_list_response(response)
-        assert not parsed.get("error"), f"响应解析失败: {parsed.get('message')}"
+        assert_response_parsed(parsed)
         
         accounts = parsed["content"]
         
@@ -284,10 +212,41 @@ class TestAccountList:
                 "record_type", "create_time"
             ]
             
-            for field in required_fields:
-                assert field in account, f"账户对象缺少必需字段: {field}"
+            # 验证字段完整性
+            assert_fields_present(account, required_fields, obj_name="账户对象")
             
             print(f"✓ 字段完整性验证通过，账户对象包含所有必需字段")
             print(f"  示例账户: {account.get('account_number')} - {account.get('account_name')}")
         else:
             pytest.skip("没有账户数据可供验证")
+
+    def test_list_accounts_sorting_by_name(self, account_api):
+        """
+        测试场景9：排序功能验证 - 按账户名称排序
+        验证点：
+        1. 使用 sort 参数进行排序
+        2. 验证返回的列表按指定字段排序
+        """
+        # 调用接口，按 account_name 升序排序
+        response = account_api.list_accounts(size=20, **{"sort": "account_name,asc"})
+        
+        # 断言状态码和解析响应
+        assert_status_ok(response)
+        parsed = account_api.parse_list_response(response)
+        assert_response_parsed(parsed)
+        
+        accounts = parsed["content"]
+        
+        if len(accounts) >= 2:
+            # 验证排序逻辑（账户名称应该按字母顺序升序）
+            for i in range(len(accounts) - 1):
+                current_name = accounts[i].get("account_name", "").lower()
+                next_name = accounts[i + 1].get("account_name", "").lower()
+                assert current_name <= next_name, \
+                    f"排序不正确: {current_name} 应该在 {next_name} 之前"
+            
+            print(f"✓ 排序验证成功（升序），共 {len(accounts)} 个账户")
+            print(f"  第一个: {accounts[0].get('account_name')}")
+            print(f"  最后一个: {accounts[-1].get('account_name')}")
+        else:
+            print(f"⚠ 账户数量不足，无法验证排序（当前 {len(accounts)} 个）")

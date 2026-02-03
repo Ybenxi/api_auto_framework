@@ -16,7 +16,7 @@ class TestSubAccountRetrieveSubAccountDetail:
 
     def test_retrieve_sub_account_detail_success(self, login_session):
         """
-        测试场景：成功获取 Sub Account 详情
+        测试场景1：成功获取 Sub Account 详情
         验证点：
         1. 先获取列表，取第一个 Sub Account ID
         2. 调用详情接口返回 200
@@ -68,9 +68,10 @@ class TestSubAccountRetrieveSubAccountDetail:
 
     def test_retrieve_sub_account_detail_with_invalid_id(self, login_session):
         """
-        测试场景：使用无效 ID 获取详情
-        验证点：
-        1. 接口返回非 200 状态码（404 或其他错误码）
+        测试场景2：使用无效 ID 获取详情
+        验证点（基于真实业务行为）：
+        1. 服务器返回 200 OK（统一错误处理设计）
+        2. 响应体包含错误信息或返回空数据
         """
         sa_api = SubAccountAPI(session=login_session)
         
@@ -81,15 +82,20 @@ class TestSubAccountRetrieveSubAccountDetail:
         print(f"[Step] 验证返回状态码")
         print(f"  状态码: {detail_response.status_code}")
         
-        # 无效 ID 应该返回非 200 状态码
-        assert detail_response.status_code != 200 or "error" in detail_response.text.lower(), \
-            f"无效 ID 应该返回错误，但返回了: {detail_response.status_code}"
+        # 服务器返回 200（统一错误处理）
+        assert detail_response.status_code == 200, \
+            f"服务器应该返回 200，但实际返回了 {detail_response.status_code}"
+        
+        # 验证响应包含错误信息
+        response_body = detail_response.json()
+        assert "error" in detail_response.text.lower() or response_body.get("code") != 200, \
+            f"无效 ID 应该返回错误信息"
         
         print(f"✓ 无效 ID 测试完成")
 
     def test_retrieve_sub_account_detail_response_structure(self, login_session):
         """
-        测试场景：验证详情响应的完整数据结构
+        测试场景3：验证详情响应的完整数据结构
         验证点：
         1. 接口返回 200
         2. 响应包含完整的 Sub Account 信息
