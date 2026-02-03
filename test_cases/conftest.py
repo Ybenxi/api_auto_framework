@@ -19,7 +19,8 @@ MODULE_NAME_MAPPING = {
     "financial_account": "Financial Account",
     "sub_account": "Sub Account",
     "fbo_account": "FBO Account",
-    "tenant": "Tenant"
+    "tenant": "Tenant",
+    "open_banking": "Open Banking"
 }
 
 
@@ -114,6 +115,25 @@ def get_module_docstring(item) -> str:
     return ""
 
 
+def extract_scenario_number(docstring_summary: str) -> int:
+    """
+    从 docstring 摘要中提取测试场景编号
+    例如: "测试场景8：排序功能验证" -> 8
+    如果没有编号，返回 999（排到最后）
+    """
+    if not docstring_summary:
+        return 999
+    
+    # 匹配模式：测试场景X：或 Test ScenarioX:
+    pattern = r'(?:测试场景|Test Scenario)\s*(\d+)'
+    match = re.search(pattern, docstring_summary)
+    
+    if match:
+        return int(match.group(1))
+    
+    return 999  # 没有编号的排到最后
+
+
 def translate_docstring_to_english(zh_text: str) -> str:
     """
     将中文测试场景描述转换为英文
@@ -122,26 +142,38 @@ def translate_docstring_to_english(zh_text: str) -> str:
     if not zh_text:
         return ""
     
-    # 中英文映射表
+    # 中英文映射表（完整版）
     translations = {
+        # 完整短语（优先匹配）
+        "排序功能验证 - 按姓名排序": "Sorting Verification - Sort by Name",
+        "排序功能验证 - 按账户名称排序": "Sorting Verification - Sort by Account Name",
+        "创建后立即查询详情，验证数据一致性": "Create then Query Detail Immediately to Verify Data Consistency",
+        "创建后立即在列表中查询，验证数据一致性": "Create then Query in List Immediately to Verify Data Consistency",
+        "对比详情接口和列表接口返回的数据一致性": "Compare Data Consistency between Detail and List API",
+        "使用不存在的筛选条件，验证空结果处理": "Verify Empty Result with Non-existent Filter",
+        
         # 测试场景标识
         "测试场景": "Test Scenario",
         
-        # 操作类型
-        "基础列表查询": "Basic List Query",
-        "验证接口可用性": "Verify API Availability",
-        "名称筛选查询": "Filter by Name",
-        "名称筛选": "Name Filter",
-        "枚举类型筛选": "Enum Type Filter",
-        "多条件组合筛选": "Multiple Filters Combined",
-        "分页功能验证": "Pagination Verification",
-        "状态筛选": "Status Filter",
-        "空结果验证": "Empty Result Verification",
-        "响应字段完整性验证": "Response Fields Completeness",
+        # 操作类型（完整短语）
+        "基础列表查询 - 验证接口可用性": "Basic List Query - Verify API Availability",
+        "响应字段完整性验证": "Response Fields Completeness Verification",
         "字段完整性验证": "Fields Completeness Verification",
         "排序功能验证": "Sorting Verification",
+        "分页功能验证": "Pagination Verification",
+        "空结果验证": "Empty Result Verification",
+        "空字符串边界值测试": "Empty String Boundary Test",
         
         # CRUD 操作
+        "基础列表查询": "Basic List Query",
+        "验证接口可用性": "Verify API Availability",
+        "名称筛选查询 - 验证筛选逻辑": "Name Filter - Verify Filter Logic",
+        "名称筛选查询": "Name Filter Query",
+        "名称筛选": "Name Filter",
+        "枚举类型筛选": "Enum Type Filter",
+        "状态筛选": "Status Filter",
+        "多条件组合筛选": "Multiple Filters Combined",
+        
         "成功获取": "Successfully Retrieve",
         "成功创建": "Successfully Create",
         "成功更新": "Successfully Update",
@@ -149,21 +181,24 @@ def translate_docstring_to_english(zh_text: str) -> str:
         "使用所有字段创建": "Create with All Fields",
         "创建后立即查询详情": "Create then Query Detail Immediately",
         "创建后立即在列表中查询": "Create then Query in List Immediately",
-        "缺少必需字段": "Missing Required Fields",
+        "创建后立即查询": "Query Immediately After Creation",
         "缺少必需字段时创建失败": "Create Failed with Missing Required Fields",
+        "缺少必需字段": "Missing Required Fields",
         "使用无效": "With Invalid",
         "使用不存在": "With Non-existent",
         "同时更新多个字段": "Update Multiple Fields",
         
         # 特定描述
         "包括可选字段": "Including Optional Fields",
-        "包含加密的": "With Encrypted",
-        "并包含加密的": "With Encrypted",
-        "无效的 email 格式": "Invalid Email Format",
-        "无效的 phone 格式": "Invalid Phone Format",
+        "包含加密": "With Encrypted",
+        "并包含加密": "With Encrypted",
+        "无效 email 格式": "Invalid Email Format",
+        "无效 phone 格式": "Invalid Phone Format",
         "非 E.164 格式": "Non-E.164 Format",
+        "验证筛选逻辑": "Verify Filter Logic",
+        "验证所有字段": "Verify All Fields",
         
-        # 资源类型
+        # 资源类型和名词
         "账户": "Account",
         "联系人": "Contact",
         "详情": "Detail",
@@ -173,32 +208,19 @@ def translate_docstring_to_english(zh_text: str) -> str:
         "邮寄地址": "Mailing Address",
         "注册地址": "Register Address",
         "部分字段": "Partial Fields",
+        "姓名": "Name",
+        "账户名称": "Account Name",
         
-        # 验证点
+        # 验证相关
         "验证点": "Verification Points",
         "验证数据一致性": "Verify Data Consistency",
-        "接口": "API",
         "数据一致性": "Data Consistency",
         "对比": "Compare",
         "响应": "Response",
         "结构": "Structure",
         "数据结构": "Data Structure",
         
-        # 特定场景
-        "按姓名排序": "Sorting by Name",
-        "按账户名称排序": "Sorting by Account Name",
-        "创建后立即查询": "Query Immediately After Creation",
-        "空字符串边界值测试": "Empty String Boundary Test",
-        "立即在列表中查询": "Query in List Immediately",
-        
-        # 动词和连词
-        "并": "and",
-        "与": "and",
-        "或": "or",
-        "的": "",
-        "了": "",
-        
-        # 其他常用词
+        # 动词
         "更新": "Update",
         "创建": "Create",
         "筛选": "Filter",
@@ -206,20 +228,44 @@ def translate_docstring_to_english(zh_text: str) -> str:
         "获取": "Retrieve",
         "验证": "Verify",
         "测试": "Test",
+        "排序": "Sort",
+        
+        # 形容词和状态
         "成功": "Success",
         "失败": "Failed",
-        "包含": "Contains",
-        "不包含": "Not Contains",
-        "边界值": "Boundary Value",
-        "格式": "Format",
         "无效": "Invalid",
-        "错误": "Error",
+        "有效": "Valid",
+        "完整": "Complete",
         "所有": "All",
         "全部": "All",
         "多个": "Multiple",
         "单个": "Single",
+        "必需": "Required",
+        "可选": "Optional",
+        
+        # 连词和介词
+        "并": " and ",
+        "与": " and ",
+        "或": " or ",
+        "按": "by ",
+        "使用": "with ",
+        
+        # 其他词汇
+        "包含": "Contains",
+        "不包含": "Not Contains",
+        "边界值": "Boundary Value",
+        "格式": "Format",
+        "错误": "Error",
         "字段": "Fields",
         "加密": "Encrypted",
+        "接口": "API",
+        "功能": "Function",
+        
+        # 语气词和连接符（删除）
+        "的": " ",
+        "了": "",
+        " - ": " - ",
+        "时": " when",
         
         # 标点符号
         "：": ": ",
@@ -324,6 +370,9 @@ def pytest_runtest_makereport(item, call):
         # 提取测试函数名（用于显示）
         test_func_name = item.nodeid.split("::")[-1]
         
+        # 提取场景编号（用于排序）
+        scenario_number = extract_scenario_number(docstring_summary_zh)
+        
         test_results.append({
             "nodeid": item.nodeid,
             "status": report.outcome,
@@ -336,6 +385,7 @@ def pytest_runtest_makereport(item, call):
             "docstring_summary_zh": docstring_summary_zh,
             "docstring_summary_en": docstring_summary_en,
             "docstring_summary": docstring_summary_zh,  # 保持向后兼容
+            "scenario_number": scenario_number,  # 用于排序
             "api_path": api_path,
             "extra": extra_data
         })
@@ -360,13 +410,14 @@ def pytest_sessionfinish(session, exitstatus):
         with open(template_path, 'r', encoding='utf-8') as f:
             template_content = f.read()
         
-        # 三级排序：模块 -> 测试文件 -> nodeid（保持文件内用例顺序）
+        # 三级排序：模块 -> 测试文件 -> 场景编号
         sorted_results = sorted(
             test_results, 
             key=lambda x: (
-                x.get("module", ""),      # 第1级：模块名称
-                x.get("test_file", ""),   # 第2级：测试文件名
-                x.get("nodeid", "")       # 第3级：nodeid（用例在文件中的顺序）
+                x.get("module", ""),         # 第1级：模块名称
+                x.get("test_file", ""),      # 第2级：测试文件名
+                x.get("scenario_number", 999),  # 第3级：场景编号（从 docstring 提取）
+                x.get("nodeid", "")          # 第4级：nodeid（兜底）
             )
         )
         

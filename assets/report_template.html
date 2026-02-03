@@ -501,7 +501,7 @@
         function applyFilters() {
             const allRows = document.querySelectorAll('tr');
             const visibleModules = new Set();
-            const visibleFiles = new Map(); // module -> Set(files)
+            const visibleFilesByModule = new Map(); // module -> Set(files)
             
             // First pass: determine which test case rows match filters
             allRows.forEach(row => {
@@ -531,42 +531,56 @@
                     if (statusMatch && moduleMatch && searchMatch) {
                         row.classList.remove('hidden');
                         visibleModules.add(module);
-                        if (!visibleFiles.has(module)) {
-                            visibleFiles.set(module, new Set());
+                        
+                        // 记录该模块下的可见文件
+                        if (!visibleFilesByModule.has(module)) {
+                            visibleFilesByModule.set(module, new Set());
                         }
-                        visibleFiles.get(module).add(testFile);
+                        visibleFilesByModule.get(module).add(testFile);
                     } else {
                         row.classList.add('hidden');
                     }
                 }
             });
             
-            // Second pass: show/hide group headers based on visible test cases
+            // Second pass: show/hide headers based on visible test cases
             allRows.forEach(row => {
                 if (row.classList.contains('group-header')) {
+                    // 提取模块名（去掉 📦 符号）
                     const headerText = row.textContent.trim();
-                    const module = headerText.replace('📦 ', '').trim();
+                    const module = headerText.replace(/^📦\s*/, '').trim();
+                    
+                    // 只有当该模块有可见的测试用例时才显示
                     if (visibleModules.has(module)) {
                         row.classList.remove('hidden');
                     } else {
                         row.classList.add('hidden');
                     }
                 } else if (row.classList.contains('file-header')) {
+                    // 提取文件名（去掉 📄 符号和测试数量）
                     const headerText = row.textContent.trim();
-                    const match = headerText.match(/📄 ([\w_]+)/);
+                    // 匹配格式：📄 test_xxx (N tests) 或 test_xxx (N tests)
+                    const match = headerText.match(/(?:📄\s*)?([\w_]+)\s*\(/);
+                    
                     if (match) {
                         const testFile = match[1];
                         let shouldShow = false;
-                        visibleFiles.forEach((files, module) => {
+                        
+                        // 检查是否有任何模块下的该文件有可见用例
+                        visibleFilesByModule.forEach((files, mod) => {
                             if (files.has(testFile)) {
                                 shouldShow = true;
                             }
                         });
+                        
                         if (shouldShow) {
                             row.classList.remove('hidden');
                         } else {
                             row.classList.add('hidden');
                         }
+                    } else {
+                        // 如果无法解析文件名，隐藏该行
+                        row.classList.add('hidden');
                     }
                 }
             });
