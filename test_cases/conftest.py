@@ -187,7 +187,7 @@ def translate_docstring_to_english(zh_text: str) -> str:
     if not zh_text:
         return ""
     
-    # 中英文映射表（完整版）
+    # 中英文映射表（完整版 v2.0 - 扩充50+词汇）
     translations = {
         # 完整短语（优先匹配）
         "排序功能验证 - 按姓名排序": "Sorting Verification - Sort by Name",
@@ -196,14 +196,14 @@ def translate_docstring_to_english(zh_text: str) -> str:
         "创建后立即在列表中查询，验证数据一致性": "Create then Query in List Immediately to Verify Data Consistency",
         "对比详情接口和列表接口返回的数据一致性": "Compare Data Consistency between Detail and List API",
         "使用不存在的筛选条件，验证空结果处理": "Verify Empty Result with Non-existent Filter",
+        "响应字段完整性验证": "Response Fields Completeness Verification",
+        "字段完整性验证": "Fields Completeness Verification",
         
         # 测试场景标识
         "测试场景": "Test Scenario",
         
         # 操作类型（完整短语）
         "基础列表查询 - 验证接口可用性": "Basic List Query - Verify API Availability",
-        "响应字段完整性验证": "Response Fields Completeness Verification",
-        "字段完整性验证": "Fields Completeness Verification",
         "排序功能验证": "Sorting Verification",
         "分页功能验证": "Pagination Verification",
         "空结果验证": "Empty Result Verification",
@@ -243,7 +243,7 @@ def translate_docstring_to_english(zh_text: str) -> str:
         "验证筛选逻辑": "Verify Filter Logic",
         "验证所有字段": "Verify All Fields",
         
-        # 资源类型和名词
+        # 资源类型和名词（大幅扩充）
         "账户": "Account",
         "联系人": "Contact",
         "详情": "Detail",
@@ -258,12 +258,51 @@ def translate_docstring_to_english(zh_text: str) -> str:
         "账户名称": "Account Name",
         "用户": "User",
         "个人资料": "Profile",
+        "资料": "Profile",  # 新增
         "头像": "Avatar",
         "密码": "Password",
         "因子": "Factor",
         "验证码": "Pass Code",
         "凭证": "Credentials",
         "文件": "File",
+        "参数": "Parameter",  # 新增
+        "类型": "Type",  # 新增
+        "数据": "Data",  # 新增
+        "信息": "Information",  # 新增
+        "方式": "Method",  # 新增
+        "操作": "Operation",  # 新增
+        "请求": "Request",  # 新增
+        "返回": "Return",  # 新增
+        "结果": "Result",  # 新增
+        "内容": "Content",  # 新增
+        "记录": "Record",  # 新增
+        "条件": "Condition",  # 新增
+        "范围": "Range",  # 新增
+        "限制": "Limit",  # 新增
+        "权限": "Permission",  # 新增
+        "配置": "Configuration",  # 新增
+        "设置": "Setting",  # 新增
+        "选项": "Option",  # 新增
+        "状态码": "Status Code",  # 新增
+        "错误码": "Error Code",  # 新增
+        "交易": "Transaction",  # 新增
+        "支付": "Payment",  # 新增
+        "账号": "Account Number",  # 新增
+        "金额": "Amount",  # 新增
+        "余额": "Balance",  # 新增
+        "日期": "Date",  # 新增
+        "时间": "Time",  # 新增
+        "期限": "Duration",  # 新增
+        "频率": "Frequency",  # 新增
+        "完整性": "Completeness",  # 新增
+        "对手方": "Counterparty",  # 新增
+        "交易对手": "Counterparty",  # 新增
+        "分组": "Group",  # 新增
+        "成员": "Member",  # 新增
+        "身份": "Identity",  # 新增
+        "安全": "Security",  # 新增
+        "认证": "Authentication",  # 新增
+        "授权": "Authorization",  # 新增
         
         # 验证相关
         "验证点": "Verification Points",
@@ -274,7 +313,7 @@ def translate_docstring_to_english(zh_text: str) -> str:
         "结构": "Structure",
         "数据结构": "Data Structure",
         
-        # 动词
+        # 动词（扩充）
         "更新": "Update",
         "创建": "Create",
         "筛选": "Filter",
@@ -283,8 +322,30 @@ def translate_docstring_to_english(zh_text: str) -> str:
         "验证": "Verify",
         "测试": "Test",
         "排序": "Sort",
+        "删除": "Delete",  # 新增
+        "添加": "Add",  # 新增
+        "移除": "Remove",  # 新增
+        "发送": "Send",  # 新增
+        "接收": "Receive",  # 新增
+        "上传": "Upload",  # 新增
+        "下载": "Download",  # 新增
+        "修改": "Modify",  # 新增
+        "设置": "Set",  # 新增
+        "清空": "Clear",  # 新增
+        "重置": "Reset",  # 新增
+        "刷新": "Refresh",  # 新增
+        "同步": "Sync",  # 新增
+        "导出": "Export",  # 新增
+        "导入": "Import",  # 新增
+        "生成": "Generate",  # 新增
+        "计算": "Calculate",  # 新增
+        "处理": "Process",  # 新增
+        "执行": "Execute",  # 新增
+        "调用": "Call",  # 新增
+        "触发": "Trigger",  # 新增
+        "缺少": "Missing",  # 新增
         
-        # 形容词和状态
+        # 形容词和状态（扩充）
         "成功": "Success",
         "失败": "Failed",
         "无效": "Invalid",
@@ -296,15 +357,41 @@ def translate_docstring_to_english(zh_text: str) -> str:
         "单个": "Single",
         "必需": "Required",
         "可选": "Optional",
+        "正确": "Correct",  # 新增
+        "错误": "Error",  # 新增
+        "空": "Empty",  # 新增
+        "非空": "Non-empty",  # 新增
+        "重复": "Duplicate",  # 新增
+        "唯一": "Unique",  # 新增
+        "有效": "Valid",
+        "已": "",  # 新增（去除）
+        "未": "Not ",  # 新增
         
-        # 连词和介词
+        # 连词和介词（扩充）
         "并": " and ",
         "与": " and ",
+        "和": " and ",  # 新增
         "或": " or ",
+        "或者": " or ",  # 新增
+        "但": " but ",  # 新增
+        "但是": " but ",  # 新增
+        "如果": " if ",  # 新增
+        "当": " when ",  # 新增
+        "在": " in ",  # 新增
+        "对": " for ",  # 新增
+        "到": " to ",  # 新增
+        "从": " from ",  # 新增
+        "于": " in ",  # 新增
+        "向": " to ",  # 新增
+        "给": " to ",  # 新增
         "按": "by ",
         "使用": "with ",
+        "通过": "via ",  # 新增
+        "根据": "according to ",  # 新增
+        "基于": "based on ",  # 新增
+        "关于": "about ",  # 新增
         
-        # 其他词汇
+        # 其他词汇（扩充）
         "包含": "Contains",
         "不包含": "Not Contains",
         "边界值": "Boundary Value",
@@ -314,12 +401,39 @@ def translate_docstring_to_english(zh_text: str) -> str:
         "加密": "Encrypted",
         "接口": "API",
         "功能": "Function",
+        "场景": "Scenario",  # 新增
+        "情况": "Case",  # 新增
+        "步骤": "Step",  # 新增
+        "流程": "Flow",  # 新增
+        "过程": "Process",  # 新增
+        "方法": "Method",  # 新增
+        "函数": "Function",  # 新增
+        "模块": "Module",  # 新增
+        "组件": "Component",  # 新增
+        "服务": "Service",  # 新增
+        "系统": "System",  # 新增
+        "应用": "Application",  # 新增
+        "程序": "Program",  # 新增
+        "代码": "Code",  # 新增
+        "脚本": "Script",  # 新增
+        "工具": "Tool",  # 新增
+        "辅助": "Helper",  # 新增
+        "实用": "Utility",  # 新增
+        "公共": "Common",  # 新增
+        "私有": "Private",  # 新增
+        "保护": "Protected",  # 新增
+        "静态": "Static",  # 新增
+        "动态": "Dynamic",  # 新增
+        "临时": "Temporary",  # 新增
+        "永久": "Permanent",  # 新增
         
         # 语气词和连接符（删除）
         "的": " ",
         "了": "",
         " - ": " - ",
         "时": " when",
+        "性": "",  # 新增（去除-ness后缀）
+        "化": "",  # 新增（去除-ization后缀）
         
         # 标点符号
         "：": ": ",
@@ -410,7 +524,7 @@ def db_session():
             logger.info("数据库会话已关闭")
 
 
-# --- 流量捕获逻辑（增强版）---
+# --- 流量捕获逻辑（增强版 - 防止重复记录）---
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
 def pytest_runtest_makereport(item, call):
     outcome = yield
@@ -449,7 +563,8 @@ def pytest_runtest_makereport(item, call):
         # 提取场景编号（用于排序）
         scenario_number = extract_scenario_number(docstring_summary_zh)
         
-        test_results.append({
+        # 构建测试结果数据
+        test_data = {
             "nodeid": item.nodeid,
             "status": report.outcome,
             "duration": report.duration,
@@ -464,7 +579,22 @@ def pytest_runtest_makereport(item, call):
             "scenario_number": scenario_number,  # 用于排序
             "api_path": api_path,
             "extra": extra_data
-        })
+        }
+        
+        # 防止重复记录（处理 pytest-rerunfailures 重试）
+        # 查找是否已有该 nodeid 的记录
+        existing_index = None
+        for i, result in enumerate(test_results):
+            if result["nodeid"] == item.nodeid:
+                existing_index = i
+                break
+        
+        if existing_index is not None:
+            # 如果已存在，更新为最新结果（重试后的最终结果）
+            test_results[existing_index] = test_data
+        else:
+            # 如果不存在，追加新记录
+            test_results.append(test_data)
 
 
 def pytest_sessionfinish(session, exitstatus):

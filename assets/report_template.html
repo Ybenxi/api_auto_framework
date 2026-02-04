@@ -101,6 +101,16 @@
         .file-header.collapsed .collapse-icon { transform: rotate(-90deg); }
         .test-count { color: #8c8c8c; font-weight: normal; font-size: 13px; margin-left: 8px; }
         
+        /* Hidden state */
+        .hidden { display: none !important; }
+        
+        /* Empty state */
+        .empty-state { background: transparent !important; cursor: default !important; }
+        .empty-state:hover { transform: none !important; box-shadow: none !important; }
+        .empty-icon { font-size: 48px; color: #d9d9d9; margin-bottom: 12px; }
+        .empty-text { font-size: 16px; color: #8c8c8c; margin-bottom: 8px; }
+        .empty-hint { font-size: 13px; color: #bfbfbf; }
+        
         /* API Path */
         .api-path { font-family: 'Fira Code', 'Consolas', monospace; font-size: 12px; color: #8c8c8c; background: #f5f5f5; padding: 4px 8px; border-radius: 4px; word-break: break-all; }
 
@@ -568,6 +578,9 @@
             const visibleModules = new Set();
             const visibleFilesByModule = new Map(); // module -> Set(files)
             
+            // 动态统计（新增）
+            let visibleStats = { passed: 0, failed: 0, skipped: 0 };
+            
             // First pass: determine which test case rows match filters
             allRows.forEach(row => {
                 if (row.classList.contains('case-row')) {
@@ -594,8 +607,13 @@
                     
                     // Show row only if all filters match
                     if (statusMatch && moduleMatch && searchMatch) {
-                        row.classList.remove('hidden');
+                        row.style.display = '';  // 修改为直接操作display
                         visibleModules.add(module);
+                        
+                        // 统计可见测试（新增）
+                        if (visibleStats[status] !== undefined) {
+                            visibleStats[status]++;
+                        }
                         
                         // 记录该模块下的可见文件
                         if (!visibleFilesByModule.has(module)) {
@@ -603,7 +621,7 @@
                         }
                         visibleFilesByModule.get(module).add(testFile);
                     } else {
-                        row.classList.add('hidden');
+                        row.style.display = 'none';  // 修改为直接操作display
                     }
                 }
             });
@@ -611,39 +629,83 @@
             // Second pass: show/hide headers based on visible test cases
             allRows.forEach(row => {
                 if (row.classList.contains('group-header')) {
-                    // 提取模块名（去掉 📦 符号）
-                    const headerText = row.textContent.trim();
-                    const module = headerText.replace(/^📦\s*/, '').trim();
+                    const module = row.getAttribute('data-module');
                     
                     // 只有当该模块有可见的测试用例时才显示
                     if (visibleModules.has(module)) {
-                        row.classList.remove('hidden');
+                        row.style.display = '';  // 修改为直接操作display
                     } else {
-                        row.classList.add('hidden');
+                        row.style.display = 'none';  // 修改为直接操作display
                     }
                 } else if (row.classList.contains('file-header')) {
-                    // 提取文件名（去掉 📄 符号和测试数量）
-                    const headerText = row.textContent.trim();
-                    // 匹配格式：📄 test_xxx (N tests) 或 test_xxx (N tests)
-                    const match = headerText.match(/(?:📄\s*)?([\w_]+)\s*\(/);
+                    const module = row.getAttribute('data-module');
+                    const testFile = row.getAttribute('data-file');
                     
-                    if (match) {
-                        const testFile = match[1];
-                        let shouldShow = false;
-                        
-                        // 检查是否有任何模块下的该文件有可见用例
-                        visibleFilesByModule.forEach((files, mod) => {
-                            if (files.has(testFile)) {
-                                shouldShow = true;
-                            }
-                        });
-                        
-                        if (shouldShow) {
-                            row.classList.remove('hidden');
-                        } else {
-                            row.classList.add('hidden');
-                        }
+                    // 检查该文件在该模块下是否有可见用例
+                    const filesInModule = visibleFilesByModule.get(module);
+                    const shouldShow = filesInModule && filesInModule.has(testFile);
+                    
+                    if (shouldShow) {
+                        row.style.display = '';  // 修改为直接操作display
                     } else {
+                        row.style.display = 'none';  // 修改为直接操作display
+                    }
+                }
+            });
+            
+            // Update dynamic statistics (新增：动态更新统计数字)
+            const visibleTotal = visibleStats.passed + visibleStats.failed + visibleStats.skipped;
+            
+            document.getElementById('cnt-passed').innerText = visibleStats.passed;
+            document.getElementById('cnt-failed').innerText = visibleStats.failed;
+            document.getElementById('cnt-skipped').innerText = visibleStats.skipped;
+            
+            document.getElementById('pct-passed').innerText = `(${visibleTotal ? Math.round((visibleStats.passed/visibleTotal)*100) : 0}%)`;
+            document.getElementById('pct-failed').innerText = `(${visibleTotal ? Math.round((visibleStats.failed/visibleTotal)*100) : 0}%)`;
+            document.getElementById('pct-skipped').innerText = `(${visibleTotal ? Math.round((visibleStats.skipped/visibleTotal)*100) : 0}%)`;
+            
+            document.getElementById('tab-all-count').innerText = visibleTotal;
+            document.getElementById('tab-passed-count').innerText = visibleStats.passed;
+            document.getElementById('tab-failed-count').innerText = visibleStats.failed;
+            
+            // Handle empty state (新增：空数据状态)
+            const listBody = document.getElementById('case-list');
+            let emptyStateRow = document.getElementById('empty-state');
+            
+            if (visibleTotal === 0) {
+                // 显示空状态
+                if (!emptyStateRow) {
+                    emptyStateRow = document.createElement('tr');
+                    emptyStateRow.id = 'empty-state';
+                    emptyStateRow.className = 'empty-state';
+                    emptyStateRow.innerHTML = `
+                        <td colspan="6" style="text-align: center; padding: 80px 20px;">
+                            <div class="empty-icon">📭</div>
+                            <div class="empty-text">
+                                <span data-lang="zh">没有找到匹配的测试用例</span>
+                                <span data-lang="en" style="display:${currentLang === 'en' ? '' : 'none'};">No matching test cases found</span>
+                            </div>
+                            <div class="empty-hint">
+                                <span data-lang="zh">尝试调整筛选条件或搜索关键词</span>
+                                <span data-lang="en" style="display:${currentLang === 'en' ? '' : 'none'};">Try adjusting filters or search keywords</span>
+                            </div>
+                        </td>
+                    `;
+                    listBody.appendChild(emptyStateRow);
+                } else {
+                    emptyStateRow.style.display = '';
+                }
+            } else {
+                // 隐藏空状态
+                if (emptyStateRow) {
+                    emptyStateRow.style.display = 'none';
+                }
+            }
+        }
+        
+        // Dummy line to continue
+        function dummyAfterApplyFilters() {
+            // Placeholder to prevent syntax error during replacement
                         // 如果无法解析文件名，隐藏该行
                         row.classList.add('hidden');
                     }
