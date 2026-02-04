@@ -3,8 +3,8 @@ Statement 列表接口测试用例
 测试 GET /api/v1/cores/{core}/statements 接口
 """
 import pytest
-from utils.assertions import (
 from utils.logger import logger
+from utils.assertions import (
     assert_status_ok,
     assert_response_parsed,
     assert_list_structure,

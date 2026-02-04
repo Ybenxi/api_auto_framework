@@ -4,8 +4,8 @@
 """
 import pytest
 from data.enums import BusinessEntityType, AccountStatus
-from utils.assertions import (
 from utils.logger import logger
+from utils.assertions import (
     assert_status_ok,
     assert_response_parsed,
     assert_list_structure,

@@ -6,8 +6,8 @@ import pytest
 import uuid
 from api.fbo_account_api import FboAccountAPI
 from api.sub_account_api import SubAccountAPI
-from utils.assertions import (
 from utils.logger import logger
+from utils.assertions import (
     assert_status_ok,
     assert_response_parsed
 )

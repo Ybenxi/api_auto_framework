@@ -4,8 +4,8 @@ FBO Account 列表接口测试用例
 """
 import pytest
 from data.enums import FboAccountStatus
-from utils.assertions import (
 from utils.logger import logger
+from utils.assertions import (
     assert_status_ok,
     assert_response_parsed,
     assert_list_structure,

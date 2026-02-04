@@ -3,8 +3,8 @@ Identity Security - MFA 接口测试用例
 测试 MFA（多因素认证）相关接口
 """
 import pytest
-from utils.assertions import (
 from utils.logger import logger
+from utils.assertions import (
     assert_status_ok,
     assert_response_parsed
 )

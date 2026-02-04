@@ -4,8 +4,8 @@ Identity Security - User Profile 接口测试用例
 测试 POST /api/v1/cores/{core}/identity-security/profile/avatar 接口
 """
 import pytest
-from utils.assertions import (
 from utils.logger import logger
+from utils.assertions import (
     assert_status_ok,
     assert_response_parsed,
     assert_fields_present

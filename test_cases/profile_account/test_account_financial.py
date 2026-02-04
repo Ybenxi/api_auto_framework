@@ -3,8 +3,8 @@
 测试 GET /api/v1/cores/{core}/accounts/{account_id}/financial-accounts 接口
 """
 import pytest
-from utils.assertions import (
 from utils.logger import logger
+from utils.assertions import (
     assert_status_ok,
     assert_response_parsed,
     assert_list_structure,
