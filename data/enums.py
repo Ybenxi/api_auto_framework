@@ -105,3 +105,42 @@ class FboAccountStatus(str, Enum):
     def __str__(self):
         """返回枚举的实际值"""
         return self.value
+
+
+class ApplicationStatus(str, Enum):
+    """
+    Account Opening Application 状态枚举
+    """
+    SUBMITTED = "submitted"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+    def __str__(self):
+        """返回枚举的实际值"""
+        return self.value
+
+
+class BusinessStatus(str, Enum):
+    """
+    企业运营状态枚举
+    """
+    OPERATING = "Operating"
+    NON_OPERATING = "Non-Operating"
+
+    def __str__(self):
+        """返回枚举的实际值"""
+        return self.value
+
+
+class EmploymentStatus(str, Enum):
+    """
+    就业状态枚举
+    """
+    EMPLOYED = "Employed"
+    NOT_EMPLOYED = "Not Employed"
+    RETIRED = "Retired"
+    SELF_EMPLOYED = "Self Employed"
+
+    def __str__(self):
+        """返回枚举的实际值"""
+        return self.value
