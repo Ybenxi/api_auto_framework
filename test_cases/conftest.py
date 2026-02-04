@@ -28,6 +28,47 @@ MODULE_NAME_MAPPING = {
 }
 
 
+def cleanup_old_reports(reports_dir: str, keep_count: int = 5):
+    """
+    清理旧的带时间戳的报告文件，只保留最近的 N 次
+    
+    Args:
+        reports_dir: 报告目录路径
+        keep_count: 保留的报告数量，默认为 5
+    """
+    import glob
+    
+    try:
+        # 查找所有带时间戳的报告文件
+        pattern = os.path.join(reports_dir, "benxi_report_*.html")
+        report_files = glob.glob(pattern)
+        
+        # 如果报告数量少于等于保留数量，不需要清理
+        if len(report_files) <= keep_count:
+            return
+        
+        # 按修改时间排序（最新的在前）
+        report_files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
+        
+        # 删除多余的旧报告
+        files_to_delete = report_files[keep_count:]
+        deleted_count = 0
+        
+        for file_path in files_to_delete:
+            try:
+                os.remove(file_path)
+                deleted_count += 1
+                logger.debug(f"已删除旧报告: {os.path.basename(file_path)}")
+            except Exception as e:
+                logger.warning(f"删除报告失败 {os.path.basename(file_path)}: {e}")
+        
+        if deleted_count > 0:
+            logger.info(f"报告清理完成: 删除 {deleted_count} 个旧报告，保留最近 {keep_count} 次")
+    
+    except Exception as e:
+        logger.warning(f"清理旧报告时发生异常: {e}")
+
+
 def extract_module_from_nodeid(nodeid: str) -> str:
     """
     从 nodeid 中提取模块名称
@@ -473,6 +514,9 @@ def pytest_sessionfinish(session, exitstatus):
         with open(latest_report_path, 'w', encoding='utf-8') as f:
             f.write(final_html)
         logger.info(f"最新报告已更新: {latest_report_path}")
+        
+        # 清理旧的带时间戳的报告，只保留最近5次
+        cleanup_old_reports(os.path.join(os.path.dirname(__file__), "..", "reports"))
 
 
 # --- 自动拦截 Requests 流量的辅助工具（修复版）---

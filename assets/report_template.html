@@ -87,13 +87,18 @@
         .module-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; background: #e6f7ff; color: #1890ff; margin-right: 8px; }
         
         /* Group Headers */
-        .group-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); font-weight: 700; color: white; cursor: default; font-size: 15px; text-shadow: 0 1px 2px rgba(0,0,0,0.2); }
-        .group-header:hover { transform: none !important; box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important; }
+        .group-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); font-weight: 700; color: white; cursor: pointer; font-size: 15px; text-shadow: 0 1px 2px rgba(0,0,0,0.2); user-select: none; }
+        .group-header:hover { transform: none !important; box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important; opacity: 0.95; }
         .group-header td { padding: 14px 20px !important; border-left: none !important; }
-        .file-header { background: linear-gradient(135deg, #f5f7fa 0%, #e8ebf0 100%); font-weight: 600; color: #262626; font-size: 14px; cursor: default; border-left: 4px solid #4472C4 !important; }
-        .file-header:hover { transform: none !important; box-shadow: 0 1px 2px rgba(0,0,0,0.03) !important; }
+        .group-header .collapse-icon { display: inline-block; margin-right: 8px; transition: transform 0.3s; font-size: 14px; }
+        .group-header.collapsed .collapse-icon { transform: rotate(-90deg); }
+        
+        .file-header { background: linear-gradient(135deg, #f5f7fa 0%, #e8ebf0 100%); font-weight: 600; color: #262626; font-size: 14px; cursor: pointer; border-left: 4px solid #4472C4 !important; user-select: none; }
+        .file-header:hover { transform: none !important; box-shadow: 0 1px 2px rgba(0,0,0,0.03) !important; background: linear-gradient(135deg, #e8ebf0 0%, #dce1e8 100%); }
         .file-header td { padding: 12px 20px !important; padding-left: 40px !important; }
         .file-header td::before { content: '📄 '; font-size: 16px; margin-right: 8px; }
+        .file-header .collapse-icon { display: inline-block; margin-left: 8px; transition: transform 0.3s; font-size: 12px; color: #8c8c8c; }
+        .file-header.collapsed .collapse-icon { transform: rotate(-90deg); }
         .test-count { color: #8c8c8c; font-weight: normal; font-size: 13px; margin-left: 8px; }
         
         /* API Path */
@@ -343,23 +348,42 @@
             // Render grouped data with headers
             let globalIndex = 0;
             Object.keys(groupedData).sort().forEach(module => {
-                // Module header row
+                // Module header row with collapse functionality
                 const moduleHeaderRow = document.createElement('tr');
                 moduleHeaderRow.className = 'group-header';
-                moduleHeaderRow.innerHTML = `<td colspan="6">📦 ${module}</td>`;
+                moduleHeaderRow.setAttribute('data-module', module);
+                moduleHeaderRow.innerHTML = `<td colspan="6"><span class="collapse-icon">▼</span> 📦 ${module}</td>`;
+                
+                // Add click event for module-level collapse
+                moduleHeaderRow.onclick = (e) => {
+                    e.stopPropagation();
+                    toggleModuleCollapse(module);
+                };
+                
                 listBody.appendChild(moduleHeaderRow);
                 
                 Object.keys(groupedData[module]).sort().forEach(testFile => {
-                    // Sort test cases within the file by nodeid to maintain original order
+                    // Sort test cases within the file by scenario_number (修复排序Bug)
                     const sortedTestCases = groupedData[module][testFile].sort((a, b) => {
-                        return (a.nodeid || '').localeCompare(b.nodeid || '');
+                        const numA = a.scenario_number !== undefined ? a.scenario_number : 999;
+                        const numB = b.scenario_number !== undefined ? b.scenario_number : 999;
+                        return numA - numB;
                     });
                     
-                    // Test file header row
+                    // Test file header row with collapse functionality
                     const fileHeaderRow = document.createElement('tr');
                     fileHeaderRow.className = 'file-header';
+                    fileHeaderRow.setAttribute('data-module', module);
+                    fileHeaderRow.setAttribute('data-file', testFile);
                     const testCount = sortedTestCases.length;
-                    fileHeaderRow.innerHTML = `<td colspan="6">${testFile} <span class="test-count">(${testCount} tests)</span></td>`;
+                    fileHeaderRow.innerHTML = `<td colspan="6"><span class="collapse-icon">▼</span>${testFile} <span class="test-count">(${testCount} tests)</span></td>`;
+                    
+                    // Add click event for file-level collapse
+                    fileHeaderRow.onclick = (e) => {
+                        e.stopPropagation();
+                        toggleFileCollapse(module, testFile);
+                    };
+                    
                     listBody.appendChild(fileHeaderRow);
                     
                     // Test case rows (already sorted)
@@ -470,6 +494,47 @@
                     if (cells.length > 2) {
                         cells[2].innerHTML = `<span style="font-weight: 500;">${displayName}</span>`;
                     }
+                }
+            });
+        }
+
+        // Toggle module collapse (折叠/展开整个模块)
+        function toggleModuleCollapse(moduleName) {
+            const moduleHeader = document.querySelector(`.group-header[data-module="${moduleName}"]`);
+            const isCollapsed = moduleHeader.classList.toggle('collapsed');
+            
+            // 切换折叠图标
+            const icon = moduleHeader.querySelector('.collapse-icon');
+            if (icon) {
+                icon.textContent = isCollapsed ? '▶' : '▼';
+            }
+            
+            // 显示/隐藏该模块下的所有行（file-header + case-row）
+            const rows = document.querySelectorAll(`[data-module="${moduleName}"]`);
+            rows.forEach(row => {
+                if (!row.classList.contains('group-header')) {
+                    row.style.display = isCollapsed ? 'none' : '';
+                }
+            });
+        }
+        
+        // Toggle file collapse (折叠/展开单个测试文件)
+        function toggleFileCollapse(moduleName, fileName) {
+            const fileHeader = document.querySelector(`.file-header[data-module="${moduleName}"][data-file="${fileName}"]`);
+            const isCollapsed = fileHeader.classList.toggle('collapsed');
+            
+            // 切换折叠图标
+            const icon = fileHeader.querySelector('.collapse-icon');
+            if (icon) {
+                icon.textContent = isCollapsed ? '▶' : '▼';
+            }
+            
+            // 显示/隐藏该文件下的所有测试用例
+            const allRows = document.querySelectorAll('.case-row');
+            allRows.forEach(row => {
+                if (row.getAttribute('data-module') === moduleName && 
+                    row.getAttribute('data-test-file') === fileName) {
+                    row.style.display = isCollapsed ? 'none' : '';
                 }
             });
         }
