@@ -21,7 +21,8 @@ MODULE_NAME_MAPPING = {
     "fbo_account": "FBO Account",
     "statement": "Statement",
     "tenant": "Tenant",
-    "open_banking": "Open Banking"
+    "open_banking": "Open Banking",
+    "counterparty": "Counterparty Management"
 }
 
 
@@ -208,9 +209,18 @@ def translate_docstring_to_english(zh_text: str) -> str:
         "地址": "Address",
         "邮寄地址": "Mailing Address",
         "注册地址": "Register Address",
+        "永久地址": "Permanent Address",
         "部分字段": "Partial Fields",
         "姓名": "Name",
         "账户名称": "Account Name",
+        "用户": "User",
+        "个人资料": "Profile",
+        "头像": "Avatar",
+        "密码": "Password",
+        "因子": "Factor",
+        "验证码": "Pass Code",
+        "凭证": "Credentials",
+        "文件": "File",
         
         # 验证相关
         "验证点": "Verification Points",
