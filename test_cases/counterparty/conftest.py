@@ -1,14 +1,19 @@
 """
-Counterparty 模块的 Pytest 配置
-自动为该目录下的所有测试用例添加 counterparty marker
+Counterparty 模块级配置
+可在此添加模块特定的 fixture 或配置
 """
 import pytest
+from api.counterparty_api import CounterpartyAPI
 
 
-def pytest_collection_modifyitems(items):
+# 模块级 marker，自动应用到该目录下所有测试
+pytestmark = pytest.mark.counterparty
+
+
+@pytest.fixture
+def counterparty_api(login_session):
     """
-    自动为 counterparty 目录下的所有测试用例添加 counterparty marker
+    Counterparty 模块专用的 CounterpartyAPI 实例
+    复用全局 login_session，避免在每个用例中重复初始化
     """
-    for item in items:
-        if "counterparty" in str(item.fspath):
-            item.add_marker(pytest.mark.counterparty)
+    return CounterpartyAPI(session=login_session)

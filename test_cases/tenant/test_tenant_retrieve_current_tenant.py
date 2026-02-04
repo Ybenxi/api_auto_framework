@@ -3,7 +3,11 @@ Tenant Info 接口测试用例
 测试 GET /api/v1/cores/{core}/tenants/info 接口
 """
 import pytest
-from api.tenant_api import TenantAPI
+from utils.assertions import (
+    assert_status_ok,
+    assert_response_parsed,
+    assert_fields_present
+)
 
 
 @pytest.mark.tenant
@@ -13,7 +17,7 @@ class TestTenantRetrieveCurrentTenant:
     获取当前 Tenant 信息接口测试用例集
     """
 
-    def test_get_current_tenant_info_success(self, login_session):
+    def test_get_current_tenant_info_success(self, tenant_api):
         """
         测试场景1：成功获取当前 Tenant 信息
         验证点：
@@ -22,40 +26,36 @@ class TestTenantRetrieveCurrentTenant:
         3. 返回的 Tenant 包含必需字段（id, name, description, status, timezone）
         4. status 字段值为有效的枚举值（ACTIVE/PENDING/INACTIVE）
         """
-        # 1. 初始化 API 对象
-        tenant_api = TenantAPI(session=login_session)
-        
-        # 2. 调用 Get Current Tenant Info 接口
+        # 1. 调用 Get Current Tenant Info 接口
         print("\n[Step] 调用 Get Current Tenant Info 接口")
         response = tenant_api.get_current_tenant_info()
         
-        # 3. 断言状态码
+        # 2. 验证状态码
         print("[Step] 验证 HTTP 状态码为 200")
-        assert response.status_code == 200, \
-            f"Get Current Tenant Info 接口返回状态码错误: {response.status_code}, Response: {response.text}"
+        assert_status_ok(response)
         
-        # 4. 解析响应
+        # 3. 解析响应
         print("[Step] 解析响应并验证数据")
         response_body = response.json()
         
-        # 5. 验证 code 字段
+        # 4. 验证 code 字段
         print("[Step] 验证 code 字段为 200")
         assert response_body.get("code") == 200, \
             f"响应 code 不正确: 期望 200, 实际 {response_body.get('code')}"
         
-        # 6. 获取 data 字段
+        # 5. 获取 data 字段
         tenant_info = response_body.get("data", {})
         assert tenant_info, "响应中缺少 data 字段"
         
-        # 7. 验证必需字段存在
+        # 6. 验证必需字段存在
         print("[Step] 验证必需字段存在")
         required_fields = ["id", "name", "description", "status", "timezone"]
+        assert_fields_present(tenant_info, required_fields, "Tenant 信息")
         
         for field in required_fields:
-            assert field in tenant_info, f"Tenant 信息缺少必需字段: {field}"
             print(f"  ✓ {field}: {tenant_info.get(field)}")
         
-        # 8. 验证 status 字段的值
+        # 7. 验证 status 字段的值
         print("[Step] 验证 status 字段值为有效枚举")
         valid_statuses = ["ACTIVE", "PENDING", "INACTIVE"]
         tenant_status = tenant_info.get("status")
@@ -69,7 +69,7 @@ class TestTenantRetrieveCurrentTenant:
         print(f"  Status: {tenant_info.get('status')}")
         print(f"  Timezone: {tenant_info.get('timezone')}")
 
-    def test_get_current_tenant_info_response_structure(self, login_session):
+    def test_get_current_tenant_info_response_structure(self, tenant_api):
         """
         测试场景2：验证响应数据结构
         验证点：
@@ -78,30 +78,23 @@ class TestTenantRetrieveCurrentTenant:
         3. 包含 code 和 data 字段
         4. data 是对象而非数组
         """
-        # 1. 初始化 API 对象
-        tenant_api = TenantAPI(session=login_session)
-        
-        # 2. 调用 Get Current Tenant Info 接口
+        # 1. 调用 Get Current Tenant Info 接口
         print("\n[Step] 调用 Get Current Tenant Info 接口")
         response = tenant_api.get_current_tenant_info()
         
-        # 3. 验证状态码
+        # 2. 验证状态码
         print("[Step] 验证 HTTP 状态码为 200")
-        assert response.status_code == 200, \
-            f"Get Current Tenant Info 接口返回状态码错误: {response.status_code}"
+        assert_status_ok(response)
         
-        # 4. 验证响应数据结构
+        # 3. 验证响应数据结构
         print("[Step] 验证响应数据结构")
         response_body = response.json()
         
         # 验证是 JSON 对象（不是数组）
         assert isinstance(response_body, dict), "响应应该是 JSON 对象，不是数组"
         
-        # 验证包含 code 字段
-        assert "code" in response_body, "响应中缺少 code 字段"
-        
-        # 验证包含 data 字段
-        assert "data" in response_body, "响应中缺少 data 字段"
+        # 验证包含 code 和 data 字段
+        assert_fields_present(response_body, ["code", "data"], "响应")
         
         # 验证 data 是对象（不是数组）
         tenant_info = response_body.get("data")
@@ -113,7 +106,7 @@ class TestTenantRetrieveCurrentTenant:
         
         print(f"✓ 响应数据结构验证通过")
 
-    def test_get_current_tenant_info_field_types(self, login_session):
+    def test_get_current_tenant_info_field_types(self, tenant_api):
         """
         测试场景3：验证字段数据类型
         验证点：
@@ -124,24 +117,20 @@ class TestTenantRetrieveCurrentTenant:
         5. status 字段为字符串类型
         6. timezone 字段为字符串类型
         """
-        # 1. 初始化 API 对象
-        tenant_api = TenantAPI(session=login_session)
-        
-        # 2. 调用 Get Current Tenant Info 接口
+        # 1. 调用 Get Current Tenant Info 接口
         print("\n[Step] 调用 Get Current Tenant Info 接口")
         response = tenant_api.get_current_tenant_info()
         
-        # 3. 验证状态码
+        # 2. 验证状态码
         print("[Step] 验证 HTTP 状态码为 200")
-        assert response.status_code == 200, \
-            f"Get Current Tenant Info 接口返回状态码错误: {response.status_code}"
+        assert_status_ok(response)
         
-        # 4. 解析响应
+        # 3. 解析响应
         print("[Step] 解析响应并验证字段类型")
         response_body = response.json()
         tenant_info = response_body.get("data", {})
         
-        # 5. 验证字段类型
+        # 4. 验证字段类型
         print("[Step] 验证各字段的数据类型")
         
         # 验证 id 为字符串
@@ -171,31 +160,27 @@ class TestTenantRetrieveCurrentTenant:
         
         print(f"\n✓ 所有字段类型验证通过")
 
-    def test_get_current_tenant_info_status_enum_values(self, login_session):
+    def test_get_current_tenant_info_status_enum_values(self, tenant_api):
         """
         测试场景4：验证 status 枚举值
         验证点：
         1. 接口返回 200
         2. status 字段值为 ACTIVE/PENDING/INACTIVE 之一
         """
-        # 1. 初始化 API 对象
-        tenant_api = TenantAPI(session=login_session)
-        
-        # 2. 调用 Get Current Tenant Info 接口
+        # 1. 调用 Get Current Tenant Info 接口
         print("\n[Step] 调用 Get Current Tenant Info 接口")
         response = tenant_api.get_current_tenant_info()
         
-        # 3. 验证状态码
+        # 2. 验证状态码
         print("[Step] 验证 HTTP 状态码为 200")
-        assert response.status_code == 200, \
-            f"Get Current Tenant Info 接口返回状态码错误: {response.status_code}"
+        assert_status_ok(response)
         
-        # 4. 解析响应
+        # 3. 解析响应
         print("[Step] 解析响应并验证 status 枚举")
         response_body = response.json()
         tenant_info = response_body.get("data", {})
         
-        # 5. 验证 status 枚举值
+        # 4. 验证 status 枚举值
         print("[Step] 验证 status 字段为有效枚举值")
         valid_statuses = ["ACTIVE", "PENDING", "INACTIVE"]
         tenant_status = tenant_info.get("status")
@@ -208,7 +193,7 @@ class TestTenantRetrieveCurrentTenant:
         
         print(f"\n✓ status 枚举值验证通过: {tenant_status}")
 
-    def test_get_current_tenant_info_timezone_format(self, login_session):
+    def test_get_current_tenant_info_timezone_format(self, tenant_api):
         """
         测试场景5：验证 timezone 字段格式
         验证点：
@@ -216,24 +201,20 @@ class TestTenantRetrieveCurrentTenant:
         2. timezone 字段存在且不为空
         3. timezone 格式符合标准时区格式（如 America/Chicago）
         """
-        # 1. 初始化 API 对象
-        tenant_api = TenantAPI(session=login_session)
-        
-        # 2. 调用 Get Current Tenant Info 接口
+        # 1. 调用 Get Current Tenant Info 接口
         print("\n[Step] 调用 Get Current Tenant Info 接口")
         response = tenant_api.get_current_tenant_info()
         
-        # 3. 验证状态码
+        # 2. 验证状态码
         print("[Step] 验证 HTTP 状态码为 200")
-        assert response.status_code == 200, \
-            f"Get Current Tenant Info 接口返回状态码错误: {response.status_code}"
+        assert_status_ok(response)
         
-        # 4. 解析响应
+        # 3. 解析响应
         print("[Step] 解析响应并验证 timezone 格式")
         response_body = response.json()
         tenant_info = response_body.get("data", {})
         
-        # 5. 验证 timezone 字段
+        # 4. 验证 timezone 字段
         print("[Step] 验证 timezone 字段格式")
         timezone = tenant_info.get("timezone")
         
@@ -254,7 +235,7 @@ class TestTenantRetrieveCurrentTenant:
         
         print(f"\n✓ timezone 字段验证完成: {timezone}")
 
-    def test_get_current_tenant_info_using_helper_method(self, login_session):
+    def test_get_current_tenant_info_using_helper_method(self, tenant_api):
         """
         测试场景6：使用辅助方法解析响应
         验证点：
@@ -262,24 +243,20 @@ class TestTenantRetrieveCurrentTenant:
         2. 使用 parse_tenant_response 辅助方法成功解析响应
         3. 解析后的数据结构正确
         """
-        # 1. 初始化 API 对象
-        tenant_api = TenantAPI(session=login_session)
-        
-        # 2. 调用 Get Current Tenant Info 接口
+        # 1. 调用 Get Current Tenant Info 接口
         print("\n[Step] 调用 Get Current Tenant Info 接口")
         response = tenant_api.get_current_tenant_info()
         
-        # 3. 使用辅助方法解析响应
+        # 2. 使用辅助方法解析响应
         print("[Step] 使用 parse_tenant_response 辅助方法解析响应")
         parsed = tenant_api.parse_tenant_response(response)
         
-        # 4. 验证解析结果
+        # 3. 验证解析结果
         print("[Step] 验证解析结果")
-        assert not parsed.get("error"), f"响应解析失败: {parsed.get('message')}"
+        assert_response_parsed(parsed)
         
         # 验证包含 code 和 data 字段
-        assert "code" in parsed, "解析结果缺少 code 字段"
-        assert "data" in parsed, "解析结果缺少 data 字段"
+        assert_fields_present(parsed, ["code", "data"], "解析结果")
         
         # 验证 code 为 200
         assert parsed["code"] == 200, f"code 不正确: 期望 200, 实际 {parsed['code']}"
@@ -287,9 +264,7 @@ class TestTenantRetrieveCurrentTenant:
         # 验证 data 中包含必需字段
         tenant_info = parsed["data"]
         required_fields = ["id", "name", "description", "status", "timezone"]
-        
-        for field in required_fields:
-            assert field in tenant_info, f"解析后的数据缺少必需字段: {field}"
+        assert_fields_present(tenant_info, required_fields, "解析后的数据")
         
         print(f"\n✓ 辅助方法解析验证通过:")
         print(f"  Code: {parsed['code']}")

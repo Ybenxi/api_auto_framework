@@ -3,17 +3,16 @@ Open Banking List Authorized Accounts 接口测试用例
 测试 GET /api/v1/cores/{core}/open-banking/accounts/authorized-accounts 接口
 """
 import pytest
-from api.open_banking_api import OpenBankingAPI
+from utils.assertions import assert_status_ok, assert_fields_present
 
 
-@pytest.mark.open_banking
 @pytest.mark.list_api
 class TestOpenBankingListAuthorizedAccounts:
     """
     获取授权账户列表接口测试用例集
     """
 
-    def test_list_authorized_accounts_success(self, login_session):
+    def test_list_authorized_accounts_success(self, open_banking_api):
         """
         测试场景1：成功获取授权账户列表
         验证点：
@@ -21,41 +20,36 @@ class TestOpenBankingListAuthorizedAccounts:
         2. 返回的 data 是数组
         3. 每个账户包含必需字段（id, account_name, account_number, account_status, record_type）
         """
-        # 1. 初始化 API 对象
-        open_banking_api = OpenBankingAPI(session=login_session)
-        
-        # 2. 调用 List Authorized Accounts 接口
+        # 1. 调用 List Authorized Accounts 接口
         print("\n[Step] 调用 List Authorized Accounts 接口")
         response = open_banking_api.list_authorized_accounts()
         
-        # 3. 断言状态码
+        # 2. 断言状态码
         print("[Step] 验证 HTTP 状态码为 200")
-        assert response.status_code == 200, \
-            f"List Authorized Accounts 接口返回状态码错误: {response.status_code}, Response: {response.text}"
+        assert_status_ok(response, 200)
         
-        # 4. 解析响应
+        # 3. 解析响应并验证数据
         print("[Step] 解析响应并验证数据")
         response_body = response.json()
         
-        # 5. 验证 code 字段
+        # 4. 验证 code 字段
         print("[Step] 验证 code 字段为 200")
         assert response_body.get("code") == 200, \
             f"响应 code 不正确: 期望 200, 实际 {response_body.get('code')}"
         
-        # 6. 验证 data 是数组
+        # 5. 验证 data 是数组
         data = response_body.get("data", [])
         assert isinstance(data, list), "data 字段应该是数组"
-        
         print(f"[Step] 获取到 {len(data)} 个授权账户")
         
-        # 7. 如果有数据，验证字段结构
+        # 6. 如果有数据，验证字段结构
         if len(data) > 0:
             print("[Step] 验证第一个账户的必需字段")
             account = data[0]
             required_fields = ["id", "account_name", "account_number", "account_status", "record_type"]
+            assert_fields_present(account, required_fields, "账户数据")
             
             for field in required_fields:
-                assert field in account, f"账户数据缺少必需字段: {field}"
                 print(f"  ✓ {field}: {account.get(field)}")
             
             print(f"\n✓ 成功获取授权账户列表:")
@@ -66,20 +60,17 @@ class TestOpenBankingListAuthorizedAccounts:
         else:
             print("  ⚠ 当前没有授权账户数据")
 
-    def test_list_authorized_accounts_with_name_filter(self, login_session):
+    def test_list_authorized_accounts_with_name_filter(self, open_banking_api):
         """
         测试场景2：使用 name 参数筛选
         验证点：
         1. 接口返回 200
         2. 返回的数据符合筛选条件
         """
-        # 1. 初始化 API 对象
-        open_banking_api = OpenBankingAPI(session=login_session)
-        
-        # 2. 先不带参数查询，获取一个账户名称
+        # 1. 先不带参数查询，获取一个账户名称
         print("\n[Step] 先获取所有授权账户")
         all_response = open_banking_api.list_authorized_accounts()
-        assert all_response.status_code == 200, "获取所有账户失败"
+        assert_status_ok(all_response, 200)
         
         all_data = all_response.json().get("data", [])
         
@@ -95,29 +86,27 @@ class TestOpenBankingListAuthorizedAccounts:
         search_name = account_name[:4] if len(account_name) > 4 else account_name
         print(f"[Step] 使用 name 参数筛选: {search_name}")
         
-        # 3. 调用带筛选的接口
+        # 2. 调用带筛选的接口
         filtered_response = open_banking_api.list_authorized_accounts(name=search_name)
         
-        # 4. 验证状态码
+        # 3. 验证状态码
         print("[Step] 验证 HTTP 状态码为 200")
-        assert filtered_response.status_code == 200, \
-            f"筛选接口返回状态码错误: {filtered_response.status_code}"
+        assert_status_ok(filtered_response, 200)
         
-        # 5. 验证返回数据
+        # 4. 验证返回数据
         filtered_data = filtered_response.json().get("data", [])
         print(f"[Step] 筛选后获取到 {len(filtered_data)} 个账户")
         
-        # 6. 验证筛选结果
+        # 5. 验证筛选结果
         if len(filtered_data) > 0:
             print("[Step] 验证筛选结果包含搜索关键词")
             for account in filtered_data:
                 account_name_value = account.get("account_name", "")
                 print(f"  账户名称: {account_name_value}")
-                # 注意：实际的筛选逻辑可能是模糊匹配或精确匹配，根据实际情况调整
         
         print(f"✓ name 参数筛选测试完成")
 
-    def test_list_authorized_accounts_response_structure(self, login_session):
+    def test_list_authorized_accounts_response_structure(self, open_banking_api):
         """
         测试场景3：验证响应数据结构
         验证点：
@@ -125,28 +114,23 @@ class TestOpenBankingListAuthorizedAccounts:
         2. 响应包含 code, error_message, error, data 字段
         3. data 是数组而非对象
         """
-        # 1. 初始化 API 对象
-        open_banking_api = OpenBankingAPI(session=login_session)
-        
-        # 2. 调用接口
+        # 1. 调用接口
         print("\n[Step] 调用 List Authorized Accounts 接口")
         response = open_banking_api.list_authorized_accounts()
         
-        # 3. 验证状态码
+        # 2. 验证状态码
         print("[Step] 验证 HTTP 状态码为 200")
-        assert response.status_code == 200, \
-            f"接口返回状态码错误: {response.status_code}"
+        assert_status_ok(response, 200)
         
-        # 4. 验证响应数据结构
+        # 3. 验证响应数据结构
         print("[Step] 验证响应数据结构")
         response_body = response.json()
         
         # 验证是 JSON 对象
         assert isinstance(response_body, dict), "响应应该是 JSON 对象"
         
-        # 验证必需字段（成功响应）
-        assert "code" in response_body, "响应中缺少 code 字段"
-        assert "data" in response_body, "响应中缺少 data 字段"
+        # 验证必需字段
+        assert_fields_present(response_body, ["code", "data"], "响应")
         print(f"  ✓ code: {response_body.get('code')}")
         print(f"  ✓ data: 存在")
         
@@ -156,33 +140,28 @@ class TestOpenBankingListAuthorizedAccounts:
         
         # 验证 data 是数组
         assert isinstance(response_body["data"], list), "data 字段应该是数组"
-        
         print(f"✓ 响应数据结构验证通过")
 
-    def test_list_authorized_accounts_all_fields(self, login_session):
+    def test_list_authorized_accounts_all_fields(self, open_banking_api):
         """
         测试场景4：验证所有字段存在
         验证点：
         1. 接口返回 200
         2. 账户数据包含所有字段（包括可能为 null 的字段）
         """
-        # 1. 初始化 API 对象
-        open_banking_api = OpenBankingAPI(session=login_session)
-        
-        # 2. 调用接口
+        # 1. 调用接口
         print("\n[Step] 调用 List Authorized Accounts 接口")
         response = open_banking_api.list_authorized_accounts()
         
-        # 3. 验证状态码
-        assert response.status_code == 200, f"接口返回状态码错误: {response.status_code}"
+        # 2. 验证状态码
+        assert_status_ok(response, 200)
         
-        # 4. 解析响应
+        # 3. 解析响应
         data = response.json().get("data", [])
-        
         if len(data) == 0:
             pytest.skip("没有可用的授权账户数据，跳过测试")
         
-        # 5. 验证所有字段
+        # 4. 验证所有字段
         print("[Step] 验证第一个账户的所有字段")
         account = data[0]
         
@@ -213,7 +192,7 @@ class TestOpenBankingListAuthorizedAccounts:
         
         print(f"✓ 字段完整性验证完成")
 
-    def test_list_authorized_accounts_account_status_values(self, login_session):
+    def test_list_authorized_accounts_account_status_values(self, open_banking_api):
         """
         测试场景5：验证 account_status 字段值
         验证点：
@@ -221,23 +200,19 @@ class TestOpenBankingListAuthorizedAccounts:
         2. account_status 字段存在
         3. account_status 值为常见状态（如 Active, Inactive）
         """
-        # 1. 初始化 API 对象
-        open_banking_api = OpenBankingAPI(session=login_session)
-        
-        # 2. 调用接口
+        # 1. 调用接口
         print("\n[Step] 调用 List Authorized Accounts 接口")
         response = open_banking_api.list_authorized_accounts()
         
-        # 3. 验证状态码
-        assert response.status_code == 200, f"接口返回状态码错误: {response.status_code}"
+        # 2. 验证状态码
+        assert_status_ok(response, 200)
         
-        # 4. 解析响应
+        # 3. 解析响应
         data = response.json().get("data", [])
-        
         if len(data) == 0:
             pytest.skip("没有可用的授权账户数据，跳过测试")
         
-        # 5. 验证 account_status
+        # 4. 验证 account_status
         print("[Step] 验证 account_status 字段")
         
         status_values = set()
@@ -260,7 +235,7 @@ class TestOpenBankingListAuthorizedAccounts:
         
         print(f"✓ account_status 验证完成")
 
-    def test_list_authorized_accounts_using_helper_method(self, login_session):
+    def test_list_authorized_accounts_using_helper_method(self, open_banking_api):
         """
         测试场景6：使用辅助方法解析响应
         验证点：
@@ -268,24 +243,20 @@ class TestOpenBankingListAuthorizedAccounts:
         2. 使用 parse_list_response 辅助方法成功解析响应
         3. 解析后的数据结构正确
         """
-        # 1. 初始化 API 对象
-        open_banking_api = OpenBankingAPI(session=login_session)
-        
-        # 2. 调用接口
+        # 1. 调用接口
         print("\n[Step] 调用 List Authorized Accounts 接口")
         response = open_banking_api.list_authorized_accounts()
         
-        # 3. 使用辅助方法解析响应
+        # 2. 使用辅助方法解析响应
         print("[Step] 使用 parse_list_response 辅助方法解析响应")
         parsed = open_banking_api.parse_list_response(response)
         
-        # 4. 验证解析结果
+        # 3. 验证解析结果
         print("[Step] 验证解析结果")
         assert not parsed.get("error"), f"响应解析失败: {parsed.get('message')}"
         
         # 验证包含必需字段
-        assert "code" in parsed, "解析结果缺少 code 字段"
-        assert "data" in parsed, "解析结果缺少 data 字段"
+        assert_fields_present(parsed, ["code", "data"], "解析结果")
         
         # 验证 code 为 200
         assert parsed["code"] == 200, f"code 不正确: 期望 200, 实际 {parsed['code']}"

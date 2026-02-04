@@ -112,6 +112,7 @@ class CounterpartyAPI:
         Returns:
             requests.Response: 响应对象
         """
+        # 注意：这是 v2 接口，使用不同的 URL 构建方式
         url = f"{self.base_url}/api/v2/cores/{self.config.core}/counterparties/{counterparty_id}/mfa"
         response = self.session.get(url)
         return response
@@ -127,6 +128,7 @@ class CounterpartyAPI:
         Returns:
             requests.Response: 响应对象
         """
+        # 注意：这是 v2 接口
         url = f"{self.base_url}/api/v2/cores/{self.config.core}/counterparties/{counterparty_id}/mfa/send"
         data = {"verification_method": verification_method}
         response = self.session.post(url, json=data)
@@ -149,6 +151,7 @@ class CounterpartyAPI:
         Returns:
             requests.Response: 响应对象
         """
+        # 注意：这是 v2 接口
         url = f"{self.base_url}/api/v2/cores/{self.config.core}/counterparties/{counterparty_id}/mfa/verify"
         data = {
             "verification_code": verification_code,
@@ -167,6 +170,7 @@ class CounterpartyAPI:
         Returns:
             requests.Response: 响应对象
         """
+        # 注意：这是 v2 接口
         url = f"{self.base_url}/api/v2/cores/{self.config.core}/counterparties"
         response = self.session.post(url, json=counterparty_data)
         return response
@@ -186,6 +190,7 @@ class CounterpartyAPI:
         Returns:
             requests.Response: 响应对象
         """
+        # 注意：这是 v2 接口
         url = f"{self.base_url}/api/v2/cores/{self.config.core}/counterparties/{counterparty_id}"
         response = self.session.patch(url, json=update_data)
         return response
@@ -423,17 +428,25 @@ class CounterpartyAPI:
         
         try:
             data = response.json()
+            # 兼容不同的响应结构
+            if "data" in data:
+                # 如果响应有 data 包装层
+                content_data = data["data"]
+            else:
+                # 如果响应直接是数据
+                content_data = data
+            
             return {
                 "error": False,
-                "content": data.get("content", []),
-                "pageable": data.get("pageable", {}),
-                "total_elements": data.get("total_elements", 0),
-                "total_pages": data.get("total_pages", 0),
-                "size": data.get("size", 0),
-                "number": data.get("number", 0),
-                "first": data.get("first", False),
-                "last": data.get("last", False),
-                "empty": data.get("empty", True)
+                "content": content_data.get("content", []),
+                "pageable": content_data.get("pageable", {}),
+                "total_elements": content_data.get("total_elements", 0),
+                "total_pages": content_data.get("total_pages", 0),
+                "size": content_data.get("size", 0),
+                "number": content_data.get("number", 0),
+                "first": content_data.get("first", False),
+                "last": content_data.get("last", False),
+                "empty": content_data.get("empty", True)
             }
         except Exception as e:
             return {

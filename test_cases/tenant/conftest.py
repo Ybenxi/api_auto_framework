@@ -1,14 +1,19 @@
 """
-Tenant 模块的 Pytest 配置
-自动为该目录下的所有测试用例添加 tenant marker
+Tenant 模块级配置
+可在此添加模块特定的 fixture 或配置
 """
 import pytest
+from api.tenant_api import TenantAPI
 
 
-def pytest_collection_modifyitems(items):
+# 模块级 marker，自动应用到该目录下所有测试
+pytestmark = pytest.mark.tenant
+
+
+@pytest.fixture
+def tenant_api(login_session):
     """
-    自动为 tenant 目录下的所有测试用例添加 tenant marker
+    Tenant 模块专用的 TenantAPI 实例
+    复用全局 login_session，避免在每个用例中重复初始化
     """
-    for item in items:
-        if "tenant" in str(item.fspath):
-            item.add_marker(pytest.mark.tenant)
+    return TenantAPI(session=login_session)

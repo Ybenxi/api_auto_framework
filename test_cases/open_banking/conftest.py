@@ -3,12 +3,21 @@ Open Banking 模块的 Pytest 配置
 自动为该目录下的所有测试用例添加 open_banking marker
 """
 import pytest
+from api.open_banking_api import OpenBankingAPI
 
 
-def pytest_collection_modifyitems(items):
+pytestmark = pytest.mark.open_banking
+
+
+@pytest.fixture
+def open_banking_api(login_session):
     """
-    自动为 open_banking 目录下的所有测试用例添加 open_banking marker
+    Open Banking API 对象 fixture
+    
+    Args:
+        login_session: 已登录的 session
+        
+    Returns:
+        OpenBankingAPI: 初始化好的 Open Banking API 对象
     """
-    for item in items:
-        if "open_banking" in str(item.fspath):
-            item.add_marker(pytest.mark.open_banking)
+    return OpenBankingAPI(session=login_session)
