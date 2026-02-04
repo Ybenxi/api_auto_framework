@@ -4,6 +4,7 @@ FBO Account 详情接口测试用例
 """
 import pytest
 from utils.assertions import (
+from utils.logger import logger
     assert_status_ok,
     assert_response_parsed,
     assert_fields_present
@@ -111,7 +112,7 @@ class TestFboAccountDetail:
         
         assert_fields_present(fbo_detail, required_fields, obj_name="FBO Account 详情")
         
-        print(f"✓ 字段完整性验证通过，FBO Account 详情包含所有必需字段")
+        logger.info("✓ 字段完整性验证通过，FBO Account 详情包含所有必需字段")
 
     def test_get_fbo_account_detail_invalid_id(self, fbo_account_api):
         """
@@ -132,7 +133,7 @@ class TestFboAccountDetail:
         assert "error" in detail_response.text.lower() or response_body.get("code") != 200, \
             f"无效 ID 应该返回错误信息"
         
-        print(f"✓ 使用无效 ID 测试完成")
+        logger.info("✓ 使用无效 ID 测试完成")
 
     def test_get_fbo_account_detail_compare_with_list(self, fbo_account_api):
         """
@@ -175,4 +176,4 @@ class TestFboAccountDetail:
             assert list_value == detail_value, \
                 f"字段 {field} 在列表和详情中不一致: 列表={list_value}, 详情={detail_value}"
         
-        print(f"✓ 列表和详情接口返回的数据一致")
+        logger.info("✓ 列表和详情接口返回的数据一致")

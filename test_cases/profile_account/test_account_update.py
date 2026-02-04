@@ -4,6 +4,7 @@
 """
 import pytest
 from utils.assertions import (
+from utils.logger import logger
     assert_status_ok,
     assert_response_parsed
 )
@@ -75,7 +76,7 @@ class TestAccountUpdate:
         assert account_detail.get("mailing_city") == new_city, \
             f"Detail 接口中的 mailing_city 不正确: 期望 '{new_city}'，实际 '{account_detail.get('mailing_city')}'"
         
-        print(f"✓ 更新成功并已落库确认: mailing_city={account_detail.get('mailing_city')}")
+        logger.info("✓ 更新成功并已落库确认: mailing_city={account_detail.get('mailing_city')}")
 
     def test_update_account_register_address(self, account_api):
         """
@@ -117,7 +118,7 @@ class TestAccountUpdate:
         assert updated_account.get("register_city") == "Los Angeles", \
             f"register_city 更新失败"
         
-        print(f"✓ 注册地址更新成功: {updated_account.get('register_city')}, {updated_account.get('register_state')}")
+        logger.info("✓ 注册地址更新成功: {updated_account.get('register_city')}, {updated_account.get('register_state')}")
 
     def test_update_account_partial_fields(self, account_api):
         """
@@ -169,7 +170,7 @@ class TestAccountUpdate:
             assert updated_account.get("mailing_state") == original_state, \
                 f"mailing_state 不应该改变"
         
-        print(f"✓ 部分字段更新成功，mailing_city: {updated_account.get('mailing_city')}")
+        logger.info("✓ 部分字段更新成功，mailing_city: {updated_account.get('mailing_city')}")
 
     def test_update_account_invalid_id(self, account_api):
         """
@@ -202,4 +203,4 @@ class TestAccountUpdate:
         assert response_body == expected_response, \
             f"响应体不匹配\n期望: {expected_response}\n实际: {response_body}"
         
-        print(f"✓ 使用无效 ID 正确返回错误信息: code=506")
+        logger.info("✓ 使用无效 ID 正确返回错误信息: code=506")

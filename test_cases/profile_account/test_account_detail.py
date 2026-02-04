@@ -4,6 +4,7 @@
 """
 import pytest
 from utils.assertions import (
+from utils.logger import logger
     assert_status_ok,
     assert_response_parsed,
     assert_list_structure,
@@ -130,7 +131,7 @@ class TestAccountDetail:
         for field in optional_fields:
             assert field in account_detail, f"账户详情缺少字段: {field}"
         
-        print(f"✓ 字段完整性验证通过，账户详情包含所有必需字段和可选字段")
+        logger.info("✓ 字段完整性验证通过，账户详情包含所有必需字段和可选字段")
 
     def test_get_account_detail_invalid_id(self, account_api):
         """
@@ -159,7 +160,7 @@ class TestAccountDetail:
         assert response_body == expected_response, \
             f"响应体不匹配\n期望: {expected_response}\n实际: {response_body}"
         
-        print(f"✓ 使用无效 ID 正确返回错误信息: code=506")
+        logger.info("✓ 使用无效 ID 正确返回错误信息: code=506")
 
     def test_get_account_detail_compare_with_list(self, account_api):
         """
@@ -201,4 +202,4 @@ class TestAccountDetail:
             assert list_value == detail_value, \
                 f"字段 {field} 在列表和详情中不一致: 列表={list_value}, 详情={detail_value}"
         
-        print(f"✓ 列表和详情接口返回的数据一致")
+        logger.info("✓ 列表和详情接口返回的数据一致")

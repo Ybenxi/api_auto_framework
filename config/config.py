@@ -1,9 +1,17 @@
 """
 多环境、多 Core 配置管理类
 通过环境变量 ENV 切换环境（DEV/UAT），通过 CORE 切换业务核心
+支持从 .env 文件加载配置
 """
 import os
+from pathlib import Path
+from dotenv import load_dotenv
 from data.enums import CoreType
+
+# 加载 .env 文件（如果存在）
+env_path = Path(__file__).parent.parent / ".env"
+if env_path.exists():
+    load_dotenv(dotenv_path=env_path)
 
 
 class Config:
@@ -15,36 +23,36 @@ class Config:
     ENV = os.getenv("ENV", "DEV").upper()
     CORE = os.getenv("CORE", CoreType.AUSTIN_CAPITAL.value)
 
-    # 环境基础配置
+    # 环境基础配置（默认值，可被 .env 覆盖）
     BASE_CONFIG = {
         "DEV": {
-            "base_url": "https://api-dev.accelerationcloud.info",
+            "base_url": os.getenv("BASE_URL", "https://api-dev.accelerationcloud.info"),
             "db_config": {
-                "host": "localhost",
-                "port": 5432,
-                "user": "dev_user",
-                "password": "dev_password",
-                "database": "dev_db"
+                "host": os.getenv("DB_HOST", "localhost"),
+                "port": int(os.getenv("DB_PORT", "5432")),
+                "user": os.getenv("DB_USER", "dev_user"),
+                "password": os.getenv("DB_PASSWORD", "dev_password"),
+                "database": os.getenv("DB_NAME", "dev_db")
             },
             "auth": {
-                "tenant_id": "1713381612826DC8Ww",
-                "user_id": "1713381666843PfKuz",
-                "basic_auth": "TTZ6dFNrMVRrVXlubkgrWFZCOVhndnl6dVhoRkgvQUlvZ29LSzhoTHFrVT06UTVwSi9kNnROUDBiT2h1WVZXcnpRaGdqdUxaZG03Y2VsTEhGTmxRZHNhZW5vemM3Y1pROHZBMElScFZlWEZmVUV1TTRXZXJvakhsNC84VmIzZkdLS3NFMnRKMDBTSWtjbzlmQlRMU2U1TWs9"
+                "tenant_id": os.getenv("TENANT_ID", "1713381612826DC8Ww"),
+                "user_id": os.getenv("USER_ID", "1713381666843PfKuz"),
+                "basic_auth": os.getenv("BASIC_AUTH", "TTZ6dFNrMVRrVXlubkgrWFZCOVhndnl6dVhoRkgvQUlvZ29LSzhoTHFrVT06UTVwSi9kNnROUDBiT2h1WVZXcnpRaGdqdUxaZG03Y2VsTEhGTmxRZHNhZW5vemM3Y1pROHZBMElScFZlWEZmVUV1TTRXZXJvakhsNC84VmIzZkdLS3NFMnRKMDBTSWtjbzlmQlRMU2U1TWs9")
             }
         },
         "UAT": {
-            "base_url": "https://api-uat.accelerationcloud.info",
+            "base_url": os.getenv("BASE_URL", "https://api-uat.accelerationcloud.info"),
             "db_config": {
-                "host": "uat-db.host",
-                "port": 5432,
-                "user": "uat_user",
-                "password": "uat_password",
-                "database": "uat_db"
+                "host": os.getenv("DB_HOST", "uat-db.host"),
+                "port": int(os.getenv("DB_PORT", "5432")),
+                "user": os.getenv("DB_USER", "uat_user"),
+                "password": os.getenv("DB_PASSWORD", "uat_password"),
+                "database": os.getenv("DB_NAME", "uat_db")
             },
             "auth": {
-                "tenant_id": "uat_tenant_id",
-                "user_id": "uat_user_id",
-                "basic_auth": "uat_basic_auth_string"
+                "tenant_id": os.getenv("TENANT_ID", "uat_tenant_id"),
+                "user_id": os.getenv("USER_ID", "uat_user_id"),
+                "basic_auth": os.getenv("BASIC_AUTH", "uat_basic_auth_string")
             }
         }
     }
@@ -73,6 +81,10 @@ class Config:
     def core(self):
         """获取当前 Core"""
         return self.CORE
+    
+    def get_env(self) -> str:
+        """获取当前环境标识"""
+        return self.ENV
 
     def get_api_path(self, endpoint: str) -> str:
         """

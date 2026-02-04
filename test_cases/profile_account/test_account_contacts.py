@@ -4,6 +4,7 @@
 """
 import pytest
 from utils.assertions import (
+from utils.logger import logger
     assert_status_ok,
     assert_response_parsed,
     assert_list_structure,
@@ -63,7 +64,7 @@ class TestAccountContacts:
             print(f"✓ 成功获取 Contacts: 总数={parsed_contacts['total_elements']}, "
                   f"第一个 Contact ID={first_contact.get('id')}, 姓名={first_contact.get('name')}")
         else:
-            print("✓ 成功获取 Contacts（当前账户没有关联的 Contacts）")
+            logger.info("✓ 成功获取 Contacts（当前账户没有关联的 Contacts）")
 
     def test_get_account_contacts_with_filters(self, account_api):
         """
@@ -97,9 +98,9 @@ class TestAccountContacts:
         if len(contacts) > 0:
             for contact in contacts:
                 if contact.get("status"):
-                    print(f"  Contact {contact.get('name')}: status={contact.get('status')}")
+                    logger.info(f"  Contact {contact.get('name')}: status={contact.get('status')}")
         
-        print(f"✓ 筛选测试完成，返回 {len(contacts)} 个 Contacts")
+        logger.info("✓ 筛选测试完成，返回 {len(contacts)} 个 Contacts")
 
     def test_get_account_contacts_pagination(self, account_api):
         """
@@ -165,7 +166,7 @@ class TestAccountContacts:
         contacts = parsed_contacts["content"]
         assert isinstance(contacts, list), "content 应该是一个列表"
         
-        print(f"✓ 空结果测试完成，返回 {len(contacts)} 个 Contacts")
+        logger.info("✓ 空结果测试完成，返回 {len(contacts)} 个 Contacts")
 
     def test_get_account_contacts_invalid_id(self, account_api):
         """
@@ -184,10 +185,10 @@ class TestAccountContacts:
             parsed_contacts = account_api.parse_contacts_response(contacts_response)
             if not parsed_contacts.get("error"):
                 contacts = parsed_contacts["content"]
-                print(f"  返回 200 和空列表（{len(contacts)} 个 Contacts）")
+                logger.info(f"  返回 200 和空列表（{len(contacts)} 个 Contacts）")
             else:
-                print(f"  返回 200 和错误信息")
+                logger.info(f"  返回 200 和错误信息")
         else:
-            print(f"  返回错误状态码: {contacts_response.status_code}")
+            logger.info(f"  返回错误状态码: {contacts_response.status_code}")
         
-        print(f"✓ 无效 ID 测试完成")
+        logger.info("✓ 无效 ID 测试完成")

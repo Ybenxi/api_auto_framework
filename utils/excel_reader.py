@@ -1,4 +1,5 @@
 import openpyxl
+from utils.logger import logger
 
 class ExcelReader:
     """
@@ -25,7 +26,7 @@ class ExcelReader:
             
             return data
         except Exception as e:
-            print(f"Error reading Excel file {file_path}: {e}")
+            logger.info(f"Error reading Excel file {file_path}: {e}")
             return []
 
 # 导出静态方法供调用

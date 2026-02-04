@@ -4,6 +4,7 @@
 """
 import pytest
 from utils.assertions import (
+from utils.logger import logger
     assert_status_ok,
     assert_response_parsed,
     assert_list_structure,
@@ -71,7 +72,7 @@ class TestAccountTransactions:
                   f"第一个 Transaction ID={first_transaction.get('id')}, "
                   f"Financial Account={first_transaction.get('financial_account_name')}")
         else:
-            print("✓ 成功获取 Transactions（当前账户没有 Settled Transactions）")
+            logger.info("✓ 成功获取 Transactions（当前账户没有 Settled Transactions）")
 
     def test_get_settled_transactions_with_date_range(self, account_api):
         """
@@ -110,9 +111,9 @@ class TestAccountTransactions:
             for transaction in transactions:
                 settle_date = transaction.get("settle_date")
                 if settle_date:
-                    print(f"  Transaction {transaction.get('id')}: settle_date={settle_date}")
+                    logger.info(f"  Transaction {transaction.get('id')}: settle_date={settle_date}")
         
-        print(f"✓ 日期范围筛选测试完成，返回 {len(transactions)} 个 Transactions")
+        logger.info("✓ 日期范围筛选测试完成，返回 {len(transactions)} 个 Transactions")
 
     def test_get_settled_transactions_with_security_filter(self, account_api):
         """
@@ -151,11 +152,11 @@ class TestAccountTransactions:
             for transaction in transactions:
                 security_name = transaction.get("security_name", "")
                 symbol = transaction.get("symbol", "")
-                print(f"  Transaction {transaction.get('id')}: {security_name} ({symbol})")
+                logger.info(f"  Transaction {transaction.get('id')}: {security_name} ({symbol})")
         else:
-            print(f"  没有找到包含证券 {security_keyword} 的 Transactions")
+            logger.info(f"  没有找到包含证券 {security_keyword} 的 Transactions")
         
-        print(f"✓ 证券筛选测试完成，返回 {len(transactions)} 个 Transactions")
+        logger.info("✓ 证券筛选测试完成，返回 {len(transactions)} 个 Transactions")
 
     def test_get_settled_transactions_pagination(self, account_api):
         """
@@ -222,7 +223,7 @@ class TestAccountTransactions:
         transactions = parsed_transactions["content"]
         assert isinstance(transactions, list), "content 应该是一个列表"
         
-        print(f"✓ 空结果测试完成，返回 {len(transactions)} 个 Transactions")
+        logger.info("✓ 空结果测试完成，返回 {len(transactions)} 个 Transactions")
 
     def test_get_settled_transactions_fields_completeness(self, account_api):
         """
@@ -290,6 +291,6 @@ class TestAccountTransactions:
         
         for field in optional_fields:
             if field in transaction:
-                print(f"  {field}: {transaction.get(field)}")
+                logger.info(f"  {field}: {transaction.get(field)}")
         
-        print(f"✓ 字段完整性验证通过")
+        logger.info("✓ 字段完整性验证通过")

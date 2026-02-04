@@ -7,6 +7,7 @@ import ast
 import re
 import pandas as pd
 from pathlib import Path
+from utils.logger import logger
 
 
 class TestCaseVisitor(ast.NodeVisitor):
@@ -35,7 +36,7 @@ class TestCaseVisitor(ast.NodeVisitor):
         self.current_class = node.name
         self.current_class_markers = self._extract_markers(node)
         
-        print(f"  [DEBUG] 进入类: {self.current_class}")
+        logger.info(f"  [DEBUG] 进入类: {self.current_class}")
         
         # 继续遍历类的子节点（方法）
         self.generic_visit(node)
@@ -44,7 +45,7 @@ class TestCaseVisitor(ast.NodeVisitor):
         self.current_class = old_class
         self.current_class_markers = old_markers
         
-        print(f"  [DEBUG] 离开类: {node.name}")
+        logger.info(f"  [DEBUG] 离开类: {node.name}")
     
     def visit_FunctionDef(self, node):
         """
@@ -70,7 +71,7 @@ class TestCaseVisitor(ast.NodeVisitor):
             # 获取当前类名（如果在类中）
             class_name = self.current_class if self.current_class else ""
             
-            print(f"    [DEBUG] 找到测试函数: {node.name}, 类: {class_name}, URI: {api_uri}")
+            logger.info(f"    [DEBUG] 找到测试函数: {node.name}, 类: {class_name}, URI: {api_uri}")
             
             # 添加到测试用例列表
             self.test_cases.append({
@@ -215,11 +216,11 @@ def extract_test_cases(test_cases_dir: str = "test_cases") -> list:
     project_root = Path(__file__).parent.parent
     test_cases_path = project_root / test_cases_dir
     
-    print(f"[INFO] 开始扫描测试用例目录: {test_cases_path}")
+    logger.info(f"[INFO] 开始扫描测试用例目录: {test_cases_path}")
     
     # 遍历所有 test_*.py 文件
     for test_file in sorted(test_cases_path.rglob("test_*.py")):
-        print(f"[INFO] 扫描文件: {test_file}")
+        logger.info(f"[INFO] 扫描文件: {test_file}")
         
         try:
             # 读取文件内容
@@ -250,7 +251,7 @@ def extract_test_cases(test_cases_dir: str = "test_cases") -> list:
                     match = re.search(pattern, module_docstring)
                     if match:
                         module_uri = match.group(1)
-                        print(f"  [DEBUG] 从模块 Docstring 提取 URI: {module_uri}")
+                        logger.info(f"  [DEBUG] 从模块 Docstring 提取 URI: {module_uri}")
                         break
             
             # 使用访问器遍历 AST
@@ -261,14 +262,14 @@ def extract_test_cases(test_cases_dir: str = "test_cases") -> list:
             # 添加到总列表
             all_test_cases.extend(visitor.test_cases)
             
-            print(f"  [INFO] 找到 {len(visitor.test_cases)} 个测试用例")
+            logger.info(f"  [INFO] 找到 {len(visitor.test_cases)} 个测试用例")
         
         except Exception as e:
-            print(f"[ERROR] 解析文件 {test_file} 失败: {e}")
+            logger.info(f"[ERROR] 解析文件 {test_file} 失败: {e}")
             import traceback
             traceback.print_exc()
     
-    print(f"[INFO] 扫描完成，共找到 {len(all_test_cases)} 个测试用例")
+    logger.info(f"[INFO] 扫描完成，共找到 {len(all_test_cases)} 个测试用例")
     
     return all_test_cases
 
@@ -289,7 +290,7 @@ def generate_excel(test_cases: list, output_file: str = "test_cases.xlsx"):
     output_path = project_root / output_file
     
     # 生成 Excel 文件
-    print(f"[INFO] 生成 Excel 文件: {output_path}")
+    logger.info(f"[INFO] 生成 Excel 文件: {output_path}")
     
     with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
         df.to_excel(writer, index=False, sheet_name="Test Cases")
@@ -322,8 +323,8 @@ def generate_excel(test_cases: list, output_file: str = "test_cases.xlsx"):
             for cell in row:
                 cell.alignment = Alignment(vertical="top", wrap_text=True)
     
-    print(f"[INFO] Excel 文件生成成功: {output_path}")
-    print(f"[INFO] 共导出 {len(test_cases)} 个测试用例")
+    logger.info(f"[INFO] Excel 文件生成成功: {output_path}")
+    logger.info(f"[INFO] 共导出 {len(test_cases)} 个测试用例")
 
 
 def main():
@@ -331,7 +332,7 @@ def main():
     主函数
     """
     print("=" * 60)
-    print("测试用例扫描工具 v2.0")
+    logger.info("测试用例扫描工具 v2.0")
     print("=" * 60)
     
     # 扫描测试用例
@@ -340,9 +341,9 @@ def main():
     # 生成 Excel 文件
     if test_cases:
         generate_excel(test_cases)
-        print("\n[SUCCESS] 测试用例列表生成完成！")
+        logger.info("\n[SUCCESS] 测试用例列表生成完成！")
     else:
-        print("\n[WARNING] 未找到任何测试用例")
+        logger.info("\n[WARNING] 未找到任何测试用例")
     
     print("=" * 60)
 

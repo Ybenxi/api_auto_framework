@@ -1,5 +1,6 @@
 import psycopg2
 from config.config import config
+from utils.logger import logger
 
 class DBManager:
     """
@@ -22,9 +23,9 @@ class DBManager:
                 database=self.conn_info["database"]
             )
             self.cursor = self.connection.cursor()
-            print("Successfully connected to the database.")
+            logger.info("Successfully connected to the database.")
         except Exception as e:
-            print(f"Error connecting to database: {e}")
+            logger.info(f"Error connecting to database: {e}")
             raise
 
     def execute_query(self, sql, params=None):
@@ -39,7 +40,7 @@ class DBManager:
             return self.cursor.rowcount
         except Exception as e:
             self.connection.rollback()
-            print(f"Error executing query: {e}")
+            logger.info(f"Error executing query: {e}")
             raise
 
     def close(self):
@@ -48,7 +49,7 @@ class DBManager:
             self.cursor.close()
         if self.connection:
             self.connection.close()
-            print("Database connection closed.")
+            logger.info("Database connection closed.")
 
 # 单例模式，方便全局调用
 db = DBManager()

@@ -4,6 +4,7 @@ Contact Update 接口测试用例
 """
 import pytest
 from api.contact_api import ContactAPI
+from utils.logger import logger
 
 
 @pytest.mark.contact
@@ -26,7 +27,7 @@ class TestContactUpdate:
         contact_api = ContactAPI(session=login_session)
         
         # 2. 先调用 List 接口获取一个真实的 Contact ID
-        print("\n[Step] 先调用 List 接口获取真实的 Contact ID")
+        logger.info("先调用 List 接口获取真实的 Contact ID")
         list_response = contact_api.list_contacts(page=0, size=1)
         assert list_response.status_code == 200, "List 接口调用失败"
         
@@ -39,38 +40,38 @@ class TestContactUpdate:
         
         contact_id = contacts[0]["id"]
         original_first_name = contacts[0].get("first_name")
-        print(f"  获取到 Contact ID: {contact_id}")
-        print(f"  原始 first_name: {original_first_name}")
+        logger.info(f"  获取到 Contact ID: {contact_id}")
+        logger.info(f"  原始 first_name: {original_first_name}")
         
         # 3. 准备更新数据
-        print("[Step] 准备更新数据")
+        logger.info("准备更新数据")
         new_first_name = f"Updated_{original_first_name}"
         update_data = {
             "first_name": new_first_name
         }
-        print(f"  新 first_name: {new_first_name}")
+        logger.info(f"  新 first_name: {new_first_name}")
         
         # 4. 调用 Update 接口
-        print("[Step] 调用 Update Contact 接口")
+        logger.info("调用 Update Contact 接口")
         update_response = contact_api.update_contact(contact_id, update_data)
         
         # 5. 断言状态码
-        print("[Step] 验证 HTTP 状态码为 200")
+        logger.info("验证 HTTP 状态码为 200")
         assert update_response.status_code == 200, \
             f"Update Contact 接口返回状态码错误: {update_response.status_code}, Response: {update_response.text}"
         
         # 6. 解析响应并验证更新结果
-        print("[Step] 解析响应并验证更新结果")
+        logger.info("解析响应并验证更新结果")
         response_body = update_response.json()
         updated_contact = response_body.get("data") if "data" in response_body else response_body
         
         assert updated_contact.get("first_name") == new_first_name, \
             f"first_name 未更新: 期望 {new_first_name}, 实际 {updated_contact.get('first_name')}"
         
-        print(f"✓ 成功更新 Contact first_name:")
-        print(f"  ID: {updated_contact['id']}")
-        print(f"  原始 first_name: {original_first_name}")
-        print(f"  新 first_name: {updated_contact.get('first_name')}")
+        logger.info("✓ 成功更新 Contact first_name:")
+        logger.info(f"  ID: {updated_contact['id']}")
+        logger.info(f"  原始 first_name: {original_first_name}")
+        logger.info(f"  新 first_name: {updated_contact.get('first_name')}")
 
     def test_update_contact_phone(self, login_session):
         """
@@ -83,7 +84,7 @@ class TestContactUpdate:
         contact_api = ContactAPI(session=login_session)
         
         # 2. 先调用 List 接口获取一个真实的 Contact ID
-        print("\n[Step] 先调用 List 接口获取真实的 Contact ID")
+        logger.info("先调用 List 接口获取真实的 Contact ID")
         list_response = contact_api.list_contacts(page=0, size=1)
         assert list_response.status_code == 200, "List 接口调用失败"
         
@@ -96,38 +97,38 @@ class TestContactUpdate:
         
         contact_id = contacts[0]["id"]
         original_phone = contacts[0].get("phone")
-        print(f"  获取到 Contact ID: {contact_id}")
-        print(f"  原始 phone: {original_phone}")
+        logger.info(f"  获取到 Contact ID: {contact_id}")
+        logger.info(f"  原始 phone: {original_phone}")
         
         # 3. 准备更新数据
-        print("[Step] 准备更新数据")
+        logger.info("准备更新数据")
         new_phone = "+14155552671"
         update_data = {
             "phone": new_phone
         }
-        print(f"  新 phone: {new_phone}")
+        logger.info(f"  新 phone: {new_phone}")
         
         # 4. 调用 Update 接口
-        print("[Step] 调用 Update Contact 接口")
+        logger.info("调用 Update Contact 接口")
         update_response = contact_api.update_contact(contact_id, update_data)
         
         # 5. 断言状态码
-        print("[Step] 验证 HTTP 状态码为 200")
+        logger.info("验证 HTTP 状态码为 200")
         assert update_response.status_code == 200, \
             f"Update Contact 接口返回状态码错误: {update_response.status_code}, Response: {update_response.text}"
         
         # 6. 解析响应并验证更新结果
-        print("[Step] 解析响应并验证更新结果")
+        logger.info("解析响应并验证更新结果")
         response_body = update_response.json()
         updated_contact = response_body.get("data") if "data" in response_body else response_body
         
         assert updated_contact.get("phone") == new_phone, \
             f"phone 未更新: 期望 {new_phone}, 实际 {updated_contact.get('phone')}"
         
-        print(f"✓ 成功更新 Contact phone:")
-        print(f"  ID: {updated_contact['id']}")
-        print(f"  原始 phone: {original_phone}")
-        print(f"  新 phone: {updated_contact.get('phone')}")
+        logger.info("✓ 成功更新 Contact phone:")
+        logger.info(f"  ID: {updated_contact['id']}")
+        logger.info(f"  原始 phone: {original_phone}")
+        logger.info(f"  新 phone: {updated_contact.get('phone')}")
 
     def test_update_contact_multiple_fields(self, login_session):
         """
@@ -140,7 +141,7 @@ class TestContactUpdate:
         contact_api = ContactAPI(session=login_session)
         
         # 2. 先调用 List 接口获取一个真实的 Contact ID
-        print("\n[Step] 先调用 List 接口获取真实的 Contact ID")
+        logger.info("先调用 List 接口获取真实的 Contact ID")
         list_response = contact_api.list_contacts(page=0, size=1)
         assert list_response.status_code == 200, "List 接口调用失败"
         
@@ -152,30 +153,30 @@ class TestContactUpdate:
             pytest.skip("没有可用的 Contact 数据，跳过测试")
         
         contact_id = contacts[0]["id"]
-        print(f"  获取到 Contact ID: {contact_id}")
+        logger.info(f"  获取到 Contact ID: {contact_id}")
         
         # 3. 准备更新数据（多个字段）
-        print("[Step] 准备更新数据（多个字段）")
+        logger.info("准备更新数据（多个字段）")
         update_data = {
             "first_name": "MultiUpdate",
             "last_name": "Test",
             "phone": "+14155552999"
         }
-        print(f"  更新 first_name: {update_data['first_name']}")
-        print(f"  更新 last_name: {update_data['last_name']}")
-        print(f"  更新 phone: {update_data['phone']}")
+        logger.info(f"  更新 first_name: {update_data['first_name']}")
+        logger.info(f"  更新 last_name: {update_data['last_name']}")
+        logger.info(f"  更新 phone: {update_data['phone']}")
         
         # 4. 调用 Update 接口
-        print("[Step] 调用 Update Contact 接口")
+        logger.info("调用 Update Contact 接口")
         update_response = contact_api.update_contact(contact_id, update_data)
         
         # 5. 断言状态码
-        print("[Step] 验证 HTTP 状态码为 200")
+        logger.info("验证 HTTP 状态码为 200")
         assert update_response.status_code == 200, \
             f"Update Contact 接口返回状态码错误: {update_response.status_code}, Response: {update_response.text}"
         
         # 6. 解析响应并验证所有更新字段
-        print("[Step] 解析响应并验证所有更新字段")
+        logger.info("解析响应并验证所有更新字段")
         response_body = update_response.json()
         updated_contact = response_body.get("data") if "data" in response_body else response_body
         
@@ -188,11 +189,11 @@ class TestContactUpdate:
         assert updated_contact.get("phone") == update_data["phone"], \
             f"phone 未更新"
         
-        print(f"✓ 成功更新多个字段:")
-        print(f"  ID: {updated_contact['id']}")
-        print(f"  first_name: {updated_contact.get('first_name')}")
-        print(f"  last_name: {updated_contact.get('last_name')}")
-        print(f"  phone: {updated_contact.get('phone')}")
+        logger.info("✓ 成功更新多个字段:")
+        logger.info(f"  ID: {updated_contact['id']}")
+        logger.info(f"  first_name: {updated_contact.get('first_name')}")
+        logger.info(f"  last_name: {updated_contact.get('last_name')}")
+        logger.info(f"  phone: {updated_contact.get('phone')}")
 
     def test_update_contact_address_fields(self, login_session):
         """
@@ -205,7 +206,7 @@ class TestContactUpdate:
         contact_api = ContactAPI(session=login_session)
         
         # 2. 先调用 List 接口获取一个真实的 Contact ID
-        print("\n[Step] 先调用 List 接口获取真实的 Contact ID")
+        logger.info("先调用 List 接口获取真实的 Contact ID")
         list_response = contact_api.list_contacts(page=0, size=1)
         assert list_response.status_code == 200, "List 接口调用失败"
         
@@ -217,10 +218,10 @@ class TestContactUpdate:
             pytest.skip("没有可用的 Contact 数据，跳过测试")
         
         contact_id = contacts[0]["id"]
-        print(f"  获取到 Contact ID: {contact_id}")
+        logger.info(f"  获取到 Contact ID: {contact_id}")
         
         # 3. 准备更新数据（地址字段）
-        print("[Step] 准备更新数据（地址字段）")
+        logger.info("准备更新数据（地址字段）")
         update_data = {
             "permanent_address": "123 Updated Street",
             "permanent_city": "Updated City",
@@ -233,16 +234,16 @@ class TestContactUpdate:
         }
         
         # 4. 调用 Update 接口
-        print("[Step] 调用 Update Contact 接口")
+        logger.info("调用 Update Contact 接口")
         update_response = contact_api.update_contact(contact_id, update_data)
         
         # 5. 断言状态码
-        print("[Step] 验证 HTTP 状态码为 200")
+        logger.info("验证 HTTP 状态码为 200")
         assert update_response.status_code == 200, \
             f"Update Contact 接口返回状态码错误: {update_response.status_code}, Response: {update_response.text}"
         
         # 6. 解析响应并验证更新结果
-        print("[Step] 解析响应并验证地址字段更新")
+        logger.info("解析响应并验证地址字段更新")
         response_body = update_response.json()
         updated_contact = response_body.get("data") if "data" in response_body else response_body
         
@@ -252,9 +253,9 @@ class TestContactUpdate:
         assert updated_contact.get("mailing_street") == update_data["mailing_street"], \
             f"mailing_street 未更新"
         
-        print(f"✓ 成功更新地址字段:")
-        print(f"  permanent_address: {updated_contact.get('permanent_address')}")
-        print(f"  mailing_street: {updated_contact.get('mailing_street')}")
+        logger.info("✓ 成功更新地址字段:")
+        logger.info(f"  permanent_address: {updated_contact.get('permanent_address')}")
+        logger.info(f"  mailing_street: {updated_contact.get('mailing_street')}")
 
     def test_update_contact_invalid_id(self, login_session):
         """
@@ -269,7 +270,7 @@ class TestContactUpdate:
         # 2. 使用无效的 Contact ID
         invalid_contact_id = "invalid_contact_id_999999"
         
-        print(f"\n[Step] 使用无效的 Contact ID: {invalid_contact_id}")
+        logger.info("使用无效的 Contact ID: {invalid_contact_id}")
         
         # 3. 准备更新数据
         update_data = {
@@ -277,34 +278,34 @@ class TestContactUpdate:
         }
         
         # 4. 调用 Update 接口
-        print("[Step] 调用 Update Contact 接口")
+        logger.info("调用 Update Contact 接口")
         update_response = contact_api.update_contact(invalid_contact_id, update_data)
         
         # 5. 验证状态码（防遍历设计：返回 200）
-        print("[Step] 验证 HTTP 状态码为 200（防遍历设计）")
+        logger.info("验证 HTTP 状态码为 200（防遍历设计）")
         assert update_response.status_code == 200, \
             f"无效 ID 应返回 200（防遍历），实际返回: {update_response.status_code}"
         
         # 6. 解析响应并验证错误码
-        print("[Step] 验证错误码和错误信息")
+        logger.info("验证错误码和错误信息")
         try:
             response_body = update_response.json()
             error_code = response_body.get("code")
             # 修复：错误信息字段可能是 error_message 或 message
             error_message = response_body.get("error_message") or response_body.get("message")
             
-            print(f"  错误码: {error_code}")
-            print(f"  错误信息: {error_message}")
+            logger.info(f"  错误码: {error_code}")
+            logger.info(f"  错误信息: {error_message}")
             
             # 验证错误码 506 和错误信息
             assert error_code == 506, f"错误码不正确: 期望 506, 实际 {error_code}"
             assert "visibility permission deny" in str(error_message).lower(), \
                 f"错误信息不正确: {error_message}"
             
-            print(f"✓ 无效 ID 测试完成（防遍历设计验证通过）")
+            logger.info("✓ 无效 ID 测试完成（防遍历设计验证通过）")
         except Exception as e:
-            print(f"  响应解析失败: {e}")
-            print(f"  响应内容: {update_response.text}")
+            logger.info(f"  响应解析失败: {e}")
+            logger.info(f"  响应内容: {update_response.text}")
             raise
 
     def test_update_contact_invalid_phone_format(self, login_session):
@@ -318,7 +319,7 @@ class TestContactUpdate:
         contact_api = ContactAPI(session=login_session)
         
         # 2. 先调用 List 接口获取一个真实的 Contact ID
-        print("\n[Step] 先调用 List 接口获取真实的 Contact ID")
+        logger.info("先调用 List 接口获取真实的 Contact ID")
         list_response = contact_api.list_contacts(page=0, size=1)
         assert list_response.status_code == 200, "List 接口调用失败"
         
@@ -330,27 +331,27 @@ class TestContactUpdate:
             pytest.skip("没有可用的 Contact 数据，跳过测试")
         
         contact_id = contacts[0]["id"]
-        print(f"  获取到 Contact ID: {contact_id}")
+        logger.info(f"  获取到 Contact ID: {contact_id}")
         
         # 3. 准备更新数据（无效的 phone 格式）
-        print("[Step] 准备更新数据（无效的 phone 格式）")
+        logger.info("准备更新数据（无效的 phone 格式）")
         update_data = {
             "phone": "123456789"  # 非 E.164 格式
         }
         
         # 4. 调用 Update 接口
-        print("[Step] 调用 Update Contact 接口")
+        logger.info("调用 Update Contact 接口")
         update_response = contact_api.update_contact(contact_id, update_data)
         
         # 5. 验证返回错误状态码
-        print("[Step] 验证返回错误状态码（400 或其他）")
-        print(f"  状态码: {update_response.status_code}")
-        print(f"  响应: {update_response.text}")
+        logger.info("验证返回错误状态码（400 或其他）")
+        logger.info(f"  状态码: {update_response.status_code}")
+        logger.info(f"  响应: {update_response.text}")
         
         if update_response.status_code != 200:
-            print(f"✓ Phone 格式验证生效")
+            logger.info("✓ Phone 格式验证生效")
         else:
-            print(f"⚠ API 未验证 phone 格式")
+            logger.info(f"⚠ API 未验证 phone 格式")
 
     def test_update_contact_empty_data(self, login_session):
         """
@@ -363,7 +364,7 @@ class TestContactUpdate:
         contact_api = ContactAPI(session=login_session)
         
         # 2. 先调用 List 接口获取一个真实的 Contact ID
-        print("\n[Step] 先调用 List 接口获取真实的 Contact ID")
+        logger.info("先调用 List 接口获取真实的 Contact ID")
         list_response = contact_api.list_contacts(page=0, size=1)
         assert list_response.status_code == 200, "List 接口调用失败"
         
@@ -375,22 +376,22 @@ class TestContactUpdate:
             pytest.skip("没有可用的 Contact 数据，跳过测试")
         
         contact_id = contacts[0]["id"]
-        print(f"  获取到 Contact ID: {contact_id}")
+        logger.info(f"  获取到 Contact ID: {contact_id}")
         
         # 3. 准备空数据
-        print("[Step] 准备空数据")
+        logger.info("准备空数据")
         update_data = {}
         
         # 4. 调用 Update 接口
-        print("[Step] 调用 Update Contact 接口")
+        logger.info("调用 Update Contact 接口")
         update_response = contact_api.update_contact(contact_id, update_data)
         
         # 5. 验证状态码
-        print("[Step] 验证状态码")
-        print(f"  状态码: {update_response.status_code}")
-        print(f"  响应: {update_response.text}")
+        logger.info("验证状态码")
+        logger.info(f"  状态码: {update_response.status_code}")
+        logger.info(f"  响应: {update_response.text}")
         
         if update_response.status_code == 200:
-            print(f"✓ API 接受空数据（不更新任何字段）")
+            logger.info("✓ API 接受空数据（不更新任何字段）")
         else:
-            print(f"✓ API 拒绝空数据")
+            logger.info("✓ API 拒绝空数据")

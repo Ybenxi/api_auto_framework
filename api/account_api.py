@@ -6,6 +6,7 @@ import requests
 from typing import Optional, Union
 from config.config import config
 from data.enums import BusinessEntityType, AccountStatus
+from utils.logger import logger
 
 
 class AccountAPI:

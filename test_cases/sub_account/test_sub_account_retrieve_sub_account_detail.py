@@ -5,6 +5,7 @@ Sub Account Detail 接口测试用例
 """
 import pytest
 from api.sub_account_api import SubAccountAPI
+from utils.logger import logger
 
 
 @pytest.mark.sub_account
@@ -26,7 +27,7 @@ class TestSubAccountRetrieveSubAccountDetail:
         sa_api = SubAccountAPI(session=login_session)
         
         # 2. 先获取列表，取第一个 Sub Account ID
-        print("\n[Step] 获取 Sub Accounts 列表")
+        logger.info("获取 Sub Accounts 列表")
         list_response = sa_api.list_sub_accounts(page=0, size=1)
         assert list_response.status_code == 200, \
             f"List Sub Accounts 接口返回状态码错误: {list_response.status_code}"
@@ -38,33 +39,33 @@ class TestSubAccountRetrieveSubAccountDetail:
             pytest.skip("没有可用的 Sub Account 进行详情查询测试")
         
         sub_account_id = sub_accounts[0].get("id")
-        print(f"  使用 Sub Account ID: {sub_account_id}")
+        logger.info(f"  使用 Sub Account ID: {sub_account_id}")
         
         # 3. 调用详情接口
-        print("[Step] 调用 Retrieve Sub Account Detail 接口")
+        logger.info("调用 Retrieve Sub Account Detail 接口")
         detail_response = sa_api.get_sub_account_detail(sub_account_id)
         
         # 4. 验证状态码
-        print("[Step] 验证 HTTP 状态码为 200")
+        logger.info("验证 HTTP 状态码为 200")
         assert detail_response.status_code == 200, \
             f"Retrieve Sub Account Detail 接口返回状态码错误: {detail_response.status_code}, Response: {detail_response.text}"
         
         # 5. 解析响应
-        print("[Step] 解析响应并验证数据结构")
+        logger.info("解析响应并验证数据结构")
         parsed_detail = sa_api.parse_detail_response(detail_response)
         assert not parsed_detail.get("error"), f"Detail 响应解析失败: {parsed_detail.get('message')}"
         
         # 6. 验证必需字段
-        print("[Step] 验证返回数据字段")
+        logger.info("验证返回数据字段")
         expected_fields = ["id", "name", "financial_account_id", "status", "balance"]
         
         for field in expected_fields:
             if field in parsed_detail:
-                print(f"  ✓ {field}: {parsed_detail.get(field)}")
+                logger.info(f"  ✓ {field}: {parsed_detail.get(field)}")
             else:
-                print(f"  - {field}: (not present)")
+                logger.info(f"  - {field}: (not present)")
         
-        print(f"✓ Sub Account 详情获取成功")
+        logger.info("✓ Sub Account 详情获取成功")
 
     def test_retrieve_sub_account_detail_with_invalid_id(self, login_session):
         """
@@ -75,12 +76,12 @@ class TestSubAccountRetrieveSubAccountDetail:
         """
         sa_api = SubAccountAPI(session=login_session)
         
-        print("\n[Step] 使用无效 ID 调用详情接口")
+        logger.info("使用无效 ID 调用详情接口")
         invalid_id = "invalid_sub_account_id_12345"
         detail_response = sa_api.get_sub_account_detail(invalid_id)
         
-        print(f"[Step] 验证返回状态码")
-        print(f"  状态码: {detail_response.status_code}")
+        logger.info("验证返回状态码")
+        logger.info(f"  状态码: {detail_response.status_code}")
         
         # 服务器返回 200（统一错误处理）
         assert detail_response.status_code == 200, \
@@ -91,7 +92,7 @@ class TestSubAccountRetrieveSubAccountDetail:
         assert "error" in detail_response.text.lower() or response_body.get("code") != 200, \
             f"无效 ID 应该返回错误信息"
         
-        print(f"✓ 无效 ID 测试完成")
+        logger.info("✓ 无效 ID 测试完成")
 
     def test_retrieve_sub_account_detail_response_structure(self, login_session):
         """
@@ -103,7 +104,7 @@ class TestSubAccountRetrieveSubAccountDetail:
         sa_api = SubAccountAPI(session=login_session)
         
         # 获取列表
-        print("\n[Step] 获取 Sub Accounts 列表")
+        logger.info("获取 Sub Accounts 列表")
         list_response = sa_api.list_sub_accounts(page=0, size=1)
         assert list_response.status_code == 200
         
@@ -116,14 +117,14 @@ class TestSubAccountRetrieveSubAccountDetail:
         sub_account_id = sub_accounts[0].get("id")
         
         # 获取详情
-        print("[Step] 调用详情接口")
+        logger.info("调用详情接口")
         detail_response = sa_api.get_sub_account_detail(sub_account_id)
         assert detail_response.status_code == 200
         
         parsed_detail = sa_api.parse_detail_response(detail_response)
         
         # 验证详细字段
-        print("[Step] 验证详情响应字段")
+        logger.info("验证详情响应字段")
         detail_fields = [
             "id", "name", "financial_account_id", "status",
             "balance", "available_balance", "account_identifier",
@@ -132,6 +133,6 @@ class TestSubAccountRetrieveSubAccountDetail:
         
         for field in detail_fields:
             value = parsed_detail.get(field, "(not present)")
-            print(f"  {field}: {value}")
+            logger.info(f"  {field}: {value}")
         
-        print(f"✓ 详情响应结构验证完成")
+        logger.info("✓ 详情响应结构验证完成")

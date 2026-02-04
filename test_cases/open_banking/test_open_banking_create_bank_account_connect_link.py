@@ -5,6 +5,7 @@ Open Banking Create Bank Account Connect Link 接口测试用例
 import pytest
 from api.account_api import AccountAPI
 from utils.assertions import assert_status_ok, assert_fields_present
+from utils.logger import logger
 
 
 @pytest.mark.create_api
@@ -26,7 +27,7 @@ class TestOpenBankingCreateBankAccountConnectLink:
         """
         # 1. 获取真实的 account_id
         account_api = AccountAPI(session=login_session)
-        print("\n[Step] 获取真实的 account_id")
+        logger.info("获取真实的 account_id")
         account_response = account_api.list_accounts(page=0, size=1)
         assert_status_ok(account_response, 200)
         
@@ -37,10 +38,10 @@ class TestOpenBankingCreateBankAccountConnectLink:
             pytest.skip("没有可用的 Account 数据，跳过测试")
         
         account_id = accounts[0]["id"]
-        print(f"  获取到 Account ID: {account_id}")
+        logger.info(f"  获取到 Account ID: {account_id}")
         
         # 2. 调用 Create Bank Account Connect Link 接口
-        print(f"[Step] 调用 Create Bank Account Connect Link 接口")
+        logger.info("调用 Create Bank Account Connect Link 接口")
         redirect_url = "https://www.fintech.com"
         response = open_banking_api.create_bank_account_connect_link(
             redirect_url=redirect_url,
@@ -48,15 +49,15 @@ class TestOpenBankingCreateBankAccountConnectLink:
         )
         
         # 3. 验证状态码
-        print("[Step] 验证 HTTP 状态码为 200")
+        logger.info("验证 HTTP 状态码为 200")
         assert_status_ok(response, 200)
         
         # 5. 解析响应
-        print("[Step] 解析响应并验证数据")
+        logger.info("解析响应并验证数据")
         response_body = response.json()
         
         # 6. 验证 code 字段
-        print("[Step] 验证 code 字段为 200")
+        logger.info("验证 code 字段为 200")
         assert response_body.get("code") == 200, \
             f"响应 code 不正确: 期望 200, 实际 {response_body.get('code')}"
         
@@ -65,8 +66,8 @@ class TestOpenBankingCreateBankAccountConnectLink:
         assert data, "响应中缺少 data 字段"
         assert isinstance(data, str), "data 字段应该是字符串"
         
-        print(f"[Step] 验证返回的 URL")
-        print(f"  URL 长度: {len(data)}")
+        logger.info("验证返回的 URL")
+        logger.info(f"  URL 长度: {len(data)}")
         
         # 验证 URL 格式
         assert data.startswith("http://") or data.startswith("https://"), \
@@ -74,12 +75,12 @@ class TestOpenBankingCreateBankAccountConnectLink:
         
         # 验证包含预期的域名（根据文档示例）
         if "finicity.com" in data:
-            print(f"  ✓ URL 包含 finicity.com 域名")
+            logger.info(f"  ✓ URL 包含 finicity.com 域名")
         
-        print(f"\n✓ 成功创建银行账户连接链接:")
-        print(f"  Account ID: {account_id}")
-        print(f"  Redirect URL: {redirect_url}")
-        print(f"  返回的连接链接: {data[:100]}...")
+        logger.info(f"\n✓ 成功创建银行账户连接链接:")
+        logger.info(f"  Account ID: {account_id}")
+        logger.info(f"  Redirect URL: {redirect_url}")
+        logger.info(f"  返回的连接链接: {data[:100]}...")
 
     def test_create_bank_account_connect_link_response_structure(self, open_banking_api, login_session):
         """
@@ -91,7 +92,7 @@ class TestOpenBankingCreateBankAccountConnectLink:
         """
         # 1. 获取 account_id
         account_api = AccountAPI(session=login_session)
-        print("\n[Step] 获取真实的 account_id")
+        logger.info("获取真实的 account_id")
         account_response = account_api.list_accounts(page=0, size=1)
         assert_status_ok(account_response, 200)
         
@@ -104,18 +105,18 @@ class TestOpenBankingCreateBankAccountConnectLink:
         account_id = accounts[0]["id"]
         
         # 2. 调用接口
-        print(f"[Step] 调用 Create Bank Account Connect Link 接口")
+        logger.info("调用 Create Bank Account Connect Link 接口")
         response = open_banking_api.create_bank_account_connect_link(
             redirect_url="https://www.fintech.com",
             account_id=account_id
         )
         
         # 3. 验证状态码
-        print("[Step] 验证 HTTP 状态码为 200")
+        logger.info("验证 HTTP 状态码为 200")
         assert_status_ok(response, 200)
         
         # 4. 验证响应数据结构
-        print("[Step] 验证响应数据结构")
+        logger.info("验证响应数据结构")
         response_body = response.json()
         
         # 验证是 JSON 对象
@@ -123,8 +124,8 @@ class TestOpenBankingCreateBankAccountConnectLink:
         
         # 验证必需字段
         assert_fields_present(response_body, ["code", "data"], "响应")
-        print(f"  ✓ code: {response_body.get('code')}")
-        print(f"  ✓ data: 存在")
+        logger.info(f"  ✓ code: {response_body.get('code')}")
+        logger.info(f"  ✓ data: 存在")
         
         # error_message 和 error 字段仅在失败时存在
         if response_body.get("code") != 200:
@@ -133,7 +134,7 @@ class TestOpenBankingCreateBankAccountConnectLink:
         # 验证 data 是字符串
         assert isinstance(response_body["data"], str), "data 字段应该是字符串"
         
-        print(f"✓ 响应数据结构验证通过")
+        logger.info("✓ 响应数据结构验证通过")
 
     def test_create_bank_account_connect_link_missing_redirect_url(self, open_banking_api):
         """
@@ -143,31 +144,31 @@ class TestOpenBankingCreateBankAccountConnectLink:
         2. 错误信息明确指出缺少必需参数
         """
         # 1. 构造缺少 redirect_url 的请求
-        print("\n[Step] 调用接口，缺少 redirect_url 参数")
+        logger.info("调用接口，缺少 redirect_url 参数")
         url = open_banking_api.config.get_full_url("/open-banking/connections/manage/banks")
         data = {"account_id": "test_account_id"}
         response = open_banking_api.session.post(url, json=data)
         
         # 2. 验证返回错误
-        print("[Step] 验证接口返回错误")
-        print(f"  状态码: {response.status_code}")
+        logger.info("验证接口返回错误")
+        logger.info(f"  状态码: {response.status_code}")
         
         # 可能返回 400 或 200（带错误信息）
         if response.status_code == 400:
-            print(f"  ✓ 返回 400 Bad Request")
+            logger.info(f"  ✓ 返回 400 Bad Request")
         else:
             # 检查响应体中的错误信息
             response_body = response.json()
             code = response_body.get("code")
             error_message = response_body.get("error_message")
             
-            print(f"  Code: {code}")
-            print(f"  Error Message: {error_message}")
+            logger.info(f"  Code: {code}")
+            logger.info(f"  Error Message: {error_message}")
             
             # 验证不是成功状态
             assert code != 200 or error_message, "应该返回错误信息"
         
-        print(f"✓ 缺少必需参数测试完成")
+        logger.info("✓ 缺少必需参数测试完成")
 
     def test_create_bank_account_connect_link_missing_account_id(self, open_banking_api):
         """
@@ -177,31 +178,31 @@ class TestOpenBankingCreateBankAccountConnectLink:
         2. 错误信息明确指出缺少必需参数
         """
         # 1. 构造缺少 account_id 的请求
-        print("\n[Step] 调用接口，缺少 account_id 参数")
+        logger.info("调用接口，缺少 account_id 参数")
         url = open_banking_api.config.get_full_url("/open-banking/connections/manage/banks")
         data = {"redirect_url": "https://www.fintech.com"}
         response = open_banking_api.session.post(url, json=data)
         
         # 2. 验证返回错误
-        print("[Step] 验证接口返回错误")
-        print(f"  状态码: {response.status_code}")
+        logger.info("验证接口返回错误")
+        logger.info(f"  状态码: {response.status_code}")
         
         # 可能返回 400 或 200（带错误信息）
         if response.status_code == 400:
-            print(f"  ✓ 返回 400 Bad Request")
+            logger.info(f"  ✓ 返回 400 Bad Request")
         else:
             # 检查响应体中的错误信息
             response_body = response.json()
             code = response_body.get("code")
             error_message = response_body.get("error_message")
             
-            print(f"  Code: {code}")
-            print(f"  Error Message: {error_message}")
+            logger.info(f"  Code: {code}")
+            logger.info(f"  Error Message: {error_message}")
             
             # 验证不是成功状态
             assert code != 200 or error_message, "应该返回错误信息"
         
-        print(f"✓ 缺少必需参数测试完成")
+        logger.info("✓ 缺少必需参数测试完成")
 
     def test_create_bank_account_connect_link_invalid_account_id(self, open_banking_api):
         """
@@ -212,30 +213,30 @@ class TestOpenBankingCreateBankAccountConnectLink:
         """
         # 1. 使用无效的 account_id
         invalid_account_id = "invalid_account_id_999999"
-        print(f"\n[Step] 使用无效的 account_id: {invalid_account_id}")
+        logger.info("使用无效的 account_id: {invalid_account_id}")
         
         # 2. 调用接口
-        print("[Step] 调用 Create Bank Account Connect Link 接口")
+        logger.info("调用 Create Bank Account Connect Link 接口")
         response = open_banking_api.create_bank_account_connect_link(
             redirect_url="https://www.fintech.com",
             account_id=invalid_account_id
         )
         
         # 3. 验证返回结果
-        print("[Step] 验证接口返回")
-        print(f"  状态码: {response.status_code}")
+        logger.info("验证接口返回")
+        logger.info(f"  状态码: {response.status_code}")
         
         response_body = response.json()
         code = response_body.get("code")
         error_message = response_body.get("error_message")
         
-        print(f"  Code: {code}")
-        print(f"  Error Message: {error_message}")
+        logger.info(f"  Code: {code}")
+        logger.info(f"  Error Message: {error_message}")
         
         # 验证返回错误（code 不为 200 或有错误信息）
         assert code != 200 or error_message, "应该返回错误信息"
         
-        print(f"✓ 无效 account_id 测试完成")
+        logger.info("✓ 无效 account_id 测试完成")
 
     def test_create_bank_account_connect_link_different_redirect_urls(self, open_banking_api, login_session):
         """
@@ -246,7 +247,7 @@ class TestOpenBankingCreateBankAccountConnectLink:
         """
         # 1. 获取 account_id
         account_api = AccountAPI(session=login_session)
-        print("\n[Step] 获取真实的 account_id")
+        logger.info("获取真实的 account_id")
         account_response = account_api.list_accounts(page=0, size=1)
         assert_status_ok(account_response, 200)
         
@@ -266,7 +267,7 @@ class TestOpenBankingCreateBankAccountConnectLink:
         ]
         
         for redirect_url in test_urls:
-            print(f"\n[Step] 测试 redirect_url: {redirect_url}")
+            logger.info("测试 redirect_url: {redirect_url}")
             response = open_banking_api.create_bank_account_connect_link(
                 redirect_url=redirect_url,
                 account_id=account_id
@@ -280,10 +281,10 @@ class TestOpenBankingCreateBankAccountConnectLink:
             if response_body.get("code") == 200:
                 data = response_body.get("data")
                 if data and isinstance(data, str):
-                    print(f"  ✓ 成功生成连接链接，长度: {len(data)}")
+                    logger.info(f"  ✓ 成功生成连接链接，长度: {len(data)}")
                 else:
-                    print(f"  ⚠ 返回数据格式异常")
+                    logger.info(f"  ⚠ 返回数据格式异常")
             else:
-                print(f"  ⚠ 返回 code: {response_body.get('code')}")
+                logger.info(f"  ⚠ 返回 code: {response_body.get('code')}")
         
-        print(f"\n✓ 不同 redirect_url 测试完成")
+        logger.info(f"\n✓ 不同 redirect_url 测试完成")

@@ -4,6 +4,7 @@
 """
 import requests
 from typing import List, Optional, Union, Dict, Any
+from utils.logger import logger
 
 
 def assert_status_ok(response: requests.Response, expected_status: int = 200):
@@ -17,8 +18,11 @@ def assert_status_ok(response: requests.Response, expected_status: int = 200):
     Raises:
         AssertionError: 如果状态码不匹配
     """
-    assert response.status_code == expected_status, \
-        f"接口返回状态码错误: 期望 {expected_status}，实际 {response.status_code}"
+    if response.status_code != expected_status:
+        error_msg = f"接口返回状态码错误: 期望 {expected_status}，实际 {response.status_code}"
+        logger.error(error_msg)
+        raise AssertionError(error_msg)
+    logger.debug(f"状态码断言通过: {expected_status}")
 
 
 def assert_response_parsed(parsed: dict):
@@ -31,8 +35,11 @@ def assert_response_parsed(parsed: dict):
     Raises:
         AssertionError: 如果响应解析失败
     """
-    assert not parsed.get("error"), \
-        f"响应解析失败: {parsed.get('message', '未知错误')}"
+    if parsed.get("error"):
+        error_msg = f"响应解析失败: {parsed.get('message', '未知错误')}"
+        logger.error(error_msg)
+        raise AssertionError(error_msg)
+    logger.debug("响应解析断言通过")
 
 
 def assert_list_structure(
@@ -55,14 +62,25 @@ def assert_list_structure(
         required_fields = ["content"]
     
     for field in required_fields:
-        assert field in parsed, f"响应中缺少必需字段: {field}"
+        if field not in parsed:
+            error_msg = f"响应中缺少必需字段: {field}"
+            logger.error(error_msg)
+            raise AssertionError(error_msg)
     
-    assert isinstance(parsed["content"], list), "content 字段不是列表类型"
+    if not isinstance(parsed["content"], list):
+        error_msg = "content 字段不是列表类型"
+        logger.error(error_msg)
+        raise AssertionError(error_msg)
     
     if has_pagination:
         pagination_fields = ["total_elements", "size", "number"]
         for field in pagination_fields:
-            assert field in parsed, f"响应中缺少分页字段: {field}"
+            if field not in parsed:
+                error_msg = f"响应中缺少分页字段: {field}"
+                logger.error(error_msg)
+                raise AssertionError(error_msg)
+    
+    logger.debug("列表结构断言通过")
 
 
 def assert_enum_filter(
@@ -94,14 +112,18 @@ def assert_enum_filter(
         
         if actual_value is None:
             if not allow_none:
-                raise AssertionError(
-                    f"列表项缺少字段 '{field_name}'，期望值: {expected_str}"
-                )
+                error_msg = f"列表项缺少字段 '{field_name}'，期望值: {expected_str}"
+                logger.error(error_msg)
+                raise AssertionError(error_msg)
             continue
         
         actual_str = str(actual_value)
-        assert actual_str == expected_str, \
-            f"字段 '{field_name}' 值不匹配: 期望 '{expected_str}'，实际 '{actual_str}'"
+        if actual_str != expected_str:
+            error_msg = f"字段 '{field_name}' 值不匹配: 期望 '{expected_str}'，实际 '{actual_str}'"
+            logger.error(error_msg)
+            raise AssertionError(error_msg)
+    
+    logger.debug(f"枚举筛选断言通过: {field_name}={expected_str}")
 
 
 def assert_string_contains_filter(
@@ -132,8 +154,12 @@ def assert_string_contains_filter(
         else:
             field_value = str(field_value)
         
-        assert search_keyword in field_value, \
-            f"字段 '{field_name}' 的值 '{item.get(field_name)}' 不包含搜索关键词 '{search_keyword}'"
+        if search_keyword not in field_value:
+            error_msg = f"字段 '{field_name}' 的值 '{item.get(field_name)}' 不包含搜索关键词 '{search_keyword}'"
+            logger.error(error_msg)
+            raise AssertionError(error_msg)
+    
+    logger.debug(f"字符串包含筛选断言通过: {field_name} contains '{search_keyword}'")
 
 
 def assert_pagination(
@@ -155,14 +181,22 @@ def assert_pagination(
     content = parsed.get("content", [])
     
     if expected_size is not None:
-        assert len(content) <= expected_size, \
-            f"返回的数据量 {len(content)} 超过了指定的每页大小 {expected_size}"
-        assert parsed.get("size") == expected_size, \
-            f"分页信息中的 size 不正确: 期望 {expected_size}，实际 {parsed.get('size')}"
+        if len(content) > expected_size:
+            error_msg = f"返回的数据量 {len(content)} 超过了指定的每页大小 {expected_size}"
+            logger.error(error_msg)
+            raise AssertionError(error_msg)
+        if parsed.get("size") != expected_size:
+            error_msg = f"分页信息中的 size 不正确: 期望 {expected_size}，实际 {parsed.get('size')}"
+            logger.error(error_msg)
+            raise AssertionError(error_msg)
     
     if expected_page is not None:
-        assert parsed.get("number") == expected_page, \
-            f"分页信息中的页码不正确: 期望 {expected_page}，实际 {parsed.get('number')}"
+        if parsed.get("number") != expected_page:
+            error_msg = f"分页信息中的页码不正确: 期望 {expected_page}，实际 {parsed.get('number')}"
+            logger.error(error_msg)
+            raise AssertionError(error_msg)
+    
+    logger.debug(f"分页断言通过: size={expected_size}, page={expected_page}")
 
 
 def assert_empty_result(parsed: dict):
@@ -175,8 +209,15 @@ def assert_empty_result(parsed: dict):
     Raises:
         AssertionError: 如果结果不为空
     """
-    assert len(parsed.get("content", [])) == 0, "期望返回空列表，但实际有数据"
-    assert parsed.get("empty", False) == True, "empty 字段应该为 True"
+    if len(parsed.get("content", [])) != 0:
+        error_msg = "期望返回空列表，但实际有数据"
+        logger.error(error_msg)
+        raise AssertionError(error_msg)
+    if parsed.get("empty", False) != True:
+        error_msg = "empty 字段应该为 True"
+        logger.error(error_msg)
+        raise AssertionError(error_msg)
+    logger.debug("空结果断言通过")
 
 
 def assert_fields_present(
@@ -196,4 +237,8 @@ def assert_fields_present(
         AssertionError: 如果缺少必需字段
     """
     for field in required_fields:
-        assert field in obj, f"{obj_name}缺少必需字段: {field}"
+        if field not in obj:
+            error_msg = f"{obj_name}缺少必需字段: {field}"
+            logger.error(error_msg)
+            raise AssertionError(error_msg)
+    logger.debug(f"{obj_name}字段完整性断言通过")

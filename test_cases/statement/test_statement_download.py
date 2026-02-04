@@ -5,6 +5,7 @@ Statement 下载接口测试用例
 import pytest
 import base64
 from utils.assertions import assert_status_ok
+from utils.logger import logger
 
 
 class TestStatementDownload:
@@ -34,18 +35,18 @@ class TestStatementDownload:
         
         # 提取第一个 Statement 的 ID
         statement_id = statements[0]["id"]
-        print(f"\n提取到 Statement ID: {statement_id}")
+        logger.info(f"\n提取到 Statement ID: {statement_id}")
         
         # 调用下载接口
-        print(f"[Step] 调用下载接口获取 Statement {statement_id}")
+        logger.info("调用下载接口获取 Statement {statement_id}")
         download_response = statement_api.download_statement_file(statement_id)
         
         # 断言状态码
-        print("[Step] 验证 HTTP 状态码为 200")
+        logger.info("验证 HTTP 状态码为 200")
         assert_status_ok(download_response)
         
         # 解析响应
-        print("[Step] 解析响应并验证文件内容")
+        logger.info("解析响应并验证文件内容")
         try:
             response_data = download_response.json()
             
@@ -58,20 +59,20 @@ class TestStatementDownload:
                 pytest.fail(f"响应格式不正确: {type(response_data)}")
             
             # 验证是 base64 编码的内容
-            print("[Step] 验证是 base64 编码内容")
+            logger.info("验证是 base64 编码内容")
             assert len(file_content) > 0, "返回的文件内容为空"
             
             # 尝试 base64 解码验证
             try:
                 decoded = base64.b64decode(file_content)
-                print(f"✓ 成功下载 Statement 文件:")
-                print(f"  Statement ID: {statement_id}")
-                print(f"  Base64 长度: {len(file_content)} 字符")
-                print(f"  解码后大小: {len(decoded)} 字节")
+                logger.info("✓ 成功下载 Statement 文件:")
+                logger.info(f"  Statement ID: {statement_id}")
+                logger.info(f"  Base64 长度: {len(file_content)} 字符")
+                logger.info(f"  解码后大小: {len(decoded)} 字节")
             except Exception as e:
                 # 如果不是 base64，可能是其他格式
-                print(f"  ⚠ 文件内容不是标准 base64 格式: {e}")
-                print(f"  内容前100字符: {file_content[:100]}")
+                logger.info(f"  ⚠ 文件内容不是标准 base64 格式: {e}")
+                logger.info(f"  内容前100字符: {file_content[:100]}")
         except Exception as e:
             pytest.fail(f"解析响应失败: {e}")
 
@@ -84,12 +85,12 @@ class TestStatementDownload:
         """
         # 使用一个不存在的 statement_id
         invalid_id = "INVALID_STATEMENT_ID_999999"
-        print(f"\n[Step] 使用无效的 Statement ID: {invalid_id}")
+        logger.info("使用无效的 Statement ID: {invalid_id}")
         download_response = statement_api.download_statement_file(invalid_id)
         
         # 验证返回 200 状态码（统一错误处理）
-        print("[Step] 验证返回状态码")
-        print(f"  状态码: {download_response.status_code}")
+        logger.info("验证返回状态码")
+        logger.info(f"  状态码: {download_response.status_code}")
         assert_status_ok(download_response)
         
         # 验证响应包含错误信息或为空
@@ -97,7 +98,7 @@ class TestStatementDownload:
         assert "error" in download_response.text.lower() or response_body.get("code") != 200 or not response_body, \
             f"无效 ID 应该返回错误信息或空响应"
         
-        print(f"✓ 使用无效 ID 测试完成")
+        logger.info("✓ 使用无效 ID 测试完成")
 
     def test_download_statement_file_format(self, statement_api):
         """
@@ -119,12 +120,12 @@ class TestStatementDownload:
         statement_id = statements[0]["id"]
         
         # 下载文件
-        print(f"\n[Step] 下载 Statement {statement_id}")
+        logger.info("下载 Statement {statement_id}")
         download_response = statement_api.download_statement_file(statement_id)
         assert_status_ok(download_response)
         
         # 解析并验证格式
-        print("[Step] 验证文件格式")
+        logger.info("验证文件格式")
         response_data = download_response.json()
         
         if isinstance(response_data, str):
@@ -146,8 +147,8 @@ class TestStatementDownload:
             else:
                 file_type = "Unknown"
             
-            print(f"✓ 文件格式验证通过:")
-            print(f"  文件类型: {file_type}")
-            print(f"  文件大小: {len(decoded)} 字节")
+            logger.info("✓ 文件格式验证通过:")
+            logger.info(f"  文件类型: {file_type}")
+            logger.info(f"  文件大小: {len(decoded)} 字节")
         except Exception as e:
             pytest.fail(f"Base64 解码失败: {e}")

@@ -5,6 +5,7 @@
 import pytest
 from data.enums import BusinessEntityType, AccountStatus
 from utils.assertions import (
+from utils.logger import logger
     assert_status_ok,
     assert_response_parsed,
     assert_list_structure,
@@ -42,7 +43,7 @@ class TestAccountList:
         assert_list_structure(parsed, has_pagination=True)
         
         # 打印统计信息
-        print(f"✓ 成功获取到 {len(parsed['content'])} 个账户，总计 {parsed['total_elements']} 个")
+        logger.info("✓ 成功获取到 {len(parsed['content'])} 个账户，总计 {parsed['total_elements']} 个")
 
     @pytest.mark.parametrize("search_name", ["Example", "Test", "Account"])
     def test_list_accounts_filter_by_name(self, account_api, search_name):
@@ -65,9 +66,9 @@ class TestAccountList:
         # 如果返回了数据，验证筛选逻辑
         if len(accounts) > 0:
             assert_string_contains_filter(accounts, "account_name", search_name, case_sensitive=False)
-            print(f"✓ 筛选成功，找到 {len(accounts)} 个包含 '{search_name}' 的账户")
+            logger.info("✓ 筛选成功，找到 {len(accounts)} 个包含 '{search_name}' 的账户")
         else:
-            print(f"⚠ 未找到包含 '{search_name}' 的账户（可能是正常情况）")
+            logger.info(f"⚠ 未找到包含 '{search_name}' 的账户（可能是正常情况）")
 
     def test_list_accounts_filter_by_entity_type(self, account_api):
         """
@@ -89,9 +90,9 @@ class TestAccountList:
         if len(accounts) > 0:
             # 验证所有账户的 business_entity_type 都是 LLC（允许 None，跳过验证）
             assert_enum_filter(accounts, "business_entity_type", BusinessEntityType.LLC, allow_none=True)
-            print(f"✓ 筛选成功，找到 {len(accounts)} 个 LLC 类型的账户")
+            logger.info("✓ 筛选成功，找到 {len(accounts)} 个 LLC 类型的账户")
         else:
-            print("⚠ 未找到 LLC 类型的账户（可能是正常情况）")
+            logger.info("⚠ 未找到 LLC 类型的账户（可能是正常情况）")
 
     def test_list_accounts_multiple_filters(self, account_api):
         """
@@ -112,7 +113,7 @@ class TestAccountList:
         parsed = account_api.parse_list_response(response)
         assert_response_parsed(parsed)
         
-        print(f"✓ 组合筛选成功，找到 {len(parsed['content'])} 个符合条件的账户")
+        logger.info("✓ 组合筛选成功，找到 {len(parsed['content'])} 个符合条件的账户")
 
     @pytest.mark.parametrize("page_size", [5, 10, 20])
     def test_list_accounts_pagination(self, account_api, page_size):
@@ -134,7 +135,7 @@ class TestAccountList:
         # 验证分页信息
         assert_pagination(parsed, expected_size=page_size, expected_page=0)
         
-        print(f"✓ 分页验证成功，请求 {page_size} 条，实际返回 {len(parsed['content'])} 条")
+        logger.info("✓ 分页验证成功，请求 {page_size} 条，实际返回 {len(parsed['content'])} 条")
 
     @pytest.mark.parametrize("account_status", [
         AccountStatus.ACTIVE,
@@ -161,9 +162,9 @@ class TestAccountList:
         if len(accounts) > 0:
             # 验证所有账户的状态都匹配（允许 None，跳过验证）
             assert_enum_filter(accounts, "account_status", account_status, allow_none=True)
-            print(f"✓ 找到 {len(accounts)} 个状态为 {account_status.value} 的账户")
+            logger.info("✓ 找到 {len(accounts)} 个状态为 {account_status.value} 的账户")
         else:
-            print(f"⚠ 未找到状态为 {account_status.value} 的账户")
+            logger.info(f"⚠ 未找到状态为 {account_status.value} 的账户")
 
     def test_list_accounts_empty_result(self, account_api):
         """
@@ -184,7 +185,7 @@ class TestAccountList:
         # 验证空结果
         assert_empty_result(parsed)
         
-        print("✓ 空结果验证成功，接口正确返回空列表")
+        logger.info("✓ 空结果验证成功，接口正确返回空列表")
 
     def test_account_response_fields(self, account_api):
         """
@@ -215,8 +216,8 @@ class TestAccountList:
             # 验证字段完整性
             assert_fields_present(account, required_fields, obj_name="账户对象")
             
-            print(f"✓ 字段完整性验证通过，账户对象包含所有必需字段")
-            print(f"  示例账户: {account.get('account_number')} - {account.get('account_name')}")
+            logger.info("✓ 字段完整性验证通过，账户对象包含所有必需字段")
+            logger.info(f"  示例账户: {account.get('account_number')} - {account.get('account_name')}")
         else:
             pytest.skip("没有账户数据可供验证")
 
@@ -246,8 +247,8 @@ class TestAccountList:
                 assert current_name <= next_name, \
                     f"排序不正确: {current_name} 应该在 {next_name} 之前"
             
-            print(f"✓ 排序验证成功（升序），共 {len(accounts)} 个账户")
-            print(f"  第一个: {accounts[0].get('account_name')}")
-            print(f"  最后一个: {accounts[-1].get('account_name')}")
+            logger.info("✓ 排序验证成功（升序），共 {len(accounts)} 个账户")
+            logger.info(f"  第一个: {accounts[0].get('account_name')}")
+            logger.info(f"  最后一个: {accounts[-1].get('account_name')}")
         else:
-            print(f"⚠ 账户数量不足，无法验证排序（当前 {len(accounts)} 个）")
+            logger.info(f"⚠ 账户数量不足，无法验证排序（当前 {len(accounts)} 个）")

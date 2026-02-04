@@ -4,6 +4,7 @@
 """
 import pytest
 from utils.assertions import (
+from utils.logger import logger
     assert_status_ok,
     assert_response_parsed,
     assert_list_structure,
@@ -63,7 +64,7 @@ class TestAccountFinancialAccounts:
             print(f"✓ 成功获取 Financial Accounts: 总数={total}, "
                   f"示例 ID={first_account.get('id')}, Name={first_account.get('name')}")
         else:
-            print(f"✓ 成功获取 Financial Accounts（当前账户没有关联的 Financial Accounts）")
+            logger.info("✓ 成功获取 Financial Accounts（当前账户没有关联的 Financial Accounts）")
 
     def test_get_financial_accounts_with_filters(self, account_api):
         """
@@ -100,9 +101,9 @@ class TestAccountFinancialAccounts:
         # 如果有数据，验证筛选逻辑
         if len(financial_accounts) > 0:
             assert_enum_filter(financial_accounts, "status", filter_status, allow_none=True)
-            print(f"✓ 筛选成功，找到 {len(financial_accounts)} 个状态为 {filter_status} 的 Financial Accounts")
+            logger.info("✓ 筛选成功，找到 {len(financial_accounts)} 个状态为 {filter_status} 的 Financial Accounts")
         else:
-            print(f"⚠ 未找到状态为 {filter_status} 的 Financial Accounts（可能是正常情况）")
+            logger.info(f"⚠ 未找到状态为 {filter_status} 的 Financial Accounts（可能是正常情况）")
 
     def test_get_financial_accounts_pagination(self, account_api):
         """
@@ -137,7 +138,7 @@ class TestAccountFinancialAccounts:
         
         assert_pagination(parsed_financial, expected_size=page_size, expected_page=0)
         
-        print(f"✓ 分页验证成功，请求 {page_size} 条，实际返回 {len(parsed_financial['content'])} 条")
+        logger.info("✓ 分页验证成功，请求 {page_size} 条，实际返回 {len(parsed_financial['content'])} 条")
 
     def test_get_financial_accounts_empty_result(self, account_api):
         """
@@ -170,7 +171,7 @@ class TestAccountFinancialAccounts:
         
         assert_empty_result(parsed_financial)
         
-        print("✓ 空结果验证成功，接口正确返回空列表")
+        logger.info("✓ 空结果验证成功，接口正确返回空列表")
 
     def test_get_financial_accounts_invalid_account_id(self, account_api):
         """
@@ -188,6 +189,6 @@ class TestAccountFinancialAccounts:
             parsed_financial = account_api.parse_financial_accounts_response(financial_response)
             assert len(parsed_financial["content"]) == 0, \
                 "使用无效 ID 应该返回空列表"
-            print(f"✓ 使用无效 ID 返回 200 和空列表")
+            logger.info("✓ 使用无效 ID 返回 200 和空列表")
         else:
-            print(f"✓ 使用无效 ID 正确返回错误状态码: {financial_response.status_code}")
+            logger.info("✓ 使用无效 ID 正确返回错误状态码: {financial_response.status_code}")

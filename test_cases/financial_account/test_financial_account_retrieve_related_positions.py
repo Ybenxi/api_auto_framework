@@ -5,6 +5,7 @@ Financial Account Related Positions 接口测试用例
 """
 import pytest
 from api.financial_account_api import FinancialAccountAPI
+from utils.logger import logger
 
 
 @pytest.mark.financial_account
@@ -25,7 +26,7 @@ class TestFinancialAccountRetrieveRelatedPositions:
         fa_api = FinancialAccountAPI(session=login_session)
         
         # 获取 Financial Account
-        print("\n[Step] 获取 Financial Accounts 列表")
+        logger.info("获取 Financial Accounts 列表")
         list_response = fa_api.list_financial_accounts(page=0, size=1)
         assert list_response.status_code == 200
         
@@ -36,13 +37,13 @@ class TestFinancialAccountRetrieveRelatedPositions:
             pytest.skip("没有可用的 Financial Account 进行测试")
         
         financial_account_id = accounts[0].get("id")
-        print(f"  使用 Financial Account ID: {financial_account_id}")
+        logger.info(f"  使用 Financial Account ID: {financial_account_id}")
         
         # 获取相关持仓
-        print("[Step] 调用 Retrieve Related Positions 接口")
+        logger.info("调用 Retrieve Related Positions 接口")
         positions_response = fa_api.get_related_positions(financial_account_id, page=0, size=10)
         
-        print("[Step] 验证 HTTP 状态码为 200")
+        logger.info("验证 HTTP 状态码为 200")
         assert positions_response.status_code == 200, \
             f"接口返回状态码错误: {positions_response.status_code}, Response: {positions_response.text}"
         
@@ -50,13 +51,13 @@ class TestFinancialAccountRetrieveRelatedPositions:
         assert not parsed_positions.get("error"), f"响应解析失败: {parsed_positions.get('message')}"
         
         positions = parsed_positions.get("content", [])
-        print(f"✓ 成功获取相关持仓:")
-        print(f"  总持仓数: {parsed_positions['total_elements']}")
-        print(f"  返回 {len(positions)} 条持仓记录")
+        logger.info("✓ 成功获取相关持仓:")
+        logger.info(f"  总持仓数: {parsed_positions['total_elements']}")
+        logger.info(f"  返回 {len(positions)} 条持仓记录")
         
         if len(positions) > 0:
             pos = positions[0]
-            print(f"  第一条持仓: {pos.get('symbol')} - {pos.get('shares')} shares @ ${pos.get('price')}")
+            logger.info(f"  第一条持仓: {pos.get('symbol')} - {pos.get('shares')} shares @ ${pos.get('price')}")
 
     def test_retrieve_related_positions_with_symbol_filter(self, login_session):
         """
@@ -78,7 +79,7 @@ class TestFinancialAccountRetrieveRelatedPositions:
         
         financial_account_id = accounts[0].get("id")
         
-        print("\n[Step] 使用 symbol 筛选持仓")
+        logger.info("使用 symbol 筛选持仓")
         positions_response = fa_api.get_related_positions(
             financial_account_id, 
             symbol="AAPL",
@@ -90,9 +91,9 @@ class TestFinancialAccountRetrieveRelatedPositions:
         parsed_positions = fa_api.parse_list_response(positions_response)
         
         positions = parsed_positions.get("content", [])
-        print(f"  返回 {len(positions)} 条匹配的持仓记录")
+        logger.info(f"  返回 {len(positions)} 条匹配的持仓记录")
         
-        print(f"✓ Symbol 筛选测试完成")
+        logger.info("✓ Symbol 筛选测试完成")
 
     def test_retrieve_related_positions_with_cusip_filter(self, login_session):
         """
@@ -114,7 +115,7 @@ class TestFinancialAccountRetrieveRelatedPositions:
         
         financial_account_id = accounts[0].get("id")
         
-        print("\n[Step] 使用 cusip 筛选持仓")
+        logger.info("使用 cusip 筛选持仓")
         positions_response = fa_api.get_related_positions(
             financial_account_id, 
             cusip="037833100",
@@ -126,9 +127,9 @@ class TestFinancialAccountRetrieveRelatedPositions:
         parsed_positions = fa_api.parse_list_response(positions_response)
         
         positions = parsed_positions.get("content", [])
-        print(f"  返回 {len(positions)} 条匹配的持仓记录")
+        logger.info(f"  返回 {len(positions)} 条匹配的持仓记录")
         
-        print(f"✓ CUSIP 筛选测试完成")
+        logger.info("✓ CUSIP 筛选测试完成")
 
     def test_retrieve_related_positions_pagination(self, login_session):
         """
@@ -150,7 +151,7 @@ class TestFinancialAccountRetrieveRelatedPositions:
         
         financial_account_id = accounts[0].get("id")
         
-        print("\n[Step] 使用分页参数 page=0, size=5")
+        logger.info("使用分页参数 page=0, size=5")
         positions_response = fa_api.get_related_positions(
             financial_account_id, 
             page=0, 
@@ -160,11 +161,11 @@ class TestFinancialAccountRetrieveRelatedPositions:
         assert positions_response.status_code == 200
         parsed_positions = fa_api.parse_list_response(positions_response)
         
-        print(f"✓ 分页测试完成:")
-        print(f"  总元素数: {parsed_positions['total_elements']}")
-        print(f"  总页数: {parsed_positions['total_pages']}")
-        print(f"  当前页: {parsed_positions['number']}")
-        print(f"  每页大小: {parsed_positions['size']}")
+        logger.info("✓ 分页测试完成:")
+        logger.info(f"  总元素数: {parsed_positions['total_elements']}")
+        logger.info(f"  总页数: {parsed_positions['total_pages']}")
+        logger.info(f"  当前页: {parsed_positions['number']}")
+        logger.info(f"  每页大小: {parsed_positions['size']}")
 
     def test_retrieve_related_positions_response_fields(self, login_session):
         """
@@ -186,7 +187,7 @@ class TestFinancialAccountRetrieveRelatedPositions:
         
         financial_account_id = accounts[0].get("id")
         
-        print("\n[Step] 获取持仓并验证字段")
+        logger.info("获取持仓并验证字段")
         positions_response = fa_api.get_related_positions(financial_account_id, page=0, size=1)
         assert positions_response.status_code == 200
         
@@ -200,11 +201,11 @@ class TestFinancialAccountRetrieveRelatedPositions:
                 "cusip", "shares", "price", "market_value", "cost_basis", "status"
             ]
             
-            print("[Step] 验证持仓字段")
+            logger.info("验证持仓字段")
             for field in expected_fields:
                 value = pos.get(field, "(not present)")
-                print(f"  {field}: {value}")
+                logger.info(f"  {field}: {value}")
             
-            print(f"✓ 字段验证完成")
+            logger.info("✓ 字段验证完成")
         else:
-            print("  跳过字段验证（列表为空）")
+            logger.info("  跳过字段验证（列表为空）")

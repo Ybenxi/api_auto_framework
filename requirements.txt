@@ -2,12 +2,21 @@
 pytest>=7.4.0
 pytest-html>=3.2.0
 pytest-json-report>=1.5.0
+pytest-rerunfailures>=12.0  # 失败重试
 
 # HTTP Requests
 requests>=2.31.0
 
+# Logging
+loguru>=0.7.0  # 日志系统
+
+# Environment Management
+python-dotenv>=1.0.0  # 环境变量管理
+
 # Database
 psycopg2-binary>=2.9.0
+sqlalchemy>=2.0.0  # ORM & 连接池
+pymysql>=1.1.0  # MySQL 驱动（备用）
 
 # Data Processing
 pandas>=2.0.0

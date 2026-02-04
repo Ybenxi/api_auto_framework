@@ -4,6 +4,7 @@ Identity Security - 安全操作接口测试用例
 """
 import pytest
 from utils.assertions import assert_status_ok
+from utils.logger import logger
 
 
 class TestIdentitySecurity:
@@ -36,9 +37,9 @@ class TestIdentitySecurity:
         if not parsed.get("error"):
             success = parsed["data"]
             assert success == True, "密码修改应该返回 true"
-            print(f"✓ 密码修改成功")
+            logger.info("✓ 密码修改成功")
         else:
-            print(f"⚠ 密码修改失败（可能是旧密码不正确）: {parsed.get('message')}")
+            logger.info(f"⚠ 密码修改失败（可能是旧密码不正确）: {parsed.get('message')}")
 
     def test_change_password_missing_required_fields(self, identity_api):
         """
@@ -60,9 +61,9 @@ class TestIdentitySecurity:
         
         # 应该返回错误
         if parsed.get("error") or parsed.get("data") == False:
-            print(f"✓ 缺少必需字段正确返回错误")
+            logger.info("✓ 缺少必需字段正确返回错误")
         else:
-            print(f"⚠ API 未验证必需字段")
+            logger.info(f"⚠ API 未验证必需字段")
 
     def test_change_password_invalid_encoded_format(self, identity_api):
         """
@@ -84,9 +85,9 @@ class TestIdentitySecurity:
         
         # 应该返回错误
         if parsed.get("error") or parsed.get("data") == False:
-            print(f"✓ 无效加密格式正确返回错误")
+            logger.info("✓ 无效加密格式正确返回错误")
         else:
-            print(f"⚠ API 未验证加密格式")
+            logger.info(f"⚠ API 未验证加密格式")
 
     @pytest.mark.skip(reason="Logout 会清除 token，影响后续所有测试，必须跳过")
     def test_logout_success(self, identity_api):
@@ -109,7 +110,7 @@ class TestIdentitySecurity:
         success = parsed["data"]
         assert success == True, "登出应该返回 true"
         
-        print(f"✓ 登出成功")
+        logger.info("✓ 登出成功")
 
     @pytest.mark.skip(reason="Delete User 是永久性破坏操作，绝对不能在测试中执行")
     def test_delete_user(self, identity_api):
@@ -135,4 +136,4 @@ class TestIdentitySecurity:
         success = parsed["data"]
         assert success == True, "删除应该返回 true"
         
-        print(f"✓ 用户删除成功")
+        logger.info("✓ 用户删除成功")

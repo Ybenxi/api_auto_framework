@@ -5,6 +5,7 @@ Open Banking List Account Transactions 接口测试用例
 import pytest
 from api.financial_account_api import FinancialAccountAPI
 from utils.assertions import assert_status_ok, assert_fields_present
+from utils.logger import logger
 
 
 @pytest.mark.transactions_api
@@ -25,7 +26,7 @@ class TestOpenBankingListAccountTransactions:
         """
         # 1. 获取真实的 financial_account_id
         financial_account_api = FinancialAccountAPI(session=login_session)
-        print("\n[Step] 获取真实的 financial_account_id")
+        logger.info("获取真实的 financial_account_id")
         fa_response = financial_account_api.list_financial_accounts(page=0, size=1)
         assert_status_ok(fa_response, 200)
         
@@ -36,24 +37,24 @@ class TestOpenBankingListAccountTransactions:
             pytest.skip("没有可用的 Financial Account 数据，跳过测试")
         
         financial_account_id = financial_accounts[0]["id"]
-        print(f"  获取到 Financial Account ID: {financial_account_id}")
+        logger.info(f"  获取到 Financial Account ID: {financial_account_id}")
         
         # 2. 调用 List Account Transactions 接口
-        print(f"[Step] 调用 List Account Transactions 接口")
+        logger.info("调用 List Account Transactions 接口")
         response = open_banking_api.list_account_transactions(
             financial_account_id=financial_account_id
         )
         
         # 3. 验证状态码
-        print("[Step] 验证 HTTP 状态码为 200")
+        logger.info("验证 HTTP 状态码为 200")
         assert_status_ok(response, 200)
         
         # 4. 解析响应并验证数据
-        print("[Step] 解析响应并验证数据")
+        logger.info("解析响应并验证数据")
         response_body = response.json()
         
         # 5. 验证 code 字段
-        print("[Step] 验证 code 字段为 200")
+        logger.info("验证 code 字段为 200")
         assert response_body.get("code") == 200, \
             f"响应 code 不正确: 期望 200, 实际 {response_body.get('code')}"
         
@@ -64,11 +65,11 @@ class TestOpenBankingListAccountTransactions:
         # 7. 验证 content 数组
         content = data.get("content", [])
         assert isinstance(content, list), "content 字段应该是数组"
-        print(f"[Step] 获取到 {len(content)} 条交易记录")
+        logger.info("获取到 {len(content)} 条交易记录")
         
         # 8. 如果有数据，验证字段结构
         if len(content) > 0:
-            print("[Step] 验证第一条交易记录的基本字段")
+            logger.info("验证第一条交易记录的基本字段")
             transaction = content[0]
             
             # 验证一些基本字段（根据文档，字段非常多，这里只验证关键字段）
@@ -76,14 +77,14 @@ class TestOpenBankingListAccountTransactions:
             
             for field in basic_fields:
                 if field in transaction:
-                    print(f"  ✓ {field}: {transaction.get(field)}")
+                    logger.info(f"  ✓ {field}: {transaction.get(field)}")
             
-            print(f"\n✓ 成功获取账户交易列表:")
-            print(f"  交易数量: {len(content)}")
-            print(f"  第一条交易 ID: {transaction.get('transaction_id')}")
-            print(f"  交易类型: {transaction.get('transaction_type')}")
+            logger.info(f"\n✓ 成功获取账户交易列表:")
+            logger.info(f"  交易数量: {len(content)}")
+            logger.info(f"  第一条交易 ID: {transaction.get('transaction_id')}")
+            logger.info(f"  交易类型: {transaction.get('transaction_type')}")
         else:
-            print("  ⚠ 当前没有交易记录")
+            logger.info("  ⚠ 当前没有交易记录")
 
     def test_list_account_transactions_response_structure(self, open_banking_api, login_session):
         """
@@ -95,7 +96,7 @@ class TestOpenBankingListAccountTransactions:
         """
         # 1. 获取 financial_account_id
         financial_account_api = FinancialAccountAPI(session=login_session)
-        print("\n[Step] 获取真实的 financial_account_id")
+        logger.info("获取真实的 financial_account_id")
         fa_response = financial_account_api.list_financial_accounts(page=0, size=1)
         assert_status_ok(fa_response, 200)
         
@@ -108,17 +109,17 @@ class TestOpenBankingListAccountTransactions:
         financial_account_id = financial_accounts[0]["id"]
         
         # 2. 调用接口
-        print(f"[Step] 调用 List Account Transactions 接口")
+        logger.info("调用 List Account Transactions 接口")
         response = open_banking_api.list_account_transactions(
             financial_account_id=financial_account_id
         )
         
         # 3. 验证状态码
-        print("[Step] 验证 HTTP 状态码为 200")
+        logger.info("验证 HTTP 状态码为 200")
         assert_status_ok(response, 200)
         
         # 4. 验证响应数据结构
-        print("[Step] 验证响应数据结构")
+        logger.info("验证响应数据结构")
         response_body = response.json()
         
         # 验证是 JSON 对象
@@ -126,8 +127,8 @@ class TestOpenBankingListAccountTransactions:
         
         # 验证必需字段
         assert_fields_present(response_body, ["code", "data"], "响应")
-        print(f"  ✓ code: {response_body.get('code')}")
-        print(f"  ✓ data: 存在")
+        logger.info(f"  ✓ code: {response_body.get('code')}")
+        logger.info(f"  ✓ data: 存在")
         
         # error_message 和 error 字段仅在失败时存在
         if response_body.get("code") != 200:
@@ -141,7 +142,7 @@ class TestOpenBankingListAccountTransactions:
         assert "content" in data, "data 中缺少 content 字段"
         assert isinstance(data["content"], list), "content 应该是数组"
         
-        print(f"✓ 响应数据结构验证通过")
+        logger.info("✓ 响应数据结构验证通过")
 
     def test_list_account_transactions_key_fields(self, open_banking_api, login_session):
         """
@@ -152,7 +153,7 @@ class TestOpenBankingListAccountTransactions:
         """
         # 1. 获取 financial_account_id
         financial_account_api = FinancialAccountAPI(session=login_session)
-        print("\n[Step] 获取真实的 financial_account_id")
+        logger.info("获取真实的 financial_account_id")
         fa_response = financial_account_api.list_financial_accounts(page=0, size=1)
         assert_status_ok(fa_response, 200)
         
@@ -165,7 +166,7 @@ class TestOpenBankingListAccountTransactions:
         financial_account_id = financial_accounts[0]["id"]
         
         # 3. 调用接口
-        print(f"[Step] 调用 List Account Transactions 接口")
+        logger.info("调用 List Account Transactions 接口")
         response = open_banking_api.list_account_transactions(
             financial_account_id=financial_account_id
         )
@@ -180,7 +181,7 @@ class TestOpenBankingListAccountTransactions:
             pytest.skip("没有可用的交易记录，跳过测试")
         
         # 5. 验证关键字段
-        print("[Step] 验证第一条交易记录的关键字段")
+        logger.info("验证第一条交易记录的关键字段")
         transaction = content[0]
         
         # 根据文档，验证一些重要字段
@@ -196,14 +197,14 @@ class TestOpenBankingListAccountTransactions:
             if field in transaction:
                 present_fields.append(field)
                 value = transaction.get(field)
-                print(f"  ✓ {field}: {value if value is not None else 'null'}")
+                logger.info(f"  ✓ {field}: {value if value is not None else 'null'}")
             else:
                 missing_fields.append(field)
         
         if missing_fields:
-            print(f"  ⚠ 缺少字段: {', '.join(missing_fields)}")
+            logger.info(f"  ⚠ 缺少字段: {', '.join(missing_fields)}")
         
-        print(f"✓ 关键字段验证完成 (存在: {len(present_fields)}, 缺失: {len(missing_fields)})")
+        logger.info("✓ 关键字段验证完成 (存在: {len(present_fields)}, 缺失: {len(missing_fields)})")
 
     def test_list_account_transactions_amount_fields(self, open_banking_api, login_session):
         """
@@ -215,7 +216,7 @@ class TestOpenBankingListAccountTransactions:
         """
         # 1. 获取 financial_account_id
         financial_account_api = FinancialAccountAPI(session=login_session)
-        print("\n[Step] 获取真实的 financial_account_id")
+        logger.info("获取真实的 financial_account_id")
         fa_response = financial_account_api.list_financial_accounts(page=0, size=1)
         assert_status_ok(fa_response, 200)
         
@@ -228,7 +229,7 @@ class TestOpenBankingListAccountTransactions:
         financial_account_id = financial_accounts[0]["id"]
         
         # 2. 调用接口
-        print(f"[Step] 调用 List Account Transactions 接口")
+        logger.info("调用 List Account Transactions 接口")
         response = open_banking_api.list_account_transactions(
             financial_account_id=financial_account_id
         )
@@ -243,7 +244,7 @@ class TestOpenBankingListAccountTransactions:
             pytest.skip("没有可用的交易记录，跳过测试")
         
         # 5. 验证金额字段
-        print("[Step] 验证金额相关字段")
+        logger.info("验证金额相关字段")
         transaction = content[0]
         
         amount_fields = [
@@ -259,11 +260,11 @@ class TestOpenBankingListAccountTransactions:
                     # 验证是数字类型（int 或 float）
                     assert isinstance(value, (int, float)), \
                         f"{field} 应该是数字类型，实际为: {type(value)}"
-                    print(f"  ✓ {field}: {value}")
+                    logger.info(f"  ✓ {field}: {value}")
                 else:
-                    print(f"  ○ {field}: null")
+                    logger.info(f"  ○ {field}: null")
         
-        print(f"✓ 金额字段验证完成")
+        logger.info("✓ 金额字段验证完成")
 
     def test_list_account_transactions_categorization_fields(self, open_banking_api, login_session):
         """
@@ -274,7 +275,7 @@ class TestOpenBankingListAccountTransactions:
         """
         # 1. 获取 financial_account_id
         financial_account_api = FinancialAccountAPI(session=login_session)
-        print("\n[Step] 获取真实的 financial_account_id")
+        logger.info("获取真实的 financial_account_id")
         fa_response = financial_account_api.list_financial_accounts(page=0, size=1)
         assert_status_ok(fa_response, 200)
         
@@ -287,7 +288,7 @@ class TestOpenBankingListAccountTransactions:
         financial_account_id = financial_accounts[0]["id"]
         
         # 2. 调用接口
-        print(f"[Step] 调用 List Account Transactions 接口")
+        logger.info("调用 List Account Transactions 接口")
         response = open_banking_api.list_account_transactions(
             financial_account_id=financial_account_id
         )
@@ -302,7 +303,7 @@ class TestOpenBankingListAccountTransactions:
             pytest.skip("没有可用的交易记录，跳过测试")
         
         # 5. 验证分类字段
-        print("[Step] 验证分类相关字段")
+        logger.info("验证分类相关字段")
         transaction = content[0]
         
         categorization_fields = [
@@ -319,10 +320,10 @@ class TestOpenBankingListAccountTransactions:
         for field in categorization_fields:
             if field in transaction:
                 value = transaction.get(field)
-                print(f"  ✓ {field}: {value if value is not None else 'null'}")
+                logger.info(f"  ✓ {field}: {value if value is not None else 'null'}")
                 present_count += 1
         
-        print(f"✓ 分类字段验证完成 (存在 {present_count}/{len(categorization_fields)} 个字段)")
+        logger.info("✓ 分类字段验证完成 (存在 {present_count}/{len(categorization_fields)} 个字段)")
 
     def test_list_account_transactions_invalid_financial_account_id(self, open_banking_api):
         """
@@ -333,17 +334,17 @@ class TestOpenBankingListAccountTransactions:
         """
         # 1. 使用无效的 financial_account_id
         invalid_id = "invalid_financial_account_id_999999"
-        print(f"\n[Step] 使用无效的 financial_account_id: {invalid_id}")
+        logger.info("使用无效的 financial_account_id: {invalid_id}")
         
         # 2. 调用接口
-        print("[Step] 调用 List Account Transactions 接口")
+        logger.info("调用 List Account Transactions 接口")
         response = open_banking_api.list_account_transactions(
             financial_account_id=invalid_id
         )
         
         # 3. 验证返回结果
-        print("[Step] 验证接口返回")
-        print(f"  状态码: {response.status_code}")
+        logger.info("验证接口返回")
+        logger.info(f"  状态码: {response.status_code}")
         
         # 可能返回 200（空数据）或错误状态码
         if response.status_code == 200:
@@ -352,13 +353,13 @@ class TestOpenBankingListAccountTransactions:
             data = response_body.get("data", {})
             content = data.get("content", []) if isinstance(data, dict) else []
             
-            print(f"  Code: {code}")
-            print(f"  交易数量: {len(content)}")
+            logger.info(f"  Code: {code}")
+            logger.info(f"  交易数量: {len(content)}")
             
             # 应该返回空数据或错误码
             assert code != 200 or len(content) == 0, \
                 "无效 ID 应该返回错误或空数据"
         else:
-            print(f"  ✓ 返回错误状态码: {response.status_code}")
+            logger.info(f"  ✓ 返回错误状态码: {response.status_code}")
         
-        print(f"✓ 无效 ID 测试完成")
+        logger.info("✓ 无效 ID 测试完成")

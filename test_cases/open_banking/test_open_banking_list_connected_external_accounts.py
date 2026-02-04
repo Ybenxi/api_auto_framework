@@ -5,6 +5,7 @@ Open Banking List Connected External Accounts 接口测试用例
 import pytest
 from api.account_api import AccountAPI
 from utils.assertions import assert_status_ok, assert_fields_present
+from utils.logger import logger
 
 
 @pytest.mark.list_api
@@ -25,7 +26,7 @@ class TestOpenBankingListConnectedExternalAccounts:
         """
         # 1. 获取真实的 account_id
         account_api = AccountAPI(session=login_session)
-        print("\n[Step] 获取真实的 account_id")
+        logger.info("获取真实的 account_id")
         account_response = account_api.list_accounts(page=0, size=1)
         assert_status_ok(account_response, 200)
         
@@ -36,47 +37,47 @@ class TestOpenBankingListConnectedExternalAccounts:
             pytest.skip("没有可用的 Account 数据，跳过测试")
         
         account_id = accounts[0]["id"]
-        print(f"  获取到 Account ID: {account_id}")
+        logger.info(f"  获取到 Account ID: {account_id}")
         
         # 2. 调用 List Connected External Accounts 接口
-        print(f"[Step] 调用 List Connected External Accounts 接口")
+        logger.info("调用 List Connected External Accounts 接口")
         response = open_banking_api.list_connected_external_accounts(account_id=account_id)
         
         # 3. 验证状态码
-        print("[Step] 验证 HTTP 状态码为 200")
+        logger.info("验证 HTTP 状态码为 200")
         assert_status_ok(response, 200)
         
         # 4. 解析响应并验证数据
-        print("[Step] 解析响应并验证数据")
+        logger.info("解析响应并验证数据")
         response_body = response.json()
         
         # 5. 验证 code 字段
-        print("[Step] 验证 code 字段为 200")
+        logger.info("验证 code 字段为 200")
         assert response_body.get("code") == 200, \
             f"响应 code 不正确: 期望 200, 实际 {response_body.get('code')}"
         
         # 6. 验证 data 是数组
         data = response_body.get("data", [])
         assert isinstance(data, list), "data 字段应该是数组"
-        print(f"[Step] 获取到 {len(data)} 个外部账户")
+        logger.info("获取到 {len(data)} 个外部账户")
         
         # 7. 如果有数据，验证字段结构
         if len(data) > 0:
-            print("[Step] 验证第一个外部账户的必需字段")
+            logger.info("验证第一个外部账户的必需字段")
             external_account = data[0]
             required_fields = ["id", "name", "account_number", "status", "record_type"]
             assert_fields_present(external_account, required_fields, "外部账户数据")
             
             for field in required_fields:
-                print(f"  ✓ {field}: {external_account.get(field)}")
+                logger.info(f"  ✓ {field}: {external_account.get(field)}")
             
-            print(f"\n✓ 成功获取已连接外部账户列表:")
-            print(f"  账户数量: {len(data)}")
-            print(f"  第一个外部账户 ID: {external_account['id']}")
-            print(f"  账户名称: {external_account.get('name')}")
-            print(f"  账户状态: {external_account.get('status')}")
+            logger.info(f"\n✓ 成功获取已连接外部账户列表:")
+            logger.info(f"  账户数量: {len(data)}")
+            logger.info(f"  第一个外部账户 ID: {external_account['id']}")
+            logger.info(f"  账户名称: {external_account.get('name')}")
+            logger.info(f"  账户状态: {external_account.get('status')}")
         else:
-            print("  ⚠ 当前没有已连接的外部账户")
+            logger.info("  ⚠ 当前没有已连接的外部账户")
 
     def test_list_connected_external_accounts_response_structure(self, open_banking_api, login_session):
         """
@@ -88,7 +89,7 @@ class TestOpenBankingListConnectedExternalAccounts:
         """
         # 1. 获取 account_id
         account_api = AccountAPI(session=login_session)
-        print("\n[Step] 获取真实的 account_id")
+        logger.info("获取真实的 account_id")
         account_response = account_api.list_accounts(page=0, size=1)
         assert_status_ok(account_response, 200)
         
@@ -101,15 +102,15 @@ class TestOpenBankingListConnectedExternalAccounts:
         account_id = accounts[0]["id"]
         
         # 2. 调用接口
-        print(f"[Step] 调用 List Connected External Accounts 接口")
+        logger.info("调用 List Connected External Accounts 接口")
         response = open_banking_api.list_connected_external_accounts(account_id=account_id)
         
         # 3. 验证状态码
-        print("[Step] 验证 HTTP 状态码为 200")
+        logger.info("验证 HTTP 状态码为 200")
         assert_status_ok(response, 200)
         
         # 4. 验证响应数据结构
-        print("[Step] 验证响应数据结构")
+        logger.info("验证响应数据结构")
         response_body = response.json()
         
         # 验证是 JSON 对象
@@ -117,8 +118,8 @@ class TestOpenBankingListConnectedExternalAccounts:
         
         # 验证必需字段
         assert_fields_present(response_body, ["code", "data"], "响应")
-        print(f"  ✓ code: {response_body.get('code')}")
-        print(f"  ✓ data: 存在")
+        logger.info(f"  ✓ code: {response_body.get('code')}")
+        logger.info(f"  ✓ data: 存在")
         
         # error_message 和 error 字段仅在失败时存在
         if response_body.get("code") != 200:
@@ -127,7 +128,7 @@ class TestOpenBankingListConnectedExternalAccounts:
         # 验证 data 是数组
         assert isinstance(response_body["data"], list), "data 字段应该是数组"
         
-        print(f"✓ 响应数据结构验证通过")
+        logger.info("✓ 响应数据结构验证通过")
 
     def test_list_connected_external_accounts_all_fields(self, open_banking_api, login_session):
         """
@@ -138,7 +139,7 @@ class TestOpenBankingListConnectedExternalAccounts:
         """
         # 1. 获取 account_id
         account_api = AccountAPI(session=login_session)
-        print("\n[Step] 获取真实的 account_id")
+        logger.info("获取真实的 account_id")
         account_response = account_api.list_accounts(page=0, size=1)
         assert_status_ok(account_response, 200)
         
@@ -151,7 +152,7 @@ class TestOpenBankingListConnectedExternalAccounts:
         account_id = accounts[0]["id"]
         
         # 3. 调用接口
-        print(f"[Step] 调用 List Connected External Accounts 接口")
+        logger.info("调用 List Connected External Accounts 接口")
         response = open_banking_api.list_connected_external_accounts(account_id=account_id)
         
         # 4. 验证状态码
@@ -163,7 +164,7 @@ class TestOpenBankingListConnectedExternalAccounts:
             pytest.skip("没有可用的外部账户数据，跳过测试")
         
         # 5. 验证所有字段
-        print("[Step] 验证第一个外部账户的所有字段")
+        logger.info("验证第一个外部账户的所有字段")
         external_account = data[0]
         
         all_fields = [
@@ -178,14 +179,14 @@ class TestOpenBankingListConnectedExternalAccounts:
                 missing_fields.append(field)
             else:
                 value = external_account.get(field)
-                print(f"  ✓ {field}: {value if value is not None else 'null'}")
+                logger.info(f"  ✓ {field}: {value if value is not None else 'null'}")
         
         if missing_fields:
-            print(f"  ⚠ 缺少字段: {', '.join(missing_fields)}")
+            logger.info(f"  ⚠ 缺少字段: {', '.join(missing_fields)}")
         else:
-            print(f"  ✓ 所有字段都存在")
+            logger.info(f"  ✓ 所有字段都存在")
         
-        print(f"✓ 字段完整性验证完成")
+        logger.info("✓ 字段完整性验证完成")
 
     def test_list_connected_external_accounts_status_values(self, open_banking_api, login_session):
         """
@@ -197,7 +198,7 @@ class TestOpenBankingListConnectedExternalAccounts:
         """
         # 1. 获取 account_id
         account_api = AccountAPI(session=login_session)
-        print("\n[Step] 获取真实的 account_id")
+        logger.info("获取真实的 account_id")
         account_response = account_api.list_accounts(page=0, size=1)
         assert_status_ok(account_response, 200)
         
@@ -210,7 +211,7 @@ class TestOpenBankingListConnectedExternalAccounts:
         account_id = accounts[0]["id"]
         
         # 2. 调用接口
-        print(f"[Step] 调用 List Connected External Accounts 接口")
+        logger.info("调用 List Connected External Accounts 接口")
         response = open_banking_api.list_connected_external_accounts(account_id=account_id)
         
         # 3. 验证状态码
@@ -222,7 +223,7 @@ class TestOpenBankingListConnectedExternalAccounts:
             pytest.skip("没有可用的外部账户数据，跳过测试")
         
         # 5. 验证 status
-        print("[Step] 验证 status 字段")
+        logger.info("验证 status 字段")
         
         status_values = set()
         for external_account in data:
@@ -231,18 +232,18 @@ class TestOpenBankingListConnectedExternalAccounts:
             if status:
                 status_values.add(status)
         
-        print(f"  发现的状态值: {', '.join(status_values)}")
+        logger.info(f"  发现的状态值: {', '.join(status_values)}")
         
         # 常见的状态值
         common_statuses = ["Open", "Closed", "Active", "Inactive"]
         
         for status in status_values:
             if status in common_statuses:
-                print(f"  ✓ {status} 是常见状态值")
+                logger.info(f"  ✓ {status} 是常见状态值")
             else:
-                print(f"  ⚠ {status} 是非常见状态值")
+                logger.info(f"  ⚠ {status} 是非常见状态值")
         
-        print(f"✓ status 验证完成")
+        logger.info("✓ status 验证完成")
 
     def test_list_connected_external_accounts_record_type_values(self, open_banking_api, login_session):
         """
@@ -254,7 +255,7 @@ class TestOpenBankingListConnectedExternalAccounts:
         """
         # 1. 获取 account_id
         account_api = AccountAPI(session=login_session)
-        print("\n[Step] 获取真实的 account_id")
+        logger.info("获取真实的 account_id")
         account_response = account_api.list_accounts(page=0, size=1)
         assert_status_ok(account_response, 200)
         
@@ -267,7 +268,7 @@ class TestOpenBankingListConnectedExternalAccounts:
         account_id = accounts[0]["id"]
         
         # 2. 调用接口
-        print(f"[Step] 调用 List Connected External Accounts 接口")
+        logger.info("调用 List Connected External Accounts 接口")
         response = open_banking_api.list_connected_external_accounts(account_id=account_id)
         
         # 3. 验证状态码
@@ -279,7 +280,7 @@ class TestOpenBankingListConnectedExternalAccounts:
             pytest.skip("没有可用的外部账户数据，跳过测试")
         
         # 5. 验证 record_type
-        print("[Step] 验证 record_type 字段")
+        logger.info("验证 record_type 字段")
         
         record_type_values = set()
         for external_account in data:
@@ -288,18 +289,18 @@ class TestOpenBankingListConnectedExternalAccounts:
             if record_type:
                 record_type_values.add(record_type)
         
-        print(f"  发现的 record_type 值: {', '.join(record_type_values)}")
+        logger.info(f"  发现的 record_type 值: {', '.join(record_type_values)}")
         
         # 常见的 record_type 值
         common_types = ["Saving", "Checking", "Investment", "Credit"]
         
         for record_type in record_type_values:
             if record_type in common_types:
-                print(f"  ✓ {record_type} 是常见账户类型")
+                logger.info(f"  ✓ {record_type} 是常见账户类型")
             else:
-                print(f"  ⚠ {record_type} 是非常见账户类型")
+                logger.info(f"  ⚠ {record_type} 是非常见账户类型")
         
-        print(f"✓ record_type 验证完成")
+        logger.info("✓ record_type 验证完成")
 
     def test_list_connected_external_accounts_using_helper_method(self, open_banking_api, login_session):
         """
@@ -311,7 +312,7 @@ class TestOpenBankingListConnectedExternalAccounts:
         """
         # 1. 获取 account_id
         account_api = AccountAPI(session=login_session)
-        print("\n[Step] 获取真实的 account_id")
+        logger.info("获取真实的 account_id")
         account_response = account_api.list_accounts(page=0, size=1)
         assert_status_ok(account_response, 200)
         
@@ -324,15 +325,15 @@ class TestOpenBankingListConnectedExternalAccounts:
         account_id = accounts[0]["id"]
         
         # 2. 调用接口
-        print(f"[Step] 调用 List Connected External Accounts 接口")
+        logger.info("调用 List Connected External Accounts 接口")
         response = open_banking_api.list_connected_external_accounts(account_id=account_id)
         
         # 3. 使用辅助方法解析响应
-        print("[Step] 使用 parse_list_response 辅助方法解析响应")
+        logger.info("使用 parse_list_response 辅助方法解析响应")
         parsed = open_banking_api.parse_list_response(response)
         
         # 4. 验证解析结果
-        print("[Step] 验证解析结果")
+        logger.info("验证解析结果")
         assert not parsed.get("error"), f"响应解析失败: {parsed.get('message')}"
         
         # 验证包含必需字段
@@ -344,7 +345,7 @@ class TestOpenBankingListConnectedExternalAccounts:
         # 验证 data 是列表
         assert isinstance(parsed["data"], list), "data 应该是列表"
         
-        print(f"\n✓ 辅助方法解析验证通过:")
-        print(f"  Code: {parsed['code']}")
-        print(f"  外部账户数量: {len(parsed['data'])}")
-        print(f"  Error Message: {parsed.get('error_message')}")
+        logger.info(f"\n✓ 辅助方法解析验证通过:")
+        logger.info(f"  Code: {parsed['code']}")
+        logger.info(f"  外部账户数量: {len(parsed['data'])}")
+        logger.info(f"  Error Message: {parsed.get('error_message')}")

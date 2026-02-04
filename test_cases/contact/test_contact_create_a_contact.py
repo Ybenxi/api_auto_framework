@@ -5,6 +5,7 @@ Contact Create 接口测试用例
 import pytest
 import time
 from api.contact_api import ContactAPI
+from utils.logger import logger
 
 
 # ==================== 测试数据常量 ====================
@@ -35,7 +36,7 @@ class TestContactCreate:
         contact_api = ContactAPI(session=login_session)
         
         # 2. 准备创建数据（仅必需字段）
-        print("\n[Step] 准备创建 Contact 数据（仅必需字段）")
+        logger.info("准备创建 Contact 数据（仅必需字段）")
         
         # 使用随机 Email 避免重复
         random_email = f"auto_test_{int(time.time())}@example.com"
@@ -48,29 +49,29 @@ class TestContactCreate:
             "email": random_email
         }
         
-        print(f"  Account ID: {FIXED_ACCOUNT_ID}")
-        print(f"  Name: {contact_data['first_name']} {contact_data['last_name']}")
-        print(f"  Birth Date: {contact_data['birth_date']}")
-        print(f"  Email: {contact_data['email']}")
+        logger.info(f"  Account ID: {FIXED_ACCOUNT_ID}")
+        logger.info(f"  Name: {contact_data['first_name']} {contact_data['last_name']}")
+        logger.info(f"  Birth Date: {contact_data['birth_date']}")
+        logger.info(f"  Email: {contact_data['email']}")
         
         # 3. 调用 Create 接口
-        print("[Step] 调用 Create Contact 接口")
+        logger.info("调用 Create Contact 接口")
         create_response = contact_api.create_contact(contact_data)
         
         # 4. 断言状态码
-        print("[Step] 验证 HTTP 状态码为 200")
+        logger.info("验证 HTTP 状态码为 200")
         assert create_response.status_code == 200, \
             f"Create Contact 接口返回状态码错误: {create_response.status_code}, Response: {create_response.text}"
         
         # 5. 解析响应（修复：提取 data 字段，增强健壮性）
-        print("[Step] 解析响应并验证数据")
+        logger.info("解析响应并验证数据")
         response_body = create_response.json()
         
         # 检查是否是 Email 重复错误（code 599）
         if response_body.get("code") == 599:
-            print("  ⚠ Email 已存在（Code 599），这不应该发生（使用了随机 Email）")
-            print(f"  错误信息: {response_body.get('error_message') or response_body.get('message')}")
-            print(f"  响应体: {response_body}")
+            logger.info("  ⚠ Email 已存在（Code 599），这不应该发生（使用了随机 Email）")
+            logger.info(f"  错误信息: {response_body.get('error_message') or response_body.get('message')}")
+            logger.info(f"  响应体: {response_body}")
             pytest.fail("Email 重复错误，请检查随机 Email 生成逻辑")
         
         # 检查响应结构
@@ -81,24 +82,24 @@ class TestContactCreate:
         
         # 增强健壮性：检查 created_contact 是否为 None
         if created_contact is None:
-            print("  ❌ created_contact 为 None")
-            print(f"  响应体: {response_body}")
-            print(f"  响应码: {response_body.get('code')}")
-            print(f"  错误信息: {response_body.get('error_message') or response_body.get('message')}")
+            logger.info("  ❌ created_contact 为 None")
+            logger.info(f"  响应体: {response_body}")
+            logger.info(f"  响应码: {response_body.get('code')}")
+            logger.info(f"  错误信息: {response_body.get('error_message') or response_body.get('message')}")
             pytest.fail(f"创建失败，data 为 None。响应: {response_body}")
         
         # 6. 验证返回的 ID 存在
-        print("[Step] 验证返回的 Contact ID 存在")
+        logger.info("验证返回的 Contact ID 存在")
         assert "id" in created_contact, f"响应中缺少 id 字段。响应: {created_contact}"
         assert created_contact["id"] is not None, "Contact ID 为 null"
         
         # 7. 验证 account_id
-        print("[Step] 验证 account_id 等于传入值")
+        logger.info("验证 account_id 等于传入值")
         assert created_contact.get("account_id") == FIXED_ACCOUNT_ID, \
             f"account_id 不匹配: 期望 {FIXED_ACCOUNT_ID}, 实际 {created_contact.get('account_id')}"
         
         # 8. 验证其他字段
-        print("[Step] 验证其他字段")
+        logger.info("验证其他字段")
         assert created_contact.get("first_name") == contact_data["first_name"], \
             f"first_name 不匹配: 期望 {contact_data['first_name']}, 实际 {created_contact.get('first_name')}"
         
@@ -108,12 +109,12 @@ class TestContactCreate:
         assert created_contact.get("email") == contact_data["email"], \
             f"email 不匹配: 期望 {contact_data['email']}, 实际 {created_contact.get('email')}"
         
-        print(f"✓ 成功创建 Contact:")
-        print(f"  ID: {created_contact['id']}")
-        print(f"  Name: {created_contact.get('name')}")
-        print(f"  Account ID: {created_contact.get('account_id')}")
-        print(f"  Email: {created_contact.get('email')}")
-        print(f"  Status: {created_contact.get('status')}")
+        logger.info("✓ 成功创建 Contact:")
+        logger.info(f"  ID: {created_contact['id']}")
+        logger.info(f"  Name: {created_contact.get('name')}")
+        logger.info(f"  Account ID: {created_contact.get('account_id')}")
+        logger.info(f"  Email: {created_contact.get('email')}")
+        logger.info(f"  Status: {created_contact.get('status')}")
 
     def test_create_contact_with_all_fields(self, login_session):
         """
@@ -127,7 +128,7 @@ class TestContactCreate:
         contact_api = ContactAPI(session=login_session)
         
         # 2. 准备创建数据（包含所有字段）
-        print("\n[Step] 准备创建 Contact 数据（包含所有字段）")
+        logger.info("准备创建 Contact 数据（包含所有字段）")
         contact_data = {
             "account_id": FIXED_ACCOUNT_ID,
             "first_name": "Auto TestYan",
@@ -163,29 +164,29 @@ class TestContactCreate:
             "description": "Test contact with all fields"
         }
         
-        print(f"  Account ID: {FIXED_ACCOUNT_ID}")
-        print(f"  Name: {contact_data['first_name']} {contact_data['middle_name']} {contact_data['last_name']}")
-        print(f"  Email: {contact_data['email']}")
-        print(f"  Phone: {contact_data['phone']}")
+        logger.info(f"  Account ID: {FIXED_ACCOUNT_ID}")
+        logger.info(f"  Name: {contact_data['first_name']} {contact_data['middle_name']} {contact_data['last_name']}")
+        logger.info(f"  Email: {contact_data['email']}")
+        logger.info(f"  Phone: {contact_data['phone']}")
         
         # 3. 调用 Create 接口
-        print("[Step] 调用 Create Contact 接口")
+        logger.info("调用 Create Contact 接口")
         create_response = contact_api.create_contact(contact_data)
         
         # 4. 断言状态码（修复：允许 200 或 599）
-        print("[Step] 验证 HTTP 状态码为 200")
+        logger.info("验证 HTTP 状态码为 200")
         assert create_response.status_code == 200, \
             f"Create Contact 接口返回状态码错误: {create_response.status_code}, Response: {create_response.text}"
         
         # 5. 解析响应（修复：提取 data 字段，处理 SSN 重复）
-        print("[Step] 解析响应并验证数据")
+        logger.info("解析响应并验证数据")
         response_body = create_response.json()
         
         # 检查是否是 SSN 重复错误（code 599）
         if response_body.get("code") == 599:
-            print("  ⚠ SSN/TIN 已存在（Code 599），这证明了接口参数被正确识别")
-            print(f"  错误信息: {response_body.get('error_message') or response_body.get('message')}")
-            print(f"✓ SSN 重复测试通过（接口参数验证正常）")
+            logger.info("  ⚠ SSN/TIN 已存在（Code 599），这证明了接口参数被正确识别")
+            logger.info(f"  错误信息: {response_body.get('error_message') or response_body.get('message')}")
+            logger.info("✓ SSN 重复测试通过（接口参数验证正常）")
             return
         
         # 检查响应结构
@@ -195,12 +196,12 @@ class TestContactCreate:
             created_contact = response_body
         
         # 6. 验证返回的 ID 存在
-        print("[Step] 验证返回的 Contact ID 存在")
+        logger.info("验证返回的 Contact ID 存在")
         assert "id" in created_contact, "响应中缺少 id 字段"
         assert created_contact["id"] is not None, "Contact ID 为 null"
         
         # 7. 验证可选字段
-        print("[Step] 验证可选字段")
+        logger.info("验证可选字段")
         assert created_contact.get("middle_name") == contact_data["middle_name"], \
             f"middle_name 不匹配"
         
@@ -211,13 +212,13 @@ class TestContactCreate:
             f"gender 不匹配"
         
         # ssn_tin 可能返回脱敏后的值，只验证字段存在
-        print(f"  ssn_tin: {created_contact.get('ssn_tin')}")
+        logger.info(f"  ssn_tin: {created_contact.get('ssn_tin')}")
         
-        print(f"✓ 成功创建 Contact（包含所有字段）:")
-        print(f"  ID: {created_contact['id']}")
-        print(f"  Name: {created_contact.get('name')}")
-        print(f"  Phone: {created_contact.get('phone')}")
-        print(f"  Gender: {created_contact.get('gender')}")
+        logger.info("✓ 成功创建 Contact（包含所有字段）:")
+        logger.info(f"  ID: {created_contact['id']}")
+        logger.info(f"  Name: {created_contact.get('name')}")
+        logger.info(f"  Phone: {created_contact.get('phone')}")
+        logger.info(f"  Gender: {created_contact.get('gender')}")
 
     def test_create_contact_with_ssn(self, login_session):
         """
@@ -231,7 +232,7 @@ class TestContactCreate:
         contact_api = ContactAPI(session=login_session)
         
         # 2. 准备创建数据（包含 SSN）
-        print("\n[Step] 准备创建 Contact 数据（包含加密 SSN）")
+        logger.info("准备创建 Contact 数据（包含加密 SSN）")
         contact_data = {
             "account_id": FIXED_ACCOUNT_ID,
             "first_name": "Auto TestYan",
@@ -241,29 +242,29 @@ class TestContactCreate:
             "ssn_tin": ENCRYPTED_SSN
         }
         
-        print(f"  Account ID: {FIXED_ACCOUNT_ID}")
-        print(f"  Name: {contact_data['first_name']} {contact_data['last_name']}")
-        print(f"  Email: {contact_data['email']}")
-        print(f"  SSN: {ENCRYPTED_SSN[:50]}...")
+        logger.info(f"  Account ID: {FIXED_ACCOUNT_ID}")
+        logger.info(f"  Name: {contact_data['first_name']} {contact_data['last_name']}")
+        logger.info(f"  Email: {contact_data['email']}")
+        logger.info(f"  SSN: {ENCRYPTED_SSN[:50]}...")
         
         # 3. 调用 Create 接口
-        print("[Step] 调用 Create Contact 接口")
+        logger.info("调用 Create Contact 接口")
         create_response = contact_api.create_contact(contact_data)
         
         # 4. 断言状态码（修复：允许 200 或 599）
-        print("[Step] 验证 HTTP 状态码为 200")
+        logger.info("验证 HTTP 状态码为 200")
         assert create_response.status_code == 200, \
             f"Create Contact 接口返回状态码错误: {create_response.status_code}, Response: {create_response.text}"
         
         # 5. 解析响应（修复：提取 data 字段，处理 SSN 重复）
-        print("[Step] 解析响应并验证数据")
+        logger.info("解析响应并验证数据")
         response_body = create_response.json()
         
         # 检查是否是 SSN 重复错误（code 599）
         if response_body.get("code") == 599:
-            print("  ⚠ SSN/TIN 已存在（Code 599），这证明了接口参数被正确识别")
-            print(f"  错误信息: {response_body.get('error_message') or response_body.get('message')}")
-            print(f"✓ SSN 重复测试通过（接口参数验证正常）")
+            logger.info("  ⚠ SSN/TIN 已存在（Code 599），这证明了接口参数被正确识别")
+            logger.info(f"  错误信息: {response_body.get('error_message') or response_body.get('message')}")
+            logger.info("✓ SSN 重复测试通过（接口参数验证正常）")
             return
         
         # 检查响应结构
@@ -273,18 +274,18 @@ class TestContactCreate:
             created_contact = response_body
         
         # 6. 验证返回的 ID 存在
-        print("[Step] 验证返回的 Contact ID 存在")
+        logger.info("验证返回的 Contact ID 存在")
         assert "id" in created_contact, "响应中缺少 id 字段"
         assert created_contact["id"] is not None, "Contact ID 为 null"
         
         # 7. 验证 ssn_tin 字段存在
-        print("[Step] 验证 ssn_tin 字段存在")
+        logger.info("验证 ssn_tin 字段存在")
         ssn_tin = created_contact.get("ssn_tin")
-        print(f"  ssn_tin: {ssn_tin}")
+        logger.info(f"  ssn_tin: {ssn_tin}")
         
-        print(f"✓ 成功创建 Contact（包含 SSN）:")
-        print(f"  ID: {created_contact['id']}")
-        print(f"  Name: {created_contact.get('name')}")
+        logger.info("✓ 成功创建 Contact（包含 SSN）:")
+        logger.info(f"  ID: {created_contact['id']}")
+        logger.info(f"  Name: {created_contact.get('name')}")
 
     def test_create_contact_missing_required_field(self, login_session):
         """
@@ -297,7 +298,7 @@ class TestContactCreate:
         contact_api = ContactAPI(session=login_session)
         
         # 2. 准备创建数据（缺少 first_name）
-        print("\n[Step] 准备创建 Contact 数据（缺少 first_name）")
+        logger.info("准备创建 Contact 数据（缺少 first_name）")
         contact_data = {
             "account_id": FIXED_ACCOUNT_ID,
             # "first_name": "Missing",  # 故意缺少
@@ -307,11 +308,11 @@ class TestContactCreate:
         }
         
         # 3. 调用 Create 接口
-        print("[Step] 调用 Create Contact 接口")
+        logger.info("调用 Create Contact 接口")
         create_response = contact_api.create_contact(contact_data)
         
         # 4. 验证返回错误（修复：检查 code 或 data）
-        print("[Step] 验证返回错误")
+        logger.info("验证返回错误")
         response_body = create_response.json()
         
         # 检查响应 code
@@ -322,11 +323,11 @@ class TestContactCreate:
         
         # 验证：code != 200 或 data 中不包含有效 ID
         if response_code != 200:
-            print(f"✓ 缺少必需字段测试完成（返回错误码 {response_code}）:")
-            print(f"  错误信息: {response_body.get('error_message') or response_body.get('message')}")
+            logger.info("✓ 缺少必需字段测试完成（返回错误码 {response_code}）:")
+            logger.info(f"  错误信息: {response_body.get('error_message') or response_body.get('message')}")
         elif data is None or not data.get("id"):
-            print(f"✓ 缺少必需字段测试完成（data 中不包含有效 ID）:")
-            print(f"  响应: {response_body}")
+            logger.info("✓ 缺少必需字段测试完成（data 中不包含有效 ID）:")
+            logger.info(f"  响应: {response_body}")
         else:
             # 如果返回了有效 ID，说明后端没有验证必需字段
             pytest.fail(f"后端未验证必需字段，返回了有效 ID: {data.get('id')}")
@@ -342,7 +343,7 @@ class TestContactCreate:
         contact_api = ContactAPI(session=login_session)
         
         # 2. 准备创建数据（无效的 email）
-        print("\n[Step] 准备创建 Contact 数据（无效的 email）")
+        logger.info("准备创建 Contact 数据（无效的 email）")
         contact_data = {
             "account_id": FIXED_ACCOUNT_ID,
             "first_name": "Auto TestYan",
@@ -352,23 +353,23 @@ class TestContactCreate:
         }
         
         # 3. 调用 Create 接口
-        print("[Step] 调用 Create Contact 接口")
+        logger.info("调用 Create Contact 接口")
         create_response = contact_api.create_contact(contact_data)
         
         # 4. 验证返回错误状态码
-        print("[Step] 验证返回错误状态码（400 或其他）")
+        logger.info("验证返回错误状态码（400 或其他）")
         # 注意：有些 API 可能不验证 email 格式，这里只记录结果
-        print(f"  状态码: {create_response.status_code}")
-        print(f"  响应: {create_response.text}")
+        logger.info(f"  状态码: {create_response.status_code}")
+        logger.info(f"  响应: {create_response.text}")
         
         if create_response.status_code != 200:
-            print(f"✓ Email 格式验证生效")
+            logger.info("✓ Email 格式验证生效")
         else:
             response_body = create_response.json()
             if response_body.get("code") != 200:
-                print(f"✓ Email 格式验证生效（返回错误码 {response_body.get('code')}）")
+                logger.info("✓ Email 格式验证生效（返回错误码 {response_body.get('code')}）")
             else:
-                print(f"⚠ API 未验证 email 格式")
+                logger.info(f"⚠ API 未验证 email 格式")
 
     def test_create_contact_invalid_phone_format(self, login_session):
         """
@@ -381,7 +382,7 @@ class TestContactCreate:
         contact_api = ContactAPI(session=login_session)
         
         # 2. 准备创建数据（无效的 phone）
-        print("\n[Step] 准备创建 Contact 数据（无效的 phone 格式）")
+        logger.info("准备创建 Contact 数据（无效的 phone 格式）")
         contact_data = {
             "account_id": FIXED_ACCOUNT_ID,
             "first_name": "Auto TestYan",
@@ -392,22 +393,22 @@ class TestContactCreate:
         }
         
         # 3. 调用 Create 接口
-        print("[Step] 调用 Create Contact 接口")
+        logger.info("调用 Create Contact 接口")
         create_response = contact_api.create_contact(contact_data)
         
         # 4. 验证返回错误状态码
-        print("[Step] 验证返回错误状态码（400 或其他）")
-        print(f"  状态码: {create_response.status_code}")
-        print(f"  响应: {create_response.text}")
+        logger.info("验证返回错误状态码（400 或其他）")
+        logger.info(f"  状态码: {create_response.status_code}")
+        logger.info(f"  响应: {create_response.text}")
         
         if create_response.status_code != 200:
-            print(f"✓ Phone 格式验证生效")
+            logger.info("✓ Phone 格式验证生效")
         else:
             response_body = create_response.json()
             if response_body.get("code") != 200:
-                print(f"✓ Phone 格式验证生效（返回错误码 {response_body.get('code')}）")
+                logger.info("✓ Phone 格式验证生效（返回错误码 {response_body.get('code')}）")
             else:
-                print(f"⚠ API 未验证 phone 格式")
+                logger.info(f"⚠ API 未验证 phone 格式")
 
     def test_create_contact_then_retrieve_detail(self, login_session):
         """
@@ -421,7 +422,7 @@ class TestContactCreate:
         contact_api = ContactAPI(session=login_session)
         
         # 准备创建数据（使用唯一email避免冲突）
-        print("\n[Step] 准备创建 Contact 数据")
+        logger.info("准备创建 Contact 数据")
         random_email = f"auto_test_verify_{int(time.time())}@example.com"
         
         contact_data = {
@@ -434,7 +435,7 @@ class TestContactCreate:
         }
         
         # 调用 Create 接口
-        print("[Step] 调用 Create Contact 接口")
+        logger.info("调用 Create Contact 接口")
         create_response = contact_api.create_contact(contact_data)
         
         # 验证创建成功
@@ -453,7 +454,7 @@ class TestContactCreate:
         assert contact_id is not None, "创建的 Contact ID 为 None"
         
         # 立即调用 Detail 接口
-        print(f"[Step] 立即查询 Contact 详情 (ID: {contact_id})")
+        logger.info("立即查询 Contact 详情 (ID: {contact_id})")
         detail_response = contact_api.get_contact_detail(contact_id)
         
         assert detail_response.status_code == 200, \
@@ -463,7 +464,7 @@ class TestContactCreate:
         detail_contact = detail_body.get("data") or detail_body
         
         # 验证字段一致性
-        print("[Step] 验证创建和详情数据一致性")
+        logger.info("验证创建和详情数据一致性")
         assert detail_contact.get("account_id") == contact_data["account_id"], \
             "account_id 不一致"
         assert detail_contact.get("first_name") == contact_data["first_name"], \
@@ -475,10 +476,10 @@ class TestContactCreate:
         assert detail_contact.get("phone") == contact_data["phone"], \
             "phone 不一致"
         
-        print(f"✓ 创建后立即查询验证通过，数据完全一致")
-        print(f"  Contact ID: {contact_id}")
-        print(f"  Name: {detail_contact.get('name')}")
-        print(f"  Email: {detail_contact.get('email')}")
+        logger.info("✓ 创建后立即查询验证通过，数据完全一致")
+        logger.info(f"  Contact ID: {contact_id}")
+        logger.info(f"  Name: {detail_contact.get('name')}")
+        logger.info(f"  Email: {detail_contact.get('email')}")
 
     def test_create_contact_with_empty_strings(self, login_session):
         """
@@ -490,7 +491,7 @@ class TestContactCreate:
         contact_api = ContactAPI(session=login_session)
         
         # 准备创建数据（first_name 为空字符串）
-        print("\n[Step] 准备创建 Contact 数据（first_name 为空字符串）")
+        logger.info("准备创建 Contact 数据（first_name 为空字符串）")
         random_email = f"auto_test_empty_{int(time.time())}@example.com"
         
         contact_data = {
@@ -502,22 +503,22 @@ class TestContactCreate:
         }
         
         # 调用 Create 接口
-        print("[Step] 调用 Create Contact 接口")
+        logger.info("调用 Create Contact 接口")
         create_response = contact_api.create_contact(contact_data)
         
         # 验证响应
-        print("[Step] 验证 API 对空字符串的处理")
-        print(f"  状态码: {create_response.status_code}")
+        logger.info("验证 API 对空字符串的处理")
+        logger.info(f"  状态码: {create_response.status_code}")
         
         if create_response.status_code == 200:
             response_body = create_response.json()
-            print(f"  响应: {response_body}")
+            logger.info(f"  响应: {response_body}")
             
             if response_body.get("code") != 200:
-                print(f"✓ API 拒绝空字符串（返回错误码 {response_body.get('code')}）")
+                logger.info("✓ API 拒绝空字符串（返回错误码 {response_body.get('code')}）")
             else:
                 # API 接受了空字符串
-                print(f"⚠ API 接受了空字符串作为 first_name")
-                print(f"  建议：first_name 应该有非空验证")
+                logger.info(f"⚠ API 接受了空字符串作为 first_name")
+                logger.info(f"  建议：first_name 应该有非空验证")
         else:
-            print(f"✓ API 拒绝空字符串（返回 HTTP 状态码 {create_response.status_code}）")
+            logger.info("✓ API 拒绝空字符串（返回 HTTP 状态码 {create_response.status_code}）")

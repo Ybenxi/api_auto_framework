@@ -5,6 +5,7 @@ Financial Account Related Settled Transactions 接口测试用例
 """
 import pytest
 from api.financial_account_api import FinancialAccountAPI
+from utils.logger import logger
 
 
 @pytest.mark.financial_account
@@ -25,7 +26,7 @@ class TestFinancialAccountRetrieveRelatedSettledTransactions:
         fa_api = FinancialAccountAPI(session=login_session)
         
         # 获取 Financial Account
-        print("\n[Step] 获取 Financial Accounts 列表")
+        logger.info("获取 Financial Accounts 列表")
         list_response = fa_api.list_financial_accounts(page=0, size=1)
         assert list_response.status_code == 200
         
@@ -36,13 +37,13 @@ class TestFinancialAccountRetrieveRelatedSettledTransactions:
             pytest.skip("没有可用的 Financial Account 进行测试")
         
         financial_account_id = accounts[0].get("id")
-        print(f"  使用 Financial Account ID: {financial_account_id}")
+        logger.info(f"  使用 Financial Account ID: {financial_account_id}")
         
         # 获取已结算交易
-        print("[Step] 调用 Retrieve Related Settled Transactions 接口")
+        logger.info("调用 Retrieve Related Settled Transactions 接口")
         settled_response = fa_api.get_settled_transactions(financial_account_id, page=0, size=10)
         
-        print("[Step] 验证 HTTP 状态码为 200")
+        logger.info("验证 HTTP 状态码为 200")
         assert settled_response.status_code == 200, \
             f"接口返回状态码错误: {settled_response.status_code}, Response: {settled_response.text}"
         
@@ -50,13 +51,13 @@ class TestFinancialAccountRetrieveRelatedSettledTransactions:
         assert not parsed_settled.get("error"), f"响应解析失败: {parsed_settled.get('message')}"
         
         transactions = parsed_settled.get("content", [])
-        print(f"✓ 成功获取已结算交易:")
-        print(f"  总交易数: {parsed_settled['total_elements']}")
-        print(f"  返回 {len(transactions)} 条交易记录")
+        logger.info("✓ 成功获取已结算交易:")
+        logger.info(f"  总交易数: {parsed_settled['total_elements']}")
+        logger.info(f"  返回 {len(transactions)} 条交易记录")
         
         if len(transactions) > 0:
             txn = transactions[0]
-            print(f"  第一条交易: {txn.get('transaction_type')} - {txn.get('symbol')} ({txn.get('settle_date')})")
+            logger.info(f"  第一条交易: {txn.get('transaction_type')} - {txn.get('symbol')} ({txn.get('settle_date')})")
 
     def test_retrieve_settled_transactions_with_date_filter(self, login_session):
         """
@@ -78,7 +79,7 @@ class TestFinancialAccountRetrieveRelatedSettledTransactions:
         
         financial_account_id = accounts[0].get("id")
         
-        print("\n[Step] 使用日期范围筛选已结算交易")
+        logger.info("使用日期范围筛选已结算交易")
         settled_response = fa_api.get_settled_transactions(
             financial_account_id, 
             begin_date="2024-01-01",
@@ -91,9 +92,9 @@ class TestFinancialAccountRetrieveRelatedSettledTransactions:
         parsed_settled = fa_api.parse_list_response(settled_response)
         
         transactions = parsed_settled.get("content", [])
-        print(f"  返回 {len(transactions)} 条匹配的交易记录")
+        logger.info(f"  返回 {len(transactions)} 条匹配的交易记录")
         
-        print(f"✓ 日期筛选测试完成")
+        logger.info("✓ 日期筛选测试完成")
 
     def test_retrieve_settled_transactions_with_security_filter(self, login_session):
         """
@@ -115,7 +116,7 @@ class TestFinancialAccountRetrieveRelatedSettledTransactions:
         
         financial_account_id = accounts[0].get("id")
         
-        print("\n[Step] 使用 security 筛选已结算交易")
+        logger.info("使用 security 筛选已结算交易")
         settled_response = fa_api.get_settled_transactions(
             financial_account_id, 
             security="AAPL",
@@ -127,9 +128,9 @@ class TestFinancialAccountRetrieveRelatedSettledTransactions:
         parsed_settled = fa_api.parse_list_response(settled_response)
         
         transactions = parsed_settled.get("content", [])
-        print(f"  返回 {len(transactions)} 条匹配的交易记录")
+        logger.info(f"  返回 {len(transactions)} 条匹配的交易记录")
         
-        print(f"✓ Security 筛选测试完成")
+        logger.info("✓ Security 筛选测试完成")
 
     def test_retrieve_settled_transactions_pagination(self, login_session):
         """
@@ -151,7 +152,7 @@ class TestFinancialAccountRetrieveRelatedSettledTransactions:
         
         financial_account_id = accounts[0].get("id")
         
-        print("\n[Step] 使用分页参数 page=0, size=5")
+        logger.info("使用分页参数 page=0, size=5")
         settled_response = fa_api.get_settled_transactions(
             financial_account_id, 
             page=0, 
@@ -161,11 +162,11 @@ class TestFinancialAccountRetrieveRelatedSettledTransactions:
         assert settled_response.status_code == 200
         parsed_settled = fa_api.parse_list_response(settled_response)
         
-        print(f"✓ 分页测试完成:")
-        print(f"  总元素数: {parsed_settled['total_elements']}")
-        print(f"  总页数: {parsed_settled['total_pages']}")
-        print(f"  当前页: {parsed_settled['number']}")
-        print(f"  每页大小: {parsed_settled['size']}")
+        logger.info("✓ 分页测试完成:")
+        logger.info(f"  总元素数: {parsed_settled['total_elements']}")
+        logger.info(f"  总页数: {parsed_settled['total_pages']}")
+        logger.info(f"  当前页: {parsed_settled['number']}")
+        logger.info(f"  每页大小: {parsed_settled['size']}")
 
     def test_retrieve_settled_transactions_response_fields(self, login_session):
         """
@@ -187,7 +188,7 @@ class TestFinancialAccountRetrieveRelatedSettledTransactions:
         
         financial_account_id = accounts[0].get("id")
         
-        print("\n[Step] 获取已结算交易并验证字段")
+        logger.info("获取已结算交易并验证字段")
         settled_response = fa_api.get_settled_transactions(financial_account_id, page=0, size=1)
         assert settled_response.status_code == 200
         
@@ -202,11 +203,11 @@ class TestFinancialAccountRetrieveRelatedSettledTransactions:
                 "amount", "units", "price", "trade_date", "settle_date"
             ]
             
-            print("[Step] 验证交易字段")
+            logger.info("验证交易字段")
             for field in expected_fields:
                 value = txn.get(field, "(not present)")
-                print(f"  {field}: {value}")
+                logger.info(f"  {field}: {value}")
             
-            print(f"✓ 字段验证完成")
+            logger.info("✓ 字段验证完成")
         else:
-            print("  跳过字段验证（列表为空）")
+            logger.info("  跳过字段验证（列表为空）")

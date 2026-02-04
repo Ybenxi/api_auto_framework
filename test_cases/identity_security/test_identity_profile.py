@@ -5,6 +5,7 @@ Identity Security - User Profile 接口测试用例
 """
 import pytest
 from utils.assertions import (
+from utils.logger import logger
     assert_status_ok,
     assert_response_parsed,
     assert_fields_present
@@ -43,11 +44,11 @@ class TestIdentityProfile:
         ]
         assert_fields_present(user_profile, required_fields, obj_name="用户资料")
         
-        print(f"✓ 成功获取用户资料:")
-        print(f"  ID: {user_profile.get('id')}")
-        print(f"  Name: {user_profile.get('first_name')} {user_profile.get('last_name')}")
-        print(f"  Email: {user_profile.get('email')}")
-        print(f"  Status: {user_profile.get('status')}")
+        logger.info("✓ 成功获取用户资料:")
+        logger.info(f"  ID: {user_profile.get('id')}")
+        logger.info(f"  Name: {user_profile.get('first_name')} {user_profile.get('last_name')}")
+        logger.info(f"  Email: {user_profile.get('email')}")
+        logger.info(f"  Status: {user_profile.get('status')}")
 
     def test_get_user_profile_fields_completeness(self, identity_api):
         """
@@ -80,15 +81,15 @@ class TestIdentityProfile:
         missing_fields = [f for f in all_fields if f not in user_profile]
         
         if missing_fields:
-            print(f"⚠ 缺少以下字段: {missing_fields}")
+            logger.info(f"⚠ 缺少以下字段: {missing_fields}")
         else:
-            print(f"✓ 所有字段都存在")
+            logger.info("✓ 所有字段都存在")
         
         # 只验证必需字段
         required_fields = ["id", "account_id", "first_name", "last_name", "email"]
         assert_fields_present(user_profile, required_fields, obj_name="用户资料")
         
-        print(f"✓ 字段完整性验证通过")
+        logger.info("✓ 字段完整性验证通过")
 
     def test_update_user_profile_single_field(self, identity_api):
         """
@@ -126,9 +127,9 @@ class TestIdentityProfile:
         assert updated_profile.get("description") == new_description, \
             f"description 更新失败"
         
-        print(f"✓ 成功更新用户资料:")
-        print(f"  原始 description: {original_description}")
-        print(f"  新 description: {updated_profile.get('description')}")
+        logger.info("✓ 成功更新用户资料:")
+        logger.info(f"  原始 description: {original_description}")
+        logger.info(f"  新 description: {updated_profile.get('description')}")
 
     def test_update_user_profile_multiple_fields(self, identity_api):
         """
@@ -160,9 +161,9 @@ class TestIdentityProfile:
             assert actual_value == expected_value, \
                 f"字段 {field} 更新失败: 期望 {expected_value}, 实际 {actual_value}"
         
-        print(f"✓ 成功更新多个字段:")
+        logger.info("✓ 成功更新多个字段:")
         for field, value in update_data.items():
-            print(f"  {field}: {value}")
+            logger.info(f"  {field}: {value}")
 
     def test_update_user_profile_address_fields(self, identity_api):
         """
@@ -198,9 +199,9 @@ class TestIdentityProfile:
         assert updated_profile.get("permanent_city") == "Test City", "permanent_city 更新失败"
         assert updated_profile.get("mailing_city") == "Mailing City", "mailing_city 更新失败"
         
-        print(f"✓ 成功更新地址字段:")
-        print(f"  永久地址: {updated_profile.get('permanent_city')}, {updated_profile.get('permanent_state')}")
-        print(f"  邮寄地址: {updated_profile.get('mailing_city')}, {updated_profile.get('mailing_state')}")
+        logger.info("✓ 成功更新地址字段:")
+        logger.info(f"  永久地址: {updated_profile.get('permanent_city')}, {updated_profile.get('permanent_state')}")
+        logger.info(f"  邮寄地址: {updated_profile.get('mailing_city')}, {updated_profile.get('mailing_state')}")
 
     def test_update_user_profile_phone_format_validation(self, identity_api):
         """
@@ -228,9 +229,9 @@ class TestIdentityProfile:
         assert updated_profile.get("phone") == update_data["phone"], "phone 更新失败"
         assert updated_profile.get("mobile_phone") == update_data["mobile_phone"], "mobile_phone 更新失败"
         
-        print(f"✓ 成功更新电话号码（E.164 格式）:")
-        print(f"  Phone: {updated_profile.get('phone')}")
-        print(f"  Mobile Phone: {updated_profile.get('mobile_phone')}")
+        logger.info("✓ 成功更新电话号码（E.164 格式）:")
+        logger.info(f"  Phone: {updated_profile.get('phone')}")
+        logger.info(f"  Mobile Phone: {updated_profile.get('mobile_phone')}")
 
     @pytest.mark.skip(reason="头像上传需要准备测试图片文件，暂时跳过")
     def test_upload_user_avatar(self, identity_api):
@@ -262,4 +263,4 @@ class TestIdentityProfile:
         assert user_profile.get("avatar_url") == avatar_url, \
             "个人资料中的 avatar_url 未更新"
         
-        print(f"✓ 头像上传成功: {avatar_url}")
+        logger.info("✓ 头像上传成功: {avatar_url}")

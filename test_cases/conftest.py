@@ -8,6 +8,8 @@ from datetime import datetime
 from urllib.parse import urlparse, parse_qs
 from api.auth_api import auth_api
 from config.config import config
+from utils.logger import logger
+from dao.db_manager import DBManager
 
 # 用于存储所有测试结果和捕获的流量
 test_results = []
@@ -307,7 +309,7 @@ def login_session():
     session.headers.update({"Content-Type": "application/json; charset=utf-8"})
     
     # 执行登录逻辑
-    print("\n[Setup] 正在执行全局登录...")
+    logger.info("正在执行全局登录...")
     try:
         # 1. 获取认证配置
         auth_data = config.auth_data
@@ -331,18 +333,40 @@ def login_session():
             token = res_json.get("access_token") or res_json.get("data", {}).get("access_token")
             if token:
                 session.headers.update({"Authorization": f"Bearer {token}"})
-                print(f"[Setup] 登录成功，获取 Token: {token[:10]}...")
+                logger.info(f"登录成功，获取 Token: {token[:10]}...")
             else:
-                print(f"[Setup] 登录响应中未找到 access_token, 响应内容: {res_json}")
+                logger.warning(f"登录响应中未找到 access_token, 响应内容: {res_json}")
         else:
-            print(f"[Setup] 登录失败，状态码: {response.status_code}, 响应: {response.text}")
+            logger.error(f"登录失败，状态码: {response.status_code}, 响应: {response.text}")
     except Exception as e:
-        print(f"[Setup] 登录过程发生异常: {e}")
+        logger.error(f"登录过程发生异常: {e}", exc_info=True)
 
     yield session
     
-    print("\n[Teardown] 正在关闭会话...")
+    logger.info("正在关闭会话...")
     session.close()
+
+
+@pytest.fixture(scope="session")
+def db_session():
+    """
+    数据库会话管理（可选）
+    仅在需要数据库验证时使用
+    """
+    db_manager = None
+    try:
+        # 尝试初始化数据库连接
+        db_config = config.db_config
+        db_manager = DBManager(db_config)
+        logger.info("数据库会话已就绪")
+        yield db_manager
+    except Exception as e:
+        logger.warning(f"数据库会话初始化跳过: {e}")
+        yield None
+    finally:
+        if db_manager:
+            db_manager.close_connection()
+            logger.info("数据库会话已关闭")
 
 
 # --- 流量捕获逻辑（增强版）---
@@ -442,13 +466,13 @@ def pytest_sessionfinish(session, exitstatus):
         
         with open(report_path, 'w', encoding='utf-8') as f:
             f.write(final_html)
-        print(f"\n[Report] Ben xi report v3.0 已生成: {report_path}")
+        logger.info(f"Ben xi report v3.0 已生成: {report_path}")
         
         # 同时生成一个固定名称的报告（用于 CI/CD）
         latest_report_path = os.path.join(os.path.dirname(__file__), "..", "reports", "final_report.html")
         with open(latest_report_path, 'w', encoding='utf-8') as f:
             f.write(final_html)
-        print(f"[Report] 最新报告已更新: {latest_report_path}")
+        logger.info(f"最新报告已更新: {latest_report_path}")
 
 
 # --- 自动拦截 Requests 流量的辅助工具（修复版）---
@@ -508,7 +532,7 @@ def capture_traffic(request, login_session):
             # 将流量挂载到当前测试用例的 item 对象上
             request.node.extra_data = traffic
         except Exception as e:
-            print(f"[Warning] 流量捕获失败: {e}")
+            logger.warning(f"流量捕获失败: {e}")
             request.node.extra_data = {}
         
         return response

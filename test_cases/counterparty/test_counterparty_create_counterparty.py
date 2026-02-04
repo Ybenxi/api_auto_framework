@@ -6,6 +6,7 @@ import pytest
 from api.account_api import AccountAPI
 import time
 from utils.assertions import (
+from utils.logger import logger
     assert_status_ok,
     assert_fields_present
 )
@@ -31,7 +32,7 @@ class TestCounterpartyCreateCounterparty:
         """
         # 1. 获取 account_id
         account_api = AccountAPI(session=login_session)
-        print("\n获取 account_id")
+        logger.info("\n获取 account_id")
         account_response = account_api.list_accounts(page=0, size=1)
         assert_status_ok(account_response)
         
@@ -42,7 +43,7 @@ class TestCounterpartyCreateCounterparty:
             pytest.skip("没有可用的 Account 数据，跳过测试")
         
         account_id = accounts[0]["id"]
-        print(f"Account ID: {account_id}")
+        logger.info(f"Account ID: {account_id}")
         
         # 2. 构造 Counterparty 数据
         timestamp = int(time.time())
@@ -59,7 +60,7 @@ class TestCounterpartyCreateCounterparty:
         }
         
         # 3. 调用 Create Counterparty 接口
-        print("创建 ACH Counterparty")
+        logger.info("创建 ACH Counterparty")
         response = counterparty_api.create_counterparty(counterparty_data)
         
         # 4. 验证响应
@@ -71,7 +72,7 @@ class TestCounterpartyCreateCounterparty:
         assert_fields_present(response_body, required_fields, "Counterparty")
         
         counterparty_id = response_body["id"]
-        print(f"✓ 创建成功 - ID: {counterparty_id}, Name: {response_body.get('name')}")
+        logger.info("✓ 创建成功 - ID: {counterparty_id}, Name: {response_body.get('name')}")
 
     def test_create_counterparty_success_wire(self, counterparty_api, login_session):
         """
@@ -82,7 +83,7 @@ class TestCounterpartyCreateCounterparty:
         """
         # 1. 获取 account_id
         account_api = AccountAPI(session=login_session)
-        print("\n获取 account_id")
+        logger.info("\n获取 account_id")
         account_response = account_api.list_accounts(page=0, size=1)
         assert_status_ok(account_response)
         
@@ -109,14 +110,14 @@ class TestCounterpartyCreateCounterparty:
         }
         
         # 3. 调用 Create Counterparty 接口
-        print("创建 Wire Counterparty")
+        logger.info("创建 Wire Counterparty")
         response = counterparty_api.create_counterparty(counterparty_data)
         
         # 4. 验证响应
         assert_status_ok(response)
         response_body = response.json()
         
-        print(f"✓ 创建成功 - ID: {response_body.get('id')}")
+        logger.info("✓ 创建成功 - ID: {response_body.get('id')}")
 
     def test_create_counterparty_missing_required_field(self, counterparty_api):
         """
@@ -125,7 +126,7 @@ class TestCounterpartyCreateCounterparty:
         1. 接口返回错误状态码或错误信息
         """
         # 1. 构造缺少 name 字段的数据
-        print("\n测试缺少必需字段")
+        logger.info("\n测试缺少必需字段")
         counterparty_data = {
             # 缺少 name
             "type": "Person",
@@ -136,7 +137,7 @@ class TestCounterpartyCreateCounterparty:
         response = counterparty_api.create_counterparty(counterparty_data)
         assert response.status_code != 200, "缺少必需字段应该返回错误"
         
-        print(f"✓ 测试完成 - 状态码: {response.status_code}")
+        logger.info("✓ 测试完成 - 状态码: {response.status_code}")
 
     def test_create_counterparty_invalid_type(self, counterparty_api, login_session):
         """
@@ -146,7 +147,7 @@ class TestCounterpartyCreateCounterparty:
         """
         # 1. 获取 account_id
         account_api = AccountAPI(session=login_session)
-        print("\n获取 account_id")
+        logger.info("\n获取 account_id")
         account_response = account_api.list_accounts(page=0, size=1)
         assert_status_ok(account_response)
         
@@ -168,13 +169,13 @@ class TestCounterpartyCreateCounterparty:
         }
         
         # 3. 调用接口
-        print("测试无效 type 值")
+        logger.info("测试无效 type 值")
         response = counterparty_api.create_counterparty(counterparty_data)
         
         if response.status_code == 200:
-            print("⚠ 系统允许创建，但 type 值可能不符合预期")
+            logger.info("⚠ 系统允许创建，但 type 值可能不符合预期")
         else:
-            print(f"✓ 系统正确拒绝 - 状态码: {response.status_code}")
+            logger.info("✓ 系统正确拒绝 - 状态码: {response.status_code}")
 
     def test_create_counterparty_draft_mode(self, counterparty_api, login_session):
         """
@@ -185,7 +186,7 @@ class TestCounterpartyCreateCounterparty:
         """
         # 1. 获取 account_id
         account_api = AccountAPI(session=login_session)
-        print("\n获取 account_id")
+        logger.info("\n获取 account_id")
         account_response = account_api.list_accounts(page=0, size=1)
         assert_status_ok(account_response)
         
@@ -208,12 +209,12 @@ class TestCounterpartyCreateCounterparty:
         }
         
         # 3. 调用接口
-        print("测试草稿模式")
+        logger.info("测试草稿模式")
         response = counterparty_api.create_counterparty(counterparty_data)
         
         if response.status_code == 200:
             response_body = response.json()
             payment_enable = response_body.get("payment_enable")
-            print(f"✓ 创建成功 - payment_enable: {payment_enable}")
+            logger.info("✓ 创建成功 - payment_enable: {payment_enable}")
         else:
-            print(f"⚠ 返回错误: {response.status_code}")
+            logger.info(f"⚠ 返回错误: {response.status_code}")

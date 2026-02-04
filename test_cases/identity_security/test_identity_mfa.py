@@ -4,6 +4,7 @@ Identity Security - MFA 接口测试用例
 """
 import pytest
 from utils.assertions import (
+from utils.logger import logger
     assert_status_ok,
     assert_response_parsed
 )
@@ -37,7 +38,7 @@ class TestIdentityMFA:
         # 验证 data 是列表
         assert isinstance(factors, list), "data 应该是列表"
         
-        print(f"✓ 成功列出 MFA 因子: 共 {len(factors)} 个")
+        logger.info("✓ 成功列出 MFA 因子: 共 {len(factors)} 个")
         
         # 如果有因子，打印信息
         for factor in factors:
@@ -72,16 +73,16 @@ class TestIdentityMFA:
             # 验证 factor_type 是有效值
             valid_types = ["email", "sms", "totp"]
             factor_type = first_factor.get("factor_type")
-            print(f"  Factor Type: {factor_type}")
+            logger.info(f"  Factor Type: {factor_type}")
             
             # 验证 status 是有效值
             valid_statuses = ["ACTIVE", "PENDING", "INACTIVE"]
             status = first_factor.get("status")
-            print(f"  Status: {status}")
+            logger.info(f"  Status: {status}")
             
-            print(f"✓ MFA 因子数据结构验证通过")
+            logger.info("✓ MFA 因子数据结构验证通过")
         else:
-            print(f"⚠ 当前没有已注册的 MFA 因子")
+            logger.info(f"⚠ 当前没有已注册的 MFA 因子")
 
     @pytest.mark.skip(reason="Enroll Factor 需要真实的验证码激活流程，暂时跳过完整流程测试")
     def test_enroll_factor_sms(self, identity_api):
@@ -113,7 +114,7 @@ class TestIdentityMFA:
         assert factor_id is not None, "factor_id 为 None"
         assert isinstance(factor_id, str), "factor_id 应该是字符串"
         
-        print(f"✓ 成功注册 SMS MFA 因子: {factor_id}")
+        logger.info("✓ 成功注册 SMS MFA 因子: {factor_id}")
         
         # 注意：实际使用时需要：
         # 1. 调用 send_mfa_challenge 发送验证码
@@ -140,9 +141,9 @@ class TestIdentityMFA:
         
         # 如果是错误响应，code 应该不等于 200
         if parsed.get("error"):
-            print(f"✓ 使用无效 factor_id 正确返回错误: {parsed.get('message')}")
+            logger.info("✓ 使用无效 factor_id 正确返回错误: {parsed.get('message')}")
         else:
-            print(f"⚠ API 未验证 factor_id 有效性")
+            logger.info(f"⚠ API 未验证 factor_id 有效性")
 
     @pytest.mark.skip(reason="Delete Factor 可能影响其他测试，暂时跳过")
     def test_delete_factors(self, identity_api):
@@ -168,7 +169,7 @@ class TestIdentityMFA:
         success = parsed["data"]
         assert success == True, "删除失败"
         
-        print(f"✓ 成功删除 MFA 因子")
+        logger.info("✓ 成功删除 MFA 因子")
 
     def test_activate_factor_with_invalid_pass_code(self, identity_api):
         """
@@ -190,11 +191,11 @@ class TestIdentityMFA:
         
         # 应该返回错误或 data=false
         if parsed.get("error"):
-            print(f"✓ 使用无效验证码正确返回错误: {parsed.get('message')}")
+            logger.info("✓ 使用无效验证码正确返回错误: {parsed.get('message')}")
         elif parsed.get("data") == False:
-            print(f"✓ 使用无效验证码返回 data=false")
+            logger.info("✓ 使用无效验证码返回 data=false")
         else:
-            print(f"⚠ API 未验证验证码有效性")
+            logger.info(f"⚠ API 未验证验证码有效性")
 
     def test_verify_mfa_with_invalid_credentials(self, identity_api):
         """
@@ -216,8 +217,8 @@ class TestIdentityMFA:
         
         # 应该返回错误或 data=null
         if parsed.get("error"):
-            print(f"✓ 使用无效凭证正确返回错误: {parsed.get('message')}")
+            logger.info("✓ 使用无效凭证正确返回错误: {parsed.get('message')}")
         elif parsed.get("data") is None:
-            print(f"✓ 使用无效凭证返回 data=null")
+            logger.info("✓ 使用无效凭证返回 data=null")
         else:
-            print(f"⚠ API 未验证 MFA 凭证有效性")
+            logger.info(f"⚠ API 未验证 MFA 凭证有效性")

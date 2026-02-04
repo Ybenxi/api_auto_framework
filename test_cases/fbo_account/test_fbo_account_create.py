@@ -7,6 +7,7 @@ import uuid
 from api.fbo_account_api import FboAccountAPI
 from api.sub_account_api import SubAccountAPI
 from utils.assertions import (
+from utils.logger import logger
     assert_status_ok,
     assert_response_parsed
 )
@@ -30,7 +31,7 @@ class TestFboAccountCreate:
         sa_api = SubAccountAPI(session=login_session)
         
         # 获取 Sub Account ID
-        print("\n[Step] 获取 Sub Account ID")
+        logger.info("获取 Sub Account ID")
         sa_response = sa_api.list_sub_accounts(page=0, size=1)
         assert sa_response.status_code == 200, \
             f"获取 Sub Accounts 失败: {sa_response.status_code}"
@@ -42,7 +43,7 @@ class TestFboAccountCreate:
             pytest.skip("没有可用的 Sub Account 进行测试")
         
         sub_account_id = sub_accounts[0].get("id")
-        print(f"  使用 Sub Account ID: {sub_account_id}")
+        logger.info(f"  使用 Sub Account ID: {sub_account_id}")
         
         # 准备创建数据
         unique_name = f"Auto TestYan FBO Account {uuid.uuid4().hex[:8]}"
@@ -52,16 +53,16 @@ class TestFboAccountCreate:
         }
         
         # 调用创建接口
-        print(f"[Step] 创建 FBO Account: {unique_name}")
+        logger.info("创建 FBO Account: {unique_name}")
         create_response = fbo_api.create_fbo_account(fbo_account_data)
         
         # 验证状态码
-        print("[Step] 验证 HTTP 状态码")
+        logger.info("验证 HTTP 状态码")
         assert create_response.status_code in [200, 201], \
             f"Create FBO Account 接口返回状态码错误: {create_response.status_code}, Response: {create_response.text}"
         
         # 解析响应
-        print("[Step] 解析响应并验证数据")
+        logger.info("解析响应并验证数据")
         response_data = create_response.json()
         
         if "data" in response_data:
@@ -69,12 +70,12 @@ class TestFboAccountCreate:
         else:
             created_fbo_account = response_data
         
-        print(f"✓ FBO Account 创建成功:")
-        print(f"  ID: {created_fbo_account.get('id')}")
-        print(f"  Name: {created_fbo_account.get('name')}")
-        print(f"  Sub Account ID: {created_fbo_account.get('sub_account_id')}")
-        print(f"  Status: {created_fbo_account.get('status')}")
-        print(f"  Account Identifier: {created_fbo_account.get('account_identifier')}")
+        logger.info("✓ FBO Account 创建成功:")
+        logger.info(f"  ID: {created_fbo_account.get('id')}")
+        logger.info(f"  Name: {created_fbo_account.get('name')}")
+        logger.info(f"  Sub Account ID: {created_fbo_account.get('sub_account_id')}")
+        logger.info(f"  Status: {created_fbo_account.get('status')}")
+        logger.info(f"  Account Identifier: {created_fbo_account.get('account_identifier')}")
 
     def test_create_fbo_account_missing_required_fields(self, login_session):
         """
@@ -85,7 +86,7 @@ class TestFboAccountCreate:
         """
         fbo_api = FboAccountAPI(session=login_session)
         
-        print("\n[Step] 尝试创建缺少必需字段的 FBO Account")
+        logger.info("尝试创建缺少必需字段的 FBO Account")
         fbo_account_data = {
             "name": "Auto TestYan FBO Account Without Sub Account ID"
             # 缺少 sub_account_id
@@ -93,15 +94,15 @@ class TestFboAccountCreate:
         
         create_response = fbo_api.create_fbo_account(fbo_account_data)
         
-        print(f"[Step] 验证返回 200 状态码（统一错误处理设计）")
-        print(f"  状态码: {create_response.status_code}")
+        logger.info("验证返回 200 状态码（统一错误处理设计）")
+        logger.info(f"  状态码: {create_response.status_code}")
         assert create_response.status_code == 200, \
             f"服务器应该返回 200，但实际返回了 {create_response.status_code}"
         
         # 验证响应体包含业务错误码
-        print(f"[Step] 验证响应体包含业务错误码")
+        logger.info("验证响应体包含业务错误码")
         response_body = create_response.json()
-        print(f"  响应: {response_body}")
+        logger.info(f"  响应: {response_body}")
         
         # 验证不是成功的 code=200
         assert response_body.get("code") != 200, \
@@ -109,7 +110,7 @@ class TestFboAccountCreate:
         assert response_body.get("data") is None, \
             f"缺少必需字段时 data 应该为 None"
         
-        print(f"✓ 缺少必需字段测试完成，业务错误码: {response_body.get('code')}")
+        logger.info("✓ 缺少必需字段测试完成，业务错误码: {response_body.get('code')}")
 
     def test_create_fbo_account_with_invalid_sub_account_id(self, login_session):
         """
@@ -120,7 +121,7 @@ class TestFboAccountCreate:
         """
         fbo_api = FboAccountAPI(session=login_session)
         
-        print("\n[Step] 尝试使用无效 Sub Account ID 创建 FBO Account")
+        logger.info("尝试使用无效 Sub Account ID 创建 FBO Account")
         fbo_account_data = {
             "sub_account_id": "invalid_sub_account_id_12345",
             "name": "Auto TestYan FBO Account Invalid Sub Account ID"
@@ -128,15 +129,15 @@ class TestFboAccountCreate:
         
         create_response = fbo_api.create_fbo_account(fbo_account_data)
         
-        print(f"[Step] 验证返回 200 状态码（统一错误处理设计）")
-        print(f"  状态码: {create_response.status_code}")
+        logger.info("验证返回 200 状态码（统一错误处理设计）")
+        logger.info(f"  状态码: {create_response.status_code}")
         assert create_response.status_code == 200, \
             f"服务器应该返回 200，但实际返回了 {create_response.status_code}"
         
         # 验证响应体包含业务错误码
-        print(f"[Step] 验证响应体包含业务错误码")
+        logger.info("验证响应体包含业务错误码")
         response_body = create_response.json()
-        print(f"  响应: {response_body}")
+        logger.info(f"  响应: {response_body}")
         
         # 验证不是成功的 code=200
         assert response_body.get("code") != 200, \
@@ -144,7 +145,7 @@ class TestFboAccountCreate:
         assert response_body.get("data") is None, \
             f"无效 Sub Account ID 时 data 应该为 None"
         
-        print(f"✓ 无效 Sub Account ID 测试完成，业务错误码: {response_body.get('code')}")
+        logger.info("✓ 无效 Sub Account ID 测试完成，业务错误码: {response_body.get('code')}")
 
     def test_create_fbo_account_then_retrieve_detail(self, login_session):
         """
@@ -158,7 +159,7 @@ class TestFboAccountCreate:
         sa_api = SubAccountAPI(session=login_session)
         
         # 获取 Sub Account ID
-        print("\n[Step] 获取 Sub Account ID")
+        logger.info("获取 Sub Account ID")
         sa_response = sa_api.list_sub_accounts(page=0, size=1)
         assert_status_ok(sa_response)
         sa_parsed = sa_api.parse_list_response(sa_response)
@@ -178,7 +179,7 @@ class TestFboAccountCreate:
         }
         
         # 调用 Create 接口
-        print(f"[Step] 创建 FBO Account: {unique_name}")
+        logger.info("创建 FBO Account: {unique_name}")
         create_response = fbo_api.create_fbo_account(fbo_account_data)
         
         # 验证创建成功
@@ -192,7 +193,7 @@ class TestFboAccountCreate:
         assert fbo_id is not None, "创建的 FBO Account ID 为 None"
         
         # 立即调用 Detail 接口
-        print(f"[Step] 立即查询 FBO Account 详情 (ID: {fbo_id})")
+        logger.info("立即查询 FBO Account 详情 (ID: {fbo_id})")
         detail_response = fbo_api.get_fbo_account_detail(fbo_id)
         
         assert_status_ok(detail_response)
@@ -202,16 +203,16 @@ class TestFboAccountCreate:
         detail_fbo = parsed_detail["data"]
         
         # 验证字段一致性
-        print("[Step] 验证创建和详情数据一致性")
+        logger.info("验证创建和详情数据一致性")
         assert detail_fbo.get("sub_account_id") == fbo_account_data["sub_account_id"], \
             "sub_account_id 不一致"
         assert detail_fbo.get("name") == fbo_account_data["name"], \
             "name 不一致"
         
-        print(f"✓ 创建后立即查询验证通过，数据完全一致")
-        print(f"  FBO Account ID: {fbo_id}")
-        print(f"  Name: {detail_fbo.get('name')}")
-        print(f"  Account Identifier: {detail_fbo.get('account_identifier')}")
+        logger.info("✓ 创建后立即查询验证通过，数据完全一致")
+        logger.info(f"  FBO Account ID: {fbo_id}")
+        logger.info(f"  Name: {detail_fbo.get('name')}")
+        logger.info(f"  Account Identifier: {detail_fbo.get('account_identifier')}")
 
     def test_create_fbo_account_response_structure(self, login_session):
         """
@@ -223,7 +224,7 @@ class TestFboAccountCreate:
         sa_api = SubAccountAPI(session=login_session)
         
         # 获取 Sub Account ID
-        print("\n[Step] 获取 Sub Account ID")
+        logger.info("获取 Sub Account ID")
         sa_response = sa_api.list_sub_accounts(page=0, size=1)
         assert sa_response.status_code == 200
         
@@ -242,7 +243,7 @@ class TestFboAccountCreate:
             "name": unique_name
         }
         
-        print(f"[Step] 创建 FBO Account 并验证响应结构")
+        logger.info("创建 FBO Account 并验证响应结构")
         create_response = fbo_api.create_fbo_account(fbo_account_data)
         
         if create_response.status_code in [200, 201]:
@@ -255,12 +256,12 @@ class TestFboAccountCreate:
             
             expected_fields = ["id", "name", "sub_account_id", "status", "account_identifier", "balance"]
             
-            print("[Step] 验证响应字段")
+            logger.info("验证响应字段")
             for field in expected_fields:
                 value = created.get(field, "(not present)")
-                print(f"  {field}: {value}")
+                logger.info(f"  {field}: {value}")
             
-            print(f"✓ 响应结构验证完成")
+            logger.info("✓ 响应结构验证完成")
         else:
-            print(f"  创建失败，状态码: {create_response.status_code}")
+            logger.info(f"  创建失败，状态码: {create_response.status_code}")
             pytest.skip("创建失败，跳过响应结构验证")

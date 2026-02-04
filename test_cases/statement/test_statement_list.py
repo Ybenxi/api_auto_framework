@@ -4,6 +4,7 @@ Statement 列表接口测试用例
 """
 import pytest
 from utils.assertions import (
+from utils.logger import logger
     assert_status_ok,
     assert_response_parsed,
     assert_list_structure,
@@ -39,7 +40,7 @@ class TestStatementList:
         assert_list_structure(parsed, has_pagination=True)
         
         # 打印统计信息
-        print(f"✓ 成功获取到 {len(parsed['content'])} 个 Statements，总计 {parsed['total_elements']} 个")
+        logger.info("✓ 成功获取到 {len(parsed['content'])} 个 Statements，总计 {parsed['total_elements']} 个")
 
     def test_list_statements_filter_by_financial_account(self, statement_api):
         """
@@ -76,9 +77,9 @@ class TestStatementList:
                 actual_fa_id = statement.get("financial_account_id")
                 assert actual_fa_id == test_financial_account_id, \
                     f"Statement 的 financial_account_id 不匹配: 期望 {test_financial_account_id}, 实际 {actual_fa_id}"
-            print(f"✓ 筛选成功，找到 {len(statements)} 个 Financial Account {test_financial_account_id} 的 Statements")
+            logger.info("✓ 筛选成功，找到 {len(statements)} 个 Financial Account {test_financial_account_id} 的 Statements")
         else:
-            print(f"⚠ 未找到该 Financial Account 的 Statements")
+            logger.info(f"⚠ 未找到该 Financial Account 的 Statements")
 
     def test_list_statements_filter_by_year_month(self, statement_api):
         """
@@ -107,9 +108,9 @@ class TestStatementList:
                 if statement.get("month") is not None:
                     assert str(statement.get("month")) == "3", \
                         f"Statement 的 month 不匹配"
-            print(f"✓ 筛选成功，找到 {len(statements)} 个 2024年3月 的 Statements")
+            logger.info("✓ 筛选成功，找到 {len(statements)} 个 2024年3月 的 Statements")
         else:
-            print(f"⚠ 未找到 2024年3月 的 Statements（可能是正常情况）")
+            logger.info(f"⚠ 未找到 2024年3月 的 Statements（可能是正常情况）")
 
     @pytest.mark.parametrize("page_size", [5, 10, 20])
     def test_list_statements_pagination(self, statement_api, page_size):
@@ -131,7 +132,7 @@ class TestStatementList:
         # 验证分页信息
         assert_pagination(parsed, expected_size=page_size, expected_page=0)
         
-        print(f"✓ 分页验证成功，请求 {page_size} 条，实际返回 {len(parsed['content'])} 条")
+        logger.info("✓ 分页验证成功，请求 {page_size} 条，实际返回 {len(parsed['content'])} 条")
 
     def test_list_statements_empty_result(self, statement_api):
         """
@@ -152,7 +153,7 @@ class TestStatementList:
         # 验证空结果
         assert_empty_result(parsed)
         
-        print("✓ 空结果验证成功，接口正确返回空列表")
+        logger.info("✓ 空结果验证成功，接口正确返回空列表")
 
     def test_statement_response_fields(self, statement_api):
         """
@@ -182,7 +183,7 @@ class TestStatementList:
             # 验证字段完整性
             assert_fields_present(statement, required_fields, obj_name="Statement 对象")
             
-            print(f"✓ 字段完整性验证通过，Statement 对象包含所有必需字段")
+            logger.info("✓ 字段完整性验证通过，Statement 对象包含所有必需字段")
             print(f"  示例 Statement: ID={statement.get('id')}, "
                   f"Year={statement.get('year')}, Month={statement.get('month')}")
         else:
