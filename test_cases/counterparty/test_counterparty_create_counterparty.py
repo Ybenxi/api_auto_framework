@@ -5,8 +5,8 @@ Counterparty Create Counterparty 接口测试用例
 import pytest
 from api.account_api import AccountAPI
 import time
-from utils.assertions import (
 from utils.logger import logger
+from utils.assertions import (
     assert_status_ok,
     assert_fields_present
 )
