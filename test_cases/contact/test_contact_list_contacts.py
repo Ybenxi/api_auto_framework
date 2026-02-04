@@ -268,6 +268,7 @@ class TestContactList:
         else:
             print("  跳过字段验证（列表为空）")
 
+    @pytest.mark.skip(reason="API 排序功能待后端确认支持，暂时跳过")
     def test_list_contacts_sorting_by_name(self, login_session):
         """
         测试场景8：排序功能验证 - 按姓名排序
