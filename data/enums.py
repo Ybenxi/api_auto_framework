@@ -541,3 +541,59 @@ class AccountSubType(str, Enum):
     def __str__(self):
         """返回枚举的实际值"""
         return self.value
+
+
+class WirePaymentType(str, Enum):
+    """
+    电汇支付类型枚举
+    对应 Wire Processing 中的 payment_type 字段
+    """
+    WIRE = "Wire"                           # 国内电汇
+    INTERNATIONAL_WIRE = "International_Wire"  # 国际电汇
+
+    def __str__(self):
+        """返回枚举的实际值"""
+        return self.value
+
+
+class CounterpartyType(str, Enum):
+    """
+    对手方类型枚举
+    对应 Counterparty 中的 type 字段
+    """
+    EMPLOYEE = "Employee"
+    COMPANY = "Company"
+    PERSON = "Person"
+    VENDOR = "Vendor"
+
+    def __str__(self):
+        """返回枚举的实际值"""
+        return self.value
+
+
+class BankAccountType(str, Enum):
+    """
+    银行账户类型枚举
+    对应 Counterparty 中的 bank_account_type 字段
+    """
+    SAVINGS = "Savings"
+    CHECKING = "Checking"
+
+    def __str__(self):
+        """返回枚举的实际值"""
+        return self.value
+
+
+class WireDirection(str, Enum):
+    """
+    电汇方向枚举
+    对应交易中的 direction 字段
+    ⚠️ 注意：此字段未在Properties定义，从响应推测
+    """
+    INCOMING = "Incoming"      # 入账
+    OUTGOING = "Outgoing"      # 出账（推测）
+    ORIGINATION = "Origination" # 发起
+
+    def __str__(self):
+        """返回枚举的实际值"""
+        return self.value

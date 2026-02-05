@@ -1,5 +1,123 @@
 # 变更日志
 
+## 2026-02-05 - Wire Processing & Remote Deposit Check 模块完成
+
+### 新增功能
+
+#### Wire Processing模块（电汇）
+- ✅ 创建 `api/wire_processing_api.py` - 8个接口封装
+- ✅ 创建 4个测试文件，21个测试场景
+  - test_wire_transactions.py (5场景)
+  - test_wire_counterparties.py (7场景)
+  - test_wire_payment.py (5场景，破坏性)
+  - test_wire_fee.py (4场景)
+- ✅ 创建 README.md 文档
+- 包含国内电汇、国际电汇、对手方管理
+- Create Counterparty有40+参数，条件逻辑极其复杂
+
+#### Remote Deposit Check模块（远程支票存款）
+- ✅ 创建 `api/remote_deposit_check_api.py` - 9个接口封装
+- ✅ 创建 5个测试文件，21个测试场景
+  - test_check_transactions.py (3场景)
+  - test_check_counterparties.py (3场景)
+  - test_check_scan_deposit.py (7场景，破坏性)
+  - test_check_update_download.py (6场景)
+  - test_check_fee.py (2场景)
+- ✅ 创建 README.md 文档
+- 包含支票扫描（OCR）、存款、更新、下载
+- 提供complete_deposit_flow流程管理
+
+#### 枚举类型
+- ✅ 新增4个枚举类：
+  - WirePaymentType（Wire/International_Wire）
+  - CounterpartyType（4个类型）
+  - BankAccountType（Checking/Savings）
+  - WireDirection（Incoming/Outgoing/Origination）
+
+### 配置更新
+- ✅ 更新 `data/enums.py` - 新增4个枚举类
+- ✅ 更新 `pytest.ini` - 新增2个marker
+  - wire_processing, remote_deposit_check
+- ✅ 更新 `test_cases/conftest.py` - 新增2个模块映射
+- ✅ 新增2个模块README文档
+- ✅ 更新 CHANGELOG
+
+### 统计数据
+
+#### 本次新增
+- 新增测试文件：9个
+- 新增测试场景：42个
+- 新增API接口：17个
+- 新增API封装类：2个
+- 新增枚举类型：4个
+- 代码行数：约2,500行
+
+#### 项目总计
+- 总测试文件：114个
+- 总测试方法：644个
+- 总API封装类：25个
+- 完成模块：23个（19主模块+4子模块）
+- 接口总数：140个
+
+### 代码质量
+- ✅ 所有代码通过语法检查
+- ✅ 遵循项目代码规范
+- ✅ 完整的docstring和注释
+- ✅ 标注文档问题（90个）
+- ✅ 所有破坏性操作添加no_rerun
+- ✅ 所有转账/存款操作明确警告
+
+### 已知问题
+
+#### Wire Processing文档问题（45个）
+- URL路径不一致
+- Create Counterparty条件逻辑极其复杂且混乱
+- Wire vs International Wire接口完全重复
+- 40+个响应字段未在Properties定义
+- intermediary bank字段定义混乱
+- HTTP方法示例错误
+
+#### Remote Deposit Check文档问题（45个）
+- Scan→Deposit流程说明缺失
+- Scan响应使用success字段（独特格式）
+- Download应该用GET不是POST
+- item_identifier依赖关系未说明
+- 15+个响应字段未定义
+- transaction_type说明与实际矛盾
+
+### 特殊处理
+
+#### 1. Wire Counterparty创建（极其复杂）
+- 40+个参数
+- 多层条件必需逻辑
+- 大部分测试skip
+- 详细的条件逻辑注释
+
+#### 2. Check Scan文件上传
+- multipart/form-data处理
+- 前后两张图片上传
+- parse_scan_response处理特殊格式
+
+#### 3. Complete Deposit Flow
+提供完整流程辅助方法：
+- 自动Scan→Deposit
+- 管理item_identifier传递
+- 返回每步结果
+
+#### 4. 三重安全标记
+所有破坏性操作：
+- @pytest.mark.no_rerun
+- @pytest.mark.skip
+- logger.warning()明确警告
+
+### 待完善工作
+1. 补充真实转账/存款测试（使用专门测试账户）
+2. 准备测试支票图片文件
+3. 验证OCR识别准确性
+4. 测试Intermediary Bank条件逻辑
+
+---
+
 ## 2026-02-05 - Internal Pay & Account Transfer 模块完成
 
 ### 新增功能

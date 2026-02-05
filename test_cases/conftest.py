@@ -39,7 +39,9 @@ MODULE_NAME_MAPPING = {
     "user_signup": "User Sign Up",
     "payment_deposit": "Payment & Deposit",
     "internal_pay": "Internal Pay",
-    "account_transfer": "Account Transfer"
+    "account_transfer": "Account Transfer",
+    "wire_processing": "Wire Processing",
+    "remote_deposit_check": "Remote Deposit Check"
 }
 
 

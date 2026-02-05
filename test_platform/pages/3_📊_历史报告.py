@@ -10,12 +10,10 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 隐藏顶部菜单
+# 隐藏页脚
 st.markdown("""
 <style>
-    #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    header {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -82,9 +80,14 @@ else:
                         st.error(f"读取失败")
                 
                 with btn_col2:
-                    # 生成可访问的URL
-                    file_url = report_file.absolute().as_uri()
-                    st.markdown(f'<a href="{file_url}" target="_blank" style="display:inline-block;padding:0.25rem 0.75rem;background-color:#f0f2f6;border-radius:0.25rem;text-decoration:none;color:#262730;border:1px solid #e0e0e0;">🔗 查看</a>', unsafe_allow_html=True)
+                    # 使用Python打开浏览器
+                    if st.button("🔗 查看", key=f"view_{idx}"):
+                        import webbrowser
+                        import os
+                        # 使用绝对路径打开
+                        file_path = str(report_file.absolute())
+                        webbrowser.open(f'file://{file_path}')
+                        st.success("✓ 已在浏览器打开")
             
             st.markdown("---")
     

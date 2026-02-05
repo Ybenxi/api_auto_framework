@@ -48,20 +48,12 @@ st.markdown("""
         font-weight: 600;
     }
     
-    /* 隐藏右上角的部署按钮和菜单 */
-    #MainMenu {visibility: hidden;}
+    /* 只隐藏页脚，保留其他元素 */
     footer {visibility: hidden;}
-    header {visibility: hidden;}
     
     /* 侧边栏样式优化 */
     [data-testid="stSidebar"] {
         min-width: 250px;
-    }
-    
-    /* 侧边栏收起按钮始终可见 */
-    button[kind="header"] {
-        visibility: visible !important;
-        opacity: 1 !important;
     }
 </style>
 """, unsafe_allow_html=True)

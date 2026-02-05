@@ -10,12 +10,10 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 隐藏顶部菜单
+# 隐藏页脚
 st.markdown("""
 <style>
-    #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    header {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
 
