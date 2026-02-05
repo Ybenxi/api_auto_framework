@@ -1,5 +1,114 @@
 # 变更日志
 
+## 2026-02-05 - Internal Pay & Account Transfer 模块完成
+
+### 新增功能
+
+#### Internal Pay模块
+- ✅ 创建 `api/internal_pay_api.py` - 5个接口封装
+- ✅ 创建 5个测试文件，31个测试场景
+  - test_internal_pay_transactions.py (8场景)
+  - test_internal_pay_payers.py (6场景)
+  - test_internal_pay_payees.py (5场景)
+  - test_internal_pay_transfer.py (7场景，破坏性)
+  - test_internal_pay_fee.py (5场景)
+- ✅ 创建 README.md 文档
+- 包含P2P支付、邮箱查找收款人、实时结算
+
+#### Account Transfer模块
+- ✅ 创建 `api/account_transfer_api.py` - 4个接口封装
+- ✅ 创建 4个测试文件，22个测试场景
+  - test_account_transfer_transactions.py (6场景)
+  - test_account_transfer_financial_accounts.py (6场景)
+  - test_account_transfer_transfer.py (6场景，破坏性)
+  - test_account_transfer_fee.py (4场景)
+- ✅ 创建 README.md 文档
+- 包含跨Profile转账、实时结算、成本效率
+
+#### 枚举类型
+- ✅ 新增3个枚举类：
+  - PaymentTransactionStatus（5个状态）
+  - PaymentTransactionType（Credit/Debit）
+  - AccountSubType（Checking/Savings等）
+
+### 配置更新
+- ✅ 更新 `data/enums.py` - 新增3个枚举类
+- ✅ 更新 `pytest.ini` - 新增2个marker
+  - internal_pay, account_transfer
+- ✅ 更新 `test_cases/conftest.py` - 新增2个模块映射
+- ✅ 新增2个模块README文档
+- ✅ 更新 CHANGELOG
+
+### 统计数据
+
+#### 本次新增
+- 新增测试文件：9个
+- 新增测试场景：53个
+- 新增API接口：9个
+- 新增API封装类：2个
+- 新增枚举类型：3个
+- 代码行数：约2,000行
+
+#### 项目总计
+- 总测试文件：105个
+- 总测试方法：602个
+- 总API封装类：23个
+- 完成模块：21个
+- 接口总数：123个
+
+### 代码质量
+- ✅ 所有代码通过语法检查
+- ✅ 遵循项目代码规范
+- ✅ 完整的docstring和注释
+- ✅ 标注文档问题（50个）
+- ✅ 转账操作添加no_rerun标记
+- ✅ 危险操作明确标注
+
+### 已知问题
+
+#### Internal Pay文档问题（25个）
+- HTTP方法示例错误（2处）
+- 响应格式不一致（4个接口无code包装层）
+- amount字段类型不一致
+- 多个响应字段未定义（10个）
+- 条件必需字段逻辑不清
+- List Payees的email参数required（与List语义矛盾）
+
+#### Account Transfer文档问题（25个）
+- HTTP方法示例错误（2处）
+- 响应格式不一致（3个接口无code包装层）
+- 接口描述错误（说ACH应为Account Transfer）
+- 与Internal Pay差异未说明
+- 多个响应字段未定义
+- 英文语法错误
+
+### 特殊处理
+
+#### 1. 响应格式自适应
+两个模块都有响应格式不一致问题：
+- parse_list_response()：兼容有无code包装层
+- parse_transfer_response()：兼容有无code包装层
+
+#### 2. 转账操作安全标记
+```python
+@pytest.mark.no_rerun  # 禁止重试
+@pytest.mark.skip(reason="真实转账，会实际扣款")
+def test_transfer():
+    logger.warning("⚠️ 发起转账...")
+```
+
+#### 3. 类型转换
+- amount: string → number（使用to_float）
+- balance字段统一处理
+
+### 待完善工作
+1. 补充真实账户测试（当前转账操作skip）
+2. 验证条件必需字段逻辑
+3. 测试跨Profile转账场景
+4. 验证实际响应格式
+
+---
+
 ## 2026-02-05 - User Sign Up 模块完成
 
 ### 新增功能

@@ -493,3 +493,51 @@ class RecoveryQuestion(str, Enum):
     def __str__(self):
         """返回枚举的实际值"""
         return self.value
+
+
+# ==================== Payment & Deposit 模块相关枚举 ====================
+
+class PaymentTransactionStatus(str, Enum):
+    """
+    支付交易状态枚举
+    对应 Internal Pay 和 Account Transfer 中的 status 字段
+    """
+    REVIEWING = "Reviewing"
+    CANCELLED = "Cancelled"
+    COMPLETED = "Completed"
+    PROCESSING = "Processing"
+    FAILED = "Failed"
+
+    def __str__(self):
+        """返回枚举的实际值"""
+        return self.value
+
+
+class PaymentTransactionType(str, Enum):
+    """
+    支付交易类型枚举
+    对应交易中的 transaction_type 字段
+    ⚠️ 注意：此字段未在Properties定义，从响应示例推测
+    """
+    CREDIT = "Credit"
+    DEBIT = "Debit"
+
+    def __str__(self):
+        """返回枚举的实际值"""
+        return self.value
+
+
+class AccountSubType(str, Enum):
+    """
+    账户子类型枚举
+    对应 Financial Account 中的 sub_type 字段
+    ⚠️ 文档问题：拼写为Saving应为Savings
+    """
+    CHECKING = "Checking"
+    SAVINGS = "Savings"  # 文档写成Saving（无s）
+    SAVING = "Saving"    # 保留错误拼写以兼容
+    INVESTMENT = "Investment"
+
+    def __str__(self):
+        """返回枚举的实际值"""
+        return self.value

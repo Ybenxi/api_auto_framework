@@ -1,0 +1,29 @@
+[server]
+# 服务器配置
+port = 8501
+headless = true
+enableCORS = true
+enableXsrfProtection = true
+
+[browser]
+# 浏览器配置
+gatherUsageStats = false
+serverAddress = "localhost"
+
+[client]
+# 工具栏配置
+toolbarMode = "minimal"
+showErrorDetails = true
+
+[theme]
+# 主题配置
+primaryColor = "#1f77b4"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f0f2f6"
+textColor = "#262730"
+font = "sans serif"
+
+[ui]
+# 隐藏部分UI元素
+hideTopBar = false
+hideSidebarNav = false
