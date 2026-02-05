@@ -24,7 +24,11 @@ MODULE_NAME_MAPPING = {
     "statement": "Statement",
     "tenant": "Tenant",
     "open_banking": "Open Banking",
-    "counterparty": "Counterparty Management"
+    "counterparty": "Counterparty Management",
+    "identity_security": "Identity Security",
+    "account_opening": "Account Opening",
+    "trading_order": "Trading Order",
+    "client_list": "Client List"
 }
 
 

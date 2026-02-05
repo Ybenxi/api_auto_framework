@@ -144,3 +144,108 @@ class EmploymentStatus(str, Enum):
     def __str__(self):
         """返回枚举的实际值"""
         return self.value
+
+
+class IssueType(str, Enum):
+    """
+    证券类型枚举（Trading Order & Client List）
+    对应 API 文档中的 issue_type 字段
+    """
+    COMMON_STOCK = "Common Stock"
+    ETF = "ETF"
+    MUTUAL_FUNDS = "Mutual Funds"
+    CRYPTO_CURRENCY = "Crypto Currency"
+    BOND = "Bond"
+    CERTIFICATES_OF_DEPOSIT = "Certificates of Deposit"
+    COMMODITIES = "Commodities"
+    COMMON_TRUST_FUNDS = "Common Trust Funds"
+    HEDGE_FUNDS = "Hedge Funds and Private Equity"
+    LIABILITIES = "Liabilities"
+    MONEY_MARKET_FUND = "Money Market Fund"
+    OTHER_ASSETS = "Other Assets"
+    OTHER_FIXED_INCOME = "Other Fixed Income"
+    REIT = "Real Estate Investment Trust"
+
+    def __str__(self):
+        """返回枚举的实际值"""
+        return self.value
+
+
+class OrderAction(str, Enum):
+    """
+    订单动作枚举
+    对应 Trading Order 中的 order_action 字段
+    """
+    BUY = "Buy"
+    SELL = "Sell"
+    SELL_ALL = "Sell_All"
+
+    def __str__(self):
+        """返回枚举的实际值"""
+        return self.value
+
+
+class QuantityType(str, Enum):
+    """
+    数量类型枚举
+    对应 Trading Order 中的 quantity_type 字段
+    """
+    SHARES = "Shares"
+    DOLLARS = "Dollars"
+
+    def __str__(self):
+        """返回枚举的实际值"""
+        return self.value
+
+
+class OrderType(str, Enum):
+    """
+    订单类型枚举
+    对应 Trading Order 中的 order_type 字段
+    ⚠️ 文档定义有误（说int实际是string），按示例使用string
+    """
+    MARKET_ORDER = "Market_Order"
+    LIMIT_ORDER = "Limit_Order"
+    STOP_ORDER = "Stop_Order"
+    STOP_LIMIT = "Stop_Limit"
+
+    def __str__(self):
+        """返回枚举的实际值"""
+        return self.value
+
+
+class OrderStatus(str, Enum):
+    """
+    订单状态枚举
+    对应 Trading Order 中的 status 字段
+    """
+    NEW = "New"
+    PENDING = "Pending"
+    OVERNIGHT = "Overnight"
+    IN_PROGRESS = "In_Progress"
+    PARTIALLY_FILLED = "Partially_Filled"
+    FILLED = "Filled"
+    POSTED = "Posted"
+    CANCELLED = "Cancelled"
+    REJECTED = "Rejected"
+
+    def __str__(self):
+        """返回枚举的实际值"""
+        return self.value
+
+
+class OMSCategory(str, Enum):
+    """
+    OMS 交易分类枚举
+    对应 Client List 中的 oms_category 字段
+    """
+    EQUITY = "Equity"
+    MUTUAL_FUND = "Mutual Fund"
+    CRYPTO_CURRENCY = "Crypto Currency"
+    CERTIFICATES_OF_DEPOSIT = "Certificates of Deposit"
+    OTHERS = "Others"
+    BOND = "Bond"
+
+    def __str__(self):
+        """返回枚举的实际值"""
+        return self.value
