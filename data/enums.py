@@ -249,3 +249,42 @@ class OMSCategory(str, Enum):
     def __str__(self):
         """返回枚举的实际值"""
         return self.value
+
+
+class FeeType(str, Enum):
+    """
+    费用计算类型枚举
+    对应 Investment Performance 接口中的 fee 参数
+    """
+    NET_OF_FEE = "NET_OF_FEE"      # 扣除费用后的金额
+    GROSS_OF_FEE = "GROSS_OF_FEE"  # 扣除费用前的原始金额
+
+    def __str__(self):
+        """返回枚举的实际值"""
+        return self.value
+
+
+class IntervalType(str, Enum):
+    """
+    数据时间间隔枚举
+    对应 Investment Performance Returns 接口中的 interval 参数
+    """
+    DAILY = "DAILY"
+    QUARTERLY = "QUARTERLY"
+
+    def __str__(self):
+        """返回枚举的实际值"""
+        return self.value
+
+
+class ClassificationMode(str, Enum):
+    """
+    账户摘要分类模式枚举
+    对应 Account Summary 接口中的 classification_mode 参数
+    """
+    FLAT = "Flat"              # 扁平结构（无分组）
+    CATEGORIZED = "Categorized" # 分类结构（按Asset/Liability分组）
+
+    def __str__(self):
+        """返回枚举的实际值"""
+        return self.value
