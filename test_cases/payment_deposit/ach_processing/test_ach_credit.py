@@ -1,6 +1,6 @@
 """
-ACH Processing - Credit & Debit 接口测试用例
-测试ACH转账接口
+ACH Processing - Credit 接口测试用例
+测试 POST /api/v1/cores/{core}/money-movements/ach/credit 接口
 """
 import pytest
 from utils.logger import logger
@@ -11,9 +11,9 @@ from data.enums import PaymentTransactionType
 @pytest.mark.create_api
 @pytest.mark.no_rerun
 @pytest.mark.skip(reason="真实ACH转账，会实际扣款，需要理解first_party逻辑")
-class TestACHCreditDebit:
+class TestACHCredit:
     """
-    ACH Credit/Debit测试（破坏性，全部skip）
+    ACH Credit测试（破坏性，全部skip）
     """
 
     def test_initiate_credit_third_party(self, ach_processing_api):
@@ -66,29 +66,15 @@ class TestACHCreditDebit:
         assert response.status_code == 200
         logger.info("✓ Same Day Credit发起成功")
 
-    def test_initiate_debit_third_party(self, ach_processing_api):
-        """测试场景4：发起第三方Debit（收款）"""
-        logger.info("测试场景4：发起第三方ACH Debit")
-        
-        response = ach_processing_api.initiate_debit(
-            amount="75.00",
-            financial_account_id="test_fa_id",
-            counterparty_id="test_counterparty_id",
-            first_party=False,
-            memo="Third Party Debit"
-        )
-        assert response.status_code == 200
-        logger.info("✓ 第三方Debit发起成功")
-
 
 @pytest.mark.ach_processing
 @pytest.mark.create_api
-class TestACHCreditDebitErrors:
-    """ACH转账错误处理（可运行）"""
+class TestACHCreditErrors:
+    """ACH Credit错误处理（可运行）"""
 
     def test_missing_required_field(self, ach_processing_api):
-        """测试场景5：缺少必需字段"""
-        logger.info("测试场景5：缺少必需字段")
+        """测试场景4：缺少必需字段"""
+        logger.info("测试场景4：缺少必需字段")
         
         response = ach_processing_api.initiate_credit(
             amount="10.00",
@@ -99,8 +85,8 @@ class TestACHCreditDebitErrors:
         logger.info("✓ 缺少必需字段测试完成")
 
     def test_same_day_cutoff_time_inconsistency(self, ach_processing_api):
-        """测试场景6：same_day截止时间不一致验证"""
-        logger.info("测试场景6：same_day截止时间不一致")
+        """测试场景5：same_day截止时间不一致验证"""
+        logger.info("测试场景5：same_day截止时间不一致")
         
         logger.warning("⚠️ 文档问题：截止时间说明不一致")
         logger.warning("Properties说：3:00 PM CT")
