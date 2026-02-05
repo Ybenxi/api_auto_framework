@@ -30,7 +30,12 @@ MODULE_NAME_MAPPING = {
     "trading_order": "Trading Order",
     "client_list": "Client List",
     "investment": "Investment Reports",
-    "account_summary": "Account Summary"
+    "account_summary": "Account Summary",
+    "card": "Card",
+    "card_opening": "Card Opening",
+    "card_management": "Card Management",
+    "sub_program": "Sub Program",
+    "dispute_and_risk": "Dispute & Risk Control"
 }
 
 

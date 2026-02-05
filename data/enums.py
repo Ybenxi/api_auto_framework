@@ -288,3 +288,162 @@ class ClassificationMode(str, Enum):
     def __str__(self):
         """返回枚举的实际值"""
         return self.value
+
+
+# ==================== Card 模块相关枚举 ====================
+
+class CardNetwork(str, Enum):
+    """
+    卡片网络枚举
+    对应 Card 模块中的 network 字段
+    """
+    VISA = "Visa"
+    MASTERCARD = "Mastercard"
+
+    def __str__(self):
+        """返回枚举的实际值"""
+        return self.value
+
+
+class CardType(str, Enum):
+    """
+    卡片类型枚举
+    对应 Card 模块中的 card_type 字段
+    """
+    DEBIT_CARD = "Debit_Card"
+
+    def __str__(self):
+        """返回枚举的实际值"""
+        return self.value
+
+
+class CardStatus(str, Enum):
+    """
+    卡片状态枚举
+    对应 Card 模块中的 card_status 字段
+    """
+    PENDING = "Pending"
+    ACTIVE = "Active"
+    RENEW = "Renew"
+    LOCKED = "Locked"
+    EXPIRED = "Expired"
+    CLOSED = "Closed"
+
+    def __str__(self):
+        """返回枚举的实际值"""
+        return self.value
+
+
+class LimitType(str, Enum):
+    """
+    限制类型枚举
+    定义消费限制是基于日历周期还是卡片激活日期
+    """
+    CALENDAR_DATE = "Calendar_Date"
+    ACTIVE_DATE = "Active_Date"
+
+    def __str__(self):
+        """返回枚举的实际值"""
+        return self.value
+
+
+class SpendingLimitInterval(str, Enum):
+    """
+    消费限制时间间隔枚举
+    对应 spending_limit 中的 interval 字段
+    """
+    DAILY = "Daily"
+    WEEKLY = "Weekly"
+    MONTHLY = "Monthly"
+    YEARLY = "Yearly"
+    PER_AUTHORIZATION = "Per_Authorization"
+    TOTAL = "Total"
+    MCC = "MCC"  # 商户类别码限制
+
+    def __str__(self):
+        """返回枚举的实际值"""
+        return self.value
+
+
+class SubProgramStatus(str, Enum):
+    """
+    子项目状态枚举
+    对应 Sub Program 中的 status 字段
+    """
+    ACTIVE = "Active"
+    INACTIVE = "Inactive"
+    UNDER_REVIEW = "Under_Review"
+
+    def __str__(self):
+        """返回枚举的实际值"""
+        return self.value
+
+
+class ClassificationType(str, Enum):
+    """
+    分类类型枚举
+    标识子项目或卡片是商业还是消费类型
+    """
+    BUSINESS = "Business"
+    CONSUMER = "Consumer"
+
+    def __str__(self):
+        """返回枚举的实际值"""
+        return self.value
+
+
+class DisputeStatus(str, Enum):
+    """
+    争议状态枚举
+    对应 Card Dispute 中的 status 字段
+    """
+    NEW = "New"
+    SUBMITTED = "Submitted"
+    RESULT = "Result"
+
+    def __str__(self):
+        """返回枚举的实际值"""
+        return self.value
+
+
+class TransactionStatus(str, Enum):
+    """
+    交易状态枚举
+    对应 Card Transaction 中的 status 字段
+    """
+    PENDING = "Pending"
+    CANCEL = "Cancel"
+    REJECTED = "Rejected"
+    VOIDED = "Voided"
+    SETTLED = "Settled"
+
+    def __str__(self):
+        """返回枚举的实际值"""
+        return self.value
+
+
+class ReplaceReason(str, Enum):
+    """
+    卡片替换原因枚举
+    对应 Replace Card 接口中的 reason 字段
+    """
+    REISSUED = "Reissued"
+    LOST = "Lost"
+
+    def __str__(self):
+        """返回枚举的实际值"""
+        return self.value
+
+
+class NestedProgramLogStatus(str, Enum):
+    """
+    嵌套项目使用日志状态枚举
+    对应 Nested Program Using Log 中的 status 字段
+    """
+    COMPLETED = "Completed"
+    CANCEL = "Cancel"
+    PENDING = "Pending"
+
+    def __str__(self):
+        """返回枚举的实际值"""
+        return self.value
