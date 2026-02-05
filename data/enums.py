@@ -447,3 +447,49 @@ class NestedProgramLogStatus(str, Enum):
     def __str__(self):
         """返回枚举的实际值"""
         return self.value
+
+
+# ==================== User Sign Up 模块相关枚举 ====================
+
+class ClientType(str, Enum):
+    """
+    客户类型枚举
+    对应 User Sign Up 中的 client_type 字段
+    ⚠️ 文档问题：枚举值有空格（Individual Client）
+    """
+    INDIVIDUAL_CLIENT = "Individual Client"
+    BUSINESS = "Business"
+
+    def __str__(self):
+        """返回枚举的实际值"""
+        return self.value
+
+
+class RecoveryQuestion(str, Enum):
+    """
+    安全问题枚举
+    对应 User Sign Up 中的 recovery_question 字段
+    """
+    DISLIKED_FOOD = "disliked_food"
+    NAME_OF_FIRST_PLUSH_TOY = "name_of_first_plush_toy"
+    FIRST_AWARD = "first_award"
+    FAVORITE_SECURITY_QUESTION = "favorite_security_question"
+    FAVORITE_TOY = "favorite_toy"
+    FIRST_COMPUTER_GAME = "first_computer_game"
+    FAVORITE_MOVIE_QUOTE = "favorite_movie_quote"
+    FIRST_SPORTS_TEAM_MASCOT = "first_sports_team_mascot"
+    FIRST_MUSIC_PURCHASE = "first_music_purchase"
+    FAVORITE_ART_PIECE = "favorite_art_piece"
+    GRANDMOTHER_FAVORITE_DESERT = "grandmother_favorite_desert"
+    FIRST_THING_COOKED = "first_thing_cooked"
+    CHILDHOOD_DREAM_JOB = "childhood_dream_job"
+    PLACE_WHERE_SIGNIFICANT_OTHER_WAS_MET = "place_where_significant_other_was_met"
+    FAVORITE_VACATION_LOCATION = "favorite_vacation_location"
+    NEW_YEARS_TWO_THOUSAND = "new_years_two_thousand"
+    FAVORITE_SPEAKER_ACTOR = "favorite_speaker_actor"
+    FAVORITE_BOOK_MOVIE_CHARACTER = "favorite_book_movie_character"
+    FAVORITE_SPORTS_PLAYER = "favorite_sports_player"
+
+    def __str__(self):
+        """返回枚举的实际值"""
+        return self.value

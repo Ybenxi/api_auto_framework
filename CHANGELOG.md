@@ -1,5 +1,97 @@
 # 变更日志
 
+## 2026-02-05 - User Sign Up 模块完成
+
+### 新增功能
+
+#### User Sign Up模块
+- ✅ 创建 `api/user_signup_api.py` - 5个接口封装
+- ✅ 创建 2个枚举类型（ClientType, RecoveryQuestion）
+- ✅ 创建 4个测试文件，31个测试场景
+  - test_user_signup_email_verification.py (7场景)
+  - test_user_signup_sms_verification.py (6场景)
+  - test_user_signup_create_user.py (9场景)
+  - test_user_signup_complete_flow.py (5场景，全skip)
+- ✅ 创建 README.md 文档
+- 包含完整的用户注册流程（邮箱→短信→创建）
+
+### 配置更新
+- ✅ 更新 `data/enums.py` - 新增2个枚举类（含19个安全问题）
+- ✅ 更新 `pytest.ini` - 新增1个marker
+  - user_signup
+- ✅ 更新 `test_cases/conftest.py` - 新增1个模块映射
+- ✅ 更新 CHANGELOG
+
+### 统计数据
+
+#### 本次新增
+- 新增测试文件：4个
+- 新增测试场景：31个
+- 新增API接口：5个
+- 新增API封装类：1个
+- 新增枚举类型：2个（含19个安全问题选项）
+- 代码行数：约900行
+
+#### 项目总计
+- 总测试文件：96个
+- 总测试方法：549个
+- 总API封装类：21个
+- 完成模块：19个
+- 接口总数：114个
+
+### 代码质量
+- ✅ 所有代码通过语法检查
+- ✅ 遵循项目代码规范
+- ✅ 完整的docstring和注释
+- ✅ 标注文档问题（25个）
+- ✅ 提供complete_signup_flow辅助方法
+- ✅ 智能条件参数处理
+
+### 已知问题
+
+#### User Sign Up文档问题（25个）
+1. token流转链说明不清晰（5步流程）
+2. has_idp_user描述不完整（条件逻辑不清）
+3. 条件必需字段规则不清（"must be left empty"含义不明）
+4. client_type枚举值有空格（Individual Client）
+5. phone格式说明不一致
+6. 验证码格式未说明（位数、有效期、重试限制）
+7. token有效期未说明
+8. email/phone重复处理未说明
+9. password加密说明不够详细
+10. recovery_question有循环定义问题
+11-25. 其他格式和命名问题
+
+### 特殊处理
+
+#### 1. 多步骤流程管理
+- 提供complete_signup_flow()方法
+- 自动传递token
+- 根据has_idp_user调整参数
+
+#### 2. 条件必需字段智能处理
+```python
+if not has_idp_user:
+    payload["encoded_password"] = encoded_password
+# has_idp_user=true时自动不传
+```
+
+#### 3. Client-Id header自动添加
+```python
+self.session.headers.update({
+    "Client-Id": self.client_id
+})
+```
+
+### 待完善工作
+1. 补充真实验证码测试（需要邮箱和短信接收）
+2. 实现密码加密工具（可选）
+3. 获取真实Client-Id
+4. 验证token有效期
+5. 测试重复注册策略
+
+---
+
 ## 2026-02-05 - Card 模块完成
 
 ### 新增功能

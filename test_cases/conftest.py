@@ -35,7 +35,8 @@ MODULE_NAME_MAPPING = {
     "card_opening": "Card Opening",
     "card_management": "Card Management",
     "sub_program": "Sub Program",
-    "dispute_and_risk": "Dispute & Risk Control"
+    "dispute_and_risk": "Dispute & Risk Control",
+    "user_signup": "User Sign Up"
 }
 
 
