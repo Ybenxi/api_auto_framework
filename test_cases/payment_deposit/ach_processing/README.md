@@ -29,11 +29,12 @@ ACH（Automated Clearing House）是美国电子支付系统，由Federal Reserv
 ### 费用接口（1个）
 12. **POST** `/money-movements/ach/fee` - 计算交易费用
 
-## 测试文件列表（6个）
+## 测试文件列表（7个）
 
 | 文件名 | 测试场景数 | 说明 |
 |--------|-----------|------|
 | `test_ach_transactions.py` | 3 | 交易列表查询 |
+| `test_ach_financial_accounts.py` | 7 | 可用账户列表 |
 | `test_ach_first_party_logic.py` | 6 | First Party业务逻辑（核心） |
 | `test_ach_credit_debit.py` | 6 | Credit/Debit转账 |
 | `test_ach_cancel_reversal.py` | 7 | Cancel和Reversal操作 |
@@ -41,7 +42,7 @@ ACH（Automated Clearing House）是美国电子支付系统，由Federal Reserv
 | `test_ach_counterparties.py` | 2 | 对手方管理 |
 | `test_ach_fee.py` | 4 | 费用计算 |
 
-**总计：33个测试场景**
+**总计：40个测试场景**
 
 ## ⚠️⚠️⚠️ 核心业务逻辑：First Party
 
