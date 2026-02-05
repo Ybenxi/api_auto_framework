@@ -23,7 +23,7 @@ secondaryBackgroundColor = "#f0f2f6"
 textColor = "#262730"
 font = "sans serif"
 
-[ui]
-# 隐藏部分UI元素
-hideTopBar = false
-hideSidebarNav = false
+[runner]
+# 运行配置
+fastReruns = true
+enforceSerializableSessionState = false

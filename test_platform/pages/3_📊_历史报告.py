@@ -2,9 +2,13 @@
 import streamlit as st
 from pathlib import Path
 from datetime import datetime
-import base64
 
-st.set_page_config(page_title="历史报告", page_icon="📊", layout="wide")
+st.set_page_config(
+    page_title="历史报告 - API自动化测试平台",
+    page_icon="📊",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
 # 隐藏顶部菜单
 st.markdown("""
@@ -24,17 +28,12 @@ if not reports_dir.exists():
     st.error("❌ 报告目录不存在")
     st.stop()
 
-# 获取所有报告文件
+# 获取所有报告文件（按时间倒序）
 report_files = sorted(
     reports_dir.glob("benxi_report_*.html"),
     key=lambda x: x.stat().st_mtime,
     reverse=True
 )
-
-# 加上final_report.html
-final_report = reports_dir / "final_report.html"
-if final_report.exists():
-    report_files.insert(0, final_report)
 
 if not report_files:
     st.warning("⚠️ 暂无测试报告")
@@ -54,8 +53,7 @@ else:
             col1, col2, col3, col4 = st.columns([3, 2, 2, 2])
             
             with col1:
-                is_final = report_file.name == "final_report.html"
-                badge = "🌟 最新" if is_final else f"#{idx}"
+                badge = f"#{idx + 1}"
                 st.markdown(f"**{badge} {report_file.name}**")
             
             with col2:
@@ -65,20 +63,28 @@ else:
                 st.text(f"💾 {file_size:.1f} KB")
             
             with col4:
-                # 使用下载按钮（更可靠）
-                try:
-                    with open(report_file, 'r', encoding='utf-8') as f:
-                        report_content = f.read()
-                    
-                    st.download_button(
-                        label="📥 下载报告",
-                        data=report_content,
-                        file_name=report_file.name,
-                        mime="text/html",
-                        key=f"download_{idx}"
-                    )
-                except Exception as e:
-                    st.error(f"读取失败: {str(e)}")
+                # 下载和查看按钮
+                btn_col1, btn_col2 = st.columns(2)
+                
+                with btn_col1:
+                    try:
+                        with open(report_file, 'r', encoding='utf-8') as f:
+                            report_content = f.read()
+                        
+                        st.download_button(
+                            label="📥 下载",
+                            data=report_content,
+                            file_name=report_file.name,
+                            mime="text/html",
+                            key=f"download_{idx}"
+                        )
+                    except Exception as e:
+                        st.error(f"读取失败")
+                
+                with btn_col2:
+                    # 生成可访问的URL
+                    file_url = report_file.absolute().as_uri()
+                    st.markdown(f'<a href="{file_url}" target="_blank" style="display:inline-block;padding:0.25rem 0.75rem;background-color:#f0f2f6;border-radius:0.25rem;text-decoration:none;color:#262730;border:1px solid #e0e0e0;">🔗 查看</a>', unsafe_allow_html=True)
             
             st.markdown("---")
     
@@ -92,13 +98,11 @@ else:
         st.info(f"💾 报告总大小: {total_size:.1f} KB")
     
     with col2:
-        # 计算可删除的报告数量（排除final_report.html）
-        deletable_reports = [f for f in report_files if f.name != "final_report.html"]
-        if len(deletable_reports) > 5:
+        # 计算可删除的报告数量
+        if len(report_files) > 5:
             if st.button("🧹 清理旧报告（仅保留5个）", type="secondary", key="btn_cleanup"):
-                # 排除final_report.html
-                to_keep = deletable_reports[:5]
-                to_delete = deletable_reports[5:]
+                to_keep = report_files[:5]
+                to_delete = report_files[5:]
                 
                 # 删除旧报告
                 deleted_count = 0
@@ -112,31 +116,21 @@ else:
                 if deleted_count > 0:
                     st.success(f"✅ 已删除 {deleted_count} 个旧报告")
                     st.rerun()
-
-st.markdown("---")
-
-# 查看报告功能
-if report_files:
-    st.subheader("👀 查看报告")
-    
-    selected_report_name = st.selectbox(
-        "选择要查看的报告",
-        [f.name for f in report_files],
-        key="select_view_report"
-    )
-    
-    if st.button("📖 在此查看", key="btn_view_inline"):
-        selected_report_file = next(f for f in report_files if f.name == selected_report_name)
         
-        try:
-            with open(selected_report_file, 'r', encoding='utf-8') as f:
-                report_html = f.read()
-            
-            # 使用iframe内嵌显示
-            st.components.v1.html(report_html, height=800, scrolling=True)
-            
-        except Exception as e:
-            st.error(f"❌ 读取报告失败: {str(e)}")
+        # 删除所有报告
+        if len(report_files) > 0:
+            if st.button("🗑️ 删除所有报告", type="secondary", key="btn_delete_all"):
+                deleted_count = 0
+                for f in report_files:
+                    try:
+                        f.unlink()
+                        deleted_count += 1
+                    except Exception as e:
+                        st.error(f"删除失败: {f.name} - {str(e)}")
+                
+                if deleted_count > 0:
+                    st.success(f"✅ 已删除 {deleted_count} 个报告")
+                    st.rerun()
 
 st.markdown("---")
-st.caption("💡 提示：点击'下载报告'按钮保存到本地，或点击'在此查看'直接浏览")
+st.caption("💡 提示：点击'📥 下载'保存到本地，点击'🔗 查看'在新窗口打开")

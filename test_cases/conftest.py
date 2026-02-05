@@ -37,6 +37,7 @@ MODULE_NAME_MAPPING = {
     "sub_program": "Sub Program",
     "dispute_and_risk": "Dispute & Risk Control",
     "user_signup": "User Sign Up",
+    "payment_deposit": "Payment & Deposit",
     "internal_pay": "Internal Pay",
     "account_transfer": "Account Transfer"
 }

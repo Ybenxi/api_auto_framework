@@ -5,8 +5,15 @@ import subprocess
 import time
 from datetime import datetime
 import re
+import sys
+import os
 
-st.set_page_config(page_title="运行测试", page_icon="▶️", layout="wide")
+st.set_page_config(
+    page_title="运行测试 - API自动化测试平台",
+    page_icon="▶️",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
 # 隐藏顶部菜单
 st.markdown("""
@@ -22,11 +29,12 @@ st.title("▶️ 运行测试")
 project_root = Path(__file__).parent.parent.parent
 test_cases_dir = project_root / "test_cases"
 
-# 运行模式选择
-run_mode = st.radio(
-    "🎯 选择运行模式",
+# 运行模式选择（使用选择框代替单选按钮）
+st.subheader("🎯 选择运行模式")
+run_mode = st.selectbox(
+    "运行方式",
     ["按模块运行", "按文件运行", "运行全部"],
-    horizontal=True
+    label_visibility="collapsed"
 )
 
 st.markdown("---")
@@ -105,20 +113,31 @@ if st.button("🚀 开始运行", type="primary", key="btn_start_run"):
     start_time = time.time()
     
     try:
-        # 构建带虚拟环境的命令
-        venv_path = project_root / ".venv" / "bin" / "activate"
-        if venv_path.exists():
-            # 使用虚拟环境中的pytest
-            pytest_cmd = str(project_root / ".venv" / "bin" / "pytest")
-            cmd_parts[0] = pytest_cmd
+        # 构建完整的执行命令，包含环境变量设置
+        venv_python = project_root / ".venv" / "bin" / "python"
+        
+        if venv_python.exists():
+            # 使用虚拟环境的python -m pytest
+            full_cmd = [
+                str(venv_python),
+                "-m", "pytest"
+            ] + cmd_parts[1:]  # 跳过原来的pytest命令
+        else:
+            # 回退到系统pytest
+            full_cmd = cmd_parts
+        
+        # 设置PYTHONPATH确保能导入项目模块
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(project_root)
         
         # 切换到项目根目录执行
         result = subprocess.run(
-            cmd_parts,
+            full_cmd,
             cwd=str(project_root),
             capture_output=True,
             text=True,
-            timeout=300  # 5分钟超时
+            timeout=300,  # 5分钟超时
+            env=env
         )
         
         end_time = time.time()

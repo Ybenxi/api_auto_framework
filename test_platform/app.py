@@ -1,5 +1,5 @@
 """
-API自动化测试管理平台 - 主页面
+API自动化测试管理平台 - 总览页面
 基于Streamlit构建的轻量级测试管理工具
 """
 import streamlit as st
@@ -8,10 +8,13 @@ import sys
 
 # 页面配置
 st.set_page_config(
-    page_title="API自动化测试平台",
+    page_title="总览 - API自动化测试平台",
     page_icon="🧪",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
+    menu_items={
+        'About': "API自动化测试管理平台 v1.1"
+    }
 )
 
 # 自定义CSS - 隐藏部分英文元素
@@ -49,6 +52,17 @@ st.markdown("""
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
+    
+    /* 侧边栏样式优化 */
+    [data-testid="stSidebar"] {
+        min-width: 250px;
+    }
+    
+    /* 侧边栏收起按钮始终可见 */
+    button[kind="header"] {
+        visibility: visible !important;
+        opacity: 1 !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -110,7 +124,7 @@ quick_col1, quick_col2, quick_col3 = st.columns(3)
 
 with quick_col1:
     if st.button("📋 查看测试用例", key="btn_test_cases"):
-        st.switch_page("pages/1_📋_测试用例.py")
+        st.switch_page("pages/1_🧪_测试用例.py")
 
 with quick_col2:
     if st.button("▶️ 运行测试", key="btn_run_test"):

@@ -3,7 +3,12 @@ import streamlit as st
 from pathlib import Path
 import re
 
-st.set_page_config(page_title="测试用例", page_icon="📋", layout="wide")
+st.set_page_config(
+    page_title="测试用例 - API自动化测试平台",
+    page_icon="📋",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
 # 隐藏顶部菜单
 st.markdown("""
