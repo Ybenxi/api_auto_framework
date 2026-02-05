@@ -597,3 +597,20 @@ class WireDirection(str, Enum):
     def __str__(self):
         """返回枚举的实际值"""
         return self.value
+
+
+class RequestPaymentStatus(str, Enum):
+    """
+    请求付款状态枚举
+    对应 Instant Pay Request Payment 中的 status 字段
+    ⚠️ 注意：此状态与普通Payment的status完全不同
+    """
+    CANCELLED = "Cancelled"
+    PENDING = "Pending"
+    REJECTED = "Rejected"
+    PAID_IN_FULL = "Paid_In_Full"
+    PAID_IN_PARTIAL = "Paid_In_Partial"
+
+    def __str__(self):
+        """返回枚举的实际值"""
+        return self.value

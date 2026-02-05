@@ -22,17 +22,18 @@ Remote Deposit Check（远程支票存款）提供通过拍照方式远程存入
 ### 费用接口（1个）
 9. **POST** `/money-movements/checks/fee` - 计算交易费用
 
-## 测试文件列表（5个）
+## 测试文件列表（6个）
 
 | 文件名 | 测试场景数 | 说明 |
 |--------|-----------|------|
 | `test_check_transactions.py` | 3 | 交易列表查询 |
+| `test_check_financial_accounts.py` | 7 | 可用账户列表 |
 | `test_check_counterparties.py` | 3 | 对手方管理 |
 | `test_check_scan_deposit.py` | 7 | 扫描和存款（核心流程） |
 | `test_check_update_download.py` | 6 | 更新和下载 |
 | `test_check_fee.py` | 2 | 费用计算 |
 
-**总计：21个测试场景**
+**总计：28个测试场景**
 
 ## 支票存款流程
 

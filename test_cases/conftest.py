@@ -41,7 +41,8 @@ MODULE_NAME_MAPPING = {
     "internal_pay": "Internal Pay",
     "account_transfer": "Account Transfer",
     "wire_processing": "Wire Processing",
-    "remote_deposit_check": "Remote Deposit Check"
+    "remote_deposit_check": "Remote Deposit Check",
+    "instant_pay": "Instant Pay"
 }
 
 

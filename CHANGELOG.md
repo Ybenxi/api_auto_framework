@@ -1,5 +1,112 @@
 # 变更日志
 
+## 2026-02-05 - Instant Pay 模块完成
+
+### 新增功能
+
+#### Instant Pay模块（实时支付）
+- ✅ 创建 `api/instant_pay_api.py` - 15个接口封装
+- ✅ 创建 6个测试文件，33个测试场景
+  - test_instant_pay_transactions.py (7场景)
+  - test_instant_pay_payment.py (8场景)
+  - test_instant_pay_cancel_approve_reject.py (6场景)
+  - test_instant_pay_return.py (8场景)
+  - test_instant_pay_counterparties.py (2场景)
+  - test_instant_pay_fee.py (2场景)
+- ✅ 创建 README.md 文档
+- 包含FedNow实时支付、Request Payment、Return处理
+
+#### 核心功能
+- 实时支付（20秒超时）
+- 收款请求（RFP）
+- Cancel/Approve/Reject流程
+- Return Payment/Request处理
+- 支持link和structured_content
+
+#### 枚举类型
+- ✅ 新增1个枚举类：RequestPaymentStatus（5个专有状态）
+
+### 配置更新
+- ✅ 更新 `data/enums.py` - 新增1个枚举类
+- ✅ 更新 `pytest.ini` - 新增1个marker
+  - instant_pay
+- ✅ 更新 `test_cases/conftest.py` - 新增1个模块映射
+- ✅ 更新 payment_deposit/README.md
+- ✅ 更新 CHANGELOG
+
+### 统计数据
+
+#### 本次新增
+- 新增测试文件：6个
+- 新增测试场景：33个
+- 新增API接口：15个
+- 新增API封装类：1个
+- 新增枚举类型：1个
+- 代码行数：约1,500行
+
+#### Payment & Deposit模块总计
+- 子模块完成：5/6（83%）
+- 测试文件：26个
+- 测试场景：142个
+- API接口：41个
+
+#### 项目总计
+- 总测试文件：122个
+- 总测试方法：691个
+- 总API封装类：26个
+- 完成模块：24个
+- 接口总数：155个
+
+### 代码质量
+- ✅ 所有代码通过语法检查
+- ✅ 遵循项目代码规范
+- ✅ 完整的docstring和注释
+- ✅ 标注文档问题（45个）
+- ✅ 所有破坏性操作triple标记
+- ✅ 20秒超时限制明确提醒
+
+### 已知问题
+
+#### Instant Pay文档问题（45个）
+- Cancel/Reject/Return概念混淆
+- payment-request vs request-payment URL不一致
+- cancel_code/return_code/reject_code外部链接缺失
+- Request Payment专有字段未在Properties定义
+- Reject Return Request URL示例完全错误
+- 响应格式不一致（7个接口无code包装层）
+- structured_content说明不清
+- 大量响应字段未定义
+
+### 特殊处理
+
+#### 1. 20秒超时限制
+所有payment接口都提醒Payment Timeout Clock：
+```python
+logger.warning("⚠️⚠️⚠️ 20秒超时限制！")
+```
+
+#### 2. Request Payment专有枚举
+新增RequestPaymentStatus处理RFP特殊状态。
+
+#### 3. 响应格式双重兼容
+parse_list_response支持has_code_wrapper参数：
+- List Transactions：无code包装层
+- List Request Payment：有code包装层
+
+#### 4. URL命名混乱标注
+详细标注payment-request vs request-payment不一致问题。
+
+#### 5. Code值未知处理
+标注cancel_code/return_code/reject_code外部链接缺失。
+
+### 待完善工作
+1. 获取完整的cancel/return/reject code列表
+2. 补充真实支付测试（专门测试账户）
+3. 验证20秒超时实际行为
+4. 理清Cancel/Reject/Return概念
+
+---
+
 ## 2026-02-05 - Wire Processing & Remote Deposit Check 模块完成
 
 ### 新增功能
