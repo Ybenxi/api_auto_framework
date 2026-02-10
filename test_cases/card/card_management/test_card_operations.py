@@ -149,10 +149,12 @@ class TestCardOperations:
         """
         logger.info("测试场景8：成功更新持卡人信息")
         
+        import time
+        timestamp = int(time.time())
         response = card_management_api.update_card_holder_info(
             card_number="test_card_number",
-            first_name="Updated",
-            last_name="Name",
+            first_name=f"Auto TestYan Updated {timestamp}",
+            last_name="Auto TestYan Name",
             address1="456 New St",
             city="New York",
             state="NY",
@@ -174,10 +176,12 @@ class TestCardOperations:
         """
         logger.info("测试场景9：成功更新卡片信息")
         
+        import time
+        timestamp = int(time.time())
         response = card_management_api.update_card_info(
             card_number="test_card_number",
-            first_name="Updated",
-            last_name="Name",
+            first_name=f"Auto TestYan Updated {timestamp}",
+            last_name="Auto TestYan Name",
             address1="456 New St",
             city="New York",
             state="NY",

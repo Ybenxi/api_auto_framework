@@ -90,8 +90,8 @@ class TestUserSignUpCompleteFlow:
             phone="+11234567892",
             email_passcode="123456",
             sms_passcode="654321",
-            first_name="Existing",
-            last_name="User",
+            first_name="Auto TestYan Existing",
+            last_name="Auto TestYan User",
             client_type=ClientType.INDIVIDUAL_CLIENT
             # 不提供 encoded_password, recovery_question, recovery_answer
         )
@@ -149,8 +149,8 @@ class TestUserSignUpCreateUserErrors:
         
         response = user_signup_api.create_unifi_user(
             enroll_token="fake_token",
-            first_name="Test",
-            last_name="User",
+            first_name="Auto TestYan Test",
+            last_name="Auto TestYan User",
             email="test@example.com",
             phone="+11234567890",
             client_type=ClientType.INDIVIDUAL_CLIENT
@@ -172,8 +172,8 @@ class TestUserSignUpCreateUserErrors:
         
         response = user_signup_api.create_unifi_user(
             enroll_token="fake_token",
-            first_name="Test",
-            last_name="User",
+            first_name="Auto TestYan Test",
+            last_name="Auto TestYan User",
             email="test@example.com",
             phone="+11234567890",
             client_type="Invalid_Type"
@@ -194,8 +194,8 @@ class TestUserSignUpCreateUserErrors:
         
         response = user_signup_api.create_unifi_user(
             enroll_token="fake_token",
-            first_name="Test",
-            last_name="User",
+            first_name="Auto TestYan Test",
+            last_name="Auto TestYan User",
             email="test@example.com",
             phone="+11234567890",
             client_type=ClientType.INDIVIDUAL_CLIENT,

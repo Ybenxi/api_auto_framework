@@ -120,6 +120,37 @@ class Config:
         """
         api_path = self.get_api_path(endpoint)
         return f"{self.base_url}{api_path}"
+    
+    def get_db_config(self, key: str, default: str = None) -> str:
+        """
+        获取数据库配置项
+        
+        Args:
+            key: 配置键名（如 "DB_HOST", "DB_PORT" 等）
+            default: 默认值
+        
+        Returns:
+            配置值
+        
+        Example:
+            config.get_db_config("DB_HOST")
+            # 返回: "fta-database-dev.cda9xsygtbs2.us-east-1.rds.amazonaws.com"
+        """
+        # 映射环境变量名到 db_config 字典的键
+        key_mapping = {
+            "DB_HOST": "host",
+            "DB_PORT": "port",
+            "DB_USER": "user",
+            "DB_PASSWORD": "password",
+            "DB_NAME": "database"
+        }
+        
+        db_key = key_mapping.get(key)
+        if db_key:
+            value = self.db_config.get(db_key, default)
+            return str(value) if value is not None else default
+        
+        return default
 
 
 # 全局配置实例

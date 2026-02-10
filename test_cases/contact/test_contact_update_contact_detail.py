@@ -45,7 +45,8 @@ class TestContactUpdate:
         
         # 3. 准备更新数据
         logger.info("准备更新数据")
-        new_first_name = f"Updated_{original_first_name}"
+        import time
+        new_first_name = f"Auto TestYan Updated {int(time.time())}"
         update_data = {
             "first_name": new_first_name
         }
@@ -157,9 +158,11 @@ class TestContactUpdate:
         
         # 3. 准备更新数据（多个字段）
         logger.info("准备更新数据（多个字段）")
+        import time
+        timestamp = int(time.time())
         update_data = {
-            "first_name": "MultiUpdate",
-            "last_name": "Test",
+            "first_name": f"Auto TestYan MultiUpdate {timestamp}",
+            "last_name": "Auto TestYan Test",
             "phone": "+14155552999"
         }
         logger.info(f"  更新 first_name: {update_data['first_name']}")
@@ -274,7 +277,7 @@ class TestContactUpdate:
         
         # 3. 准备更新数据
         update_data = {
-            "first_name": "Invalid"
+            "first_name": "Auto TestYan InvalidTest"
         }
         
         # 4. 调用 Update 接口
@@ -336,6 +339,7 @@ class TestContactUpdate:
         # 3. 准备更新数据（无效的 phone 格式）
         logger.info("准备更新数据（无效的 phone 格式）")
         update_data = {
+            "first_name": "Auto TestYan InvalidPhone",  # 保持命名规范
             "phone": "123456789"  # 非 E.164 格式
         }
         

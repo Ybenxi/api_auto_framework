@@ -79,7 +79,7 @@ class TestWireCounterpartiesCreate:
             name=f"Auto TestYan Intl Wire {int(time.time())}",
             type=CounterpartyType.COMPANY,
             bank_account_type=BankAccountType.SAVINGS,
-            bank_account_owner_name="Test Company",
+            bank_account_owner_name="Auto TestYan Company",
             bank_account_number="222222222",
             payment_type=WirePaymentType.INTERNATIONAL_WIRE,
             # International_Wire条件必需字段
@@ -90,7 +90,7 @@ class TestWireCounterpartiesCreate:
             zip_code="100000",
             bank_country="CN",
             swift_code="ABCCCNBJ",
-            bank_name="Test Bank",
+            bank_name="Auto TestYan Bank",
             bank_address="456 Bank St",
             bank_city="Beijing",
             bank_state="Beijing",
@@ -110,10 +110,10 @@ class TestWireCounterpartiesCreateErrors:
         logger.info("测试场景6：缺少必需字段")
         
         response = wire_processing_api.create_counterparty(
-            name="Test",
+            name="Auto TestYan Test",
             type=CounterpartyType.PERSON,
             bank_account_type=BankAccountType.CHECKING,
-            bank_account_owner_name="Test"
+            bank_account_owner_name="Auto TestYan Test"
             # 缺少 bank_account_number
         )
         assert response.status_code == 200
@@ -124,10 +124,10 @@ class TestWireCounterpartiesCreateErrors:
         logger.info("测试场景7：Wire类型条件必需验证")
         
         response = wire_processing_api.create_counterparty(
-            name="Test",
+            name="Auto TestYan Test",
             type=CounterpartyType.PERSON,
             bank_account_type=BankAccountType.CHECKING,
-            bank_account_owner_name="Test",
+            bank_account_owner_name="Auto TestYan Test",
             bank_account_number="111111111",
             payment_type=WirePaymentType.WIRE
             # 缺少 bank_routing_number（Wire类型必需）

@@ -10,9 +10,24 @@ from api.auth_api import auth_api
 from config.config import config
 from utils.logger import logger
 from dao.db_manager import DBManager
+from utils.data_cleanup import DataCleanup
 
 # 用于存储所有测试结果和捕获的流量
 test_results = []
+
+# 用于跟踪测试创建的ID（自动清理用）
+test_created_ids = {
+    "counterparty": [],
+    "counterparty_group": [],
+    "contact": [],
+    "sub_account": [],
+    "fbo_account": [],
+    "financial_account": [],
+    "trading_order": [],
+    "client_list": [],
+    "card": [],
+    "user": []
+}
 
 # 模块名称映射（基于文件夹名称）
 MODULE_NAME_MAPPING = {
@@ -541,6 +556,121 @@ def db_session():
         if db_manager:
             db_manager.close_connection()
             logger.info("数据库会话已关闭")
+
+
+@pytest.fixture(scope="session")
+def db_cleanup():
+    """
+    数据库清理器 fixture（session级别）
+    用于自动清理测试过程中创建的垃圾数据
+    
+    ⚠️ 重要：
+    1. 测试结束后自动清理跟踪的ID
+    2. 只删除名称以 "Auto TestYan" 开头的数据
+    3. 默认先模拟，确认无误后再实际删除
+    
+    使用方法：
+        def test_create_something(api, db_cleanup):
+            response = api.create(...)
+            created_id = response.json()["data"]["id"]
+            track_created_id("counterparty", created_id)  # 自动清理
+    """
+    db_manager = None
+    cleaner = None
+    
+    try:
+        # 初始化数据库连接
+        db_config = config.db_config
+        
+        # 检查是否配置了数据库（避免使用默认的localhost）
+        if db_config.get("host") == "localhost":
+            logger.warning("数据库未配置（使用默认localhost），跳过数据清理功能")
+            yield None
+            return
+        
+        db_manager = DBManager(db_config)
+        cleaner = DataCleanup(db_manager)
+        
+        logger.info("=" * 60)
+        logger.info("数据清理器已就绪")
+        logger.info("⚠️  测试结束后将自动清理跟踪的测试数据")
+        logger.info("=" * 60)
+        
+        yield cleaner
+        
+        # 测试结束后清理
+        logger.info("")
+        logger.info("=" * 60)
+        logger.info("测试会话结束，开始清理数据...")
+        logger.info("=" * 60)
+        
+        total_cleaned = 0
+        for module, ids in test_created_ids.items():
+            if ids:
+                logger.info(f"\n清理 {module}: {len(ids)} 条记录")
+                logger.debug(f"ID列表: {ids}")
+                
+                try:
+                    # 实际执行清理（dry_run=False）
+                    stats = cleaner.cleanup_by_ids(module, ids, dry_run=False)
+                    
+                    # 统计总删除数
+                    module_total = sum(stats.values())
+                    total_cleaned += module_total
+                    
+                    logger.info(f"✓ {module} 清理完成: {stats}")
+                    
+                except Exception as e:
+                    logger.error(f"✗ {module} 清理失败: {e}", exc_info=True)
+        
+        logger.info("")
+        logger.info("=" * 60)
+        logger.info(f"数据清理完成！共清理 {total_cleaned} 条记录")
+        logger.info("=" * 60)
+        
+    except Exception as e:
+        logger.error(f"数据库清理器初始化失败: {e}", exc_info=True)
+        yield None
+    
+    finally:
+        if db_manager:
+            db_manager.close_connection()
+
+
+def track_created_id(module: str, resource_id: str):
+    """
+    跟踪测试创建的ID（用于测试结束后自动清理）
+    
+    Args:
+        module: 模块名称（如 "counterparty", "contact", "sub_account"）
+        resource_id: 资源ID
+    
+    Example:
+        # 在测试中使用
+        response = counterparty_api.create_counterparty(...)
+        created_id = response.json()["data"]["id"]
+        track_created_id("counterparty", created_id)
+        
+        # 测试结束后会自动清理
+    """
+    if module in test_created_ids:
+        test_created_ids[module].append(str(resource_id))
+        logger.debug(f"✓ 已跟踪 {module} ID: {resource_id}")
+    else:
+        logger.warning(f"未知模块: {module}，无法跟踪ID")
+
+
+def get_tracked_ids(module: str) -> list:
+    """
+    获取已跟踪的ID列表
+    
+    Args:
+        module: 模块名称
+    
+    Returns:
+        ID列表
+    """
+    return test_created_ids.get(module, [])
 
 
 # --- 流量捕获逻辑（增强版 - 防止重复记录）---

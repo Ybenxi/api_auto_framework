@@ -120,8 +120,8 @@ class TestCardOpeningRewardCardErrors:
         response = card_opening_api.create_reward_card_application(
             sub_program_id="test_sub_program_id",
             email="test@example.com",
-            first_name="Test",
-            last_name="User",
+            first_name="Auto TestYan Test",
+            last_name="Auto TestYan User",
             ssn="1234",
             telephone="1234567890",
             address1="123 Test St",
@@ -150,8 +150,8 @@ class TestCardOpeningRewardCardErrors:
         response = card_opening_api.create_reward_card_application(
             sub_program_id="test_sub_program_id",
             email="test@example.com",
-            first_name="Test",
-            last_name="User",
+            first_name="Auto TestYan Test",
+            last_name="Auto TestYan User",
             ssn="1234",
             telephone="1234567890",
             address1="123 Test St",
@@ -179,8 +179,8 @@ class TestCardOpeningRewardCardErrors:
         response = card_opening_api.create_reward_card_application(
             sub_program_id="test_sub_program_id",
             email="test@example.com",
-            first_name="Test",
-            last_name="User",
+            first_name="Auto TestYan Test",
+            last_name="Auto TestYan User",
             ssn="1234",
             telephone="1234567890",
             address1="123 Test St",
@@ -215,8 +215,8 @@ class TestCardOpeningRewardCardErrors:
         response = card_opening_api.create_reward_card_application(
             sub_program_id="test_sub_program_id",
             email="test@example.com",
-            first_name="Test",
-            last_name="User",
+            first_name="Auto TestYan Test",
+            last_name="Auto TestYan User",
             ssn="1234",  # 未加密的明文SSN
             telephone="1234567890",
             address1="123 Test St",

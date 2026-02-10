@@ -80,8 +80,8 @@ class TestUserSignUpCreateUser:
         
         response = user_signup_api.create_unifi_user(
             enroll_token="fake_token4",
-            first_name="Existing",
-            last_name="User",
+            first_name="Auto TestYan Existing",
+            last_name="Auto TestYan User",
             email="existing@example.com",
             phone="+11234567890",
             client_type=ClientType.INDIVIDUAL_CLIENT
@@ -102,8 +102,8 @@ class TestUserSignUpCreateUser:
         
         response = user_signup_api.create_unifi_user(
             enroll_token="fake_token",
-            first_name="Test",
-            last_name="User",
+            first_name="Auto TestYan Test",
+            last_name="Auto TestYan User",
             email="test@example.com",
             phone="+11234567890",
             client_type=ClientType.BUSINESS
@@ -128,8 +128,8 @@ class TestUserSignUpCreateUser:
         
         response = user_signup_api.create_unifi_user(
             enroll_token="fake_token",
-            first_name="Test",
-            last_name="User",
+            first_name="Auto TestYan Test",
+            last_name="Auto TestYan User",
             email="test@example.com",
             phone="+11234567890",
             client_type=ClientType.BUSINESS,
@@ -153,8 +153,8 @@ class TestUserSignUpCreateUser:
         # 测试过短（<4字符）
         response_short = user_signup_api.create_unifi_user(
             enroll_token="fake_token",
-            first_name="Test",
-            last_name="User",
+            first_name="Auto TestYan Test",
+            last_name="Auto TestYan User",
             email="test@example.com",
             phone="+11234567890",
             client_type=ClientType.INDIVIDUAL_CLIENT,
@@ -169,8 +169,8 @@ class TestUserSignUpCreateUser:
         long_answer = "A" * 51
         response_long = user_signup_api.create_unifi_user(
             enroll_token="fake_token",
-            first_name="Test",
-            last_name="User",
+            first_name="Auto TestYan Test",
+            last_name="Auto TestYan User",
             email="test@example.com",
             phone="+11234567890",
             client_type=ClientType.INDIVIDUAL_CLIENT,
@@ -198,8 +198,8 @@ class TestUserSignUpCreateUser:
         
         response = user_signup_api.create_unifi_user(
             enroll_token="fake_token",
-            first_name="Test",
-            last_name="User",
+            first_name="Auto TestYan Test",
+            last_name="Auto TestYan User",
             email="test@example.com",
             phone="+11234567890",
             client_type="Individual Client",  # 使用带空格的枚举值

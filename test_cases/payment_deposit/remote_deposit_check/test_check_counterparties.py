@@ -55,7 +55,7 @@ class TestCheckCounterpartiesErrors:
         logger.info("测试场景3：缺少address1")
         
         response = remote_deposit_check_api.create_counterparty(
-            name="Test",
+            name="Auto TestYan Test",
             type=CounterpartyType.PERSON
             # 缺少address1（Check counterparty必需）
         )
