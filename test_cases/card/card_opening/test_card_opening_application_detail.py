@@ -61,12 +61,13 @@ class TestCardOpeningApplicationDetail:
         response = card_opening_api.get_application_detail(invalid_id)
         
         assert response.status_code == 200
-        
-        # Detail响应格式特殊，可能有code也可能没有
+
+        # 验证无效ID返回了错误
         response_body = response.json()
-        logger.info(f"响应结构: {list(response_body.keys())}")
-        
-        logger.info("✓ 无效申请ID测试完成")
+        assert response_body.get("code") != 200 or response_body.get("data") is None or response_body.get("id") is None, \
+            "无效申请ID应该返回错误或空数据"
+
+        logger.info(f"✓ 无效申请ID测试完成，code={response_body.get('code')}")
 
     def test_response_format_inconsistency(self, card_opening_api):
         """

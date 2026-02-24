@@ -57,9 +57,13 @@ class TestFinancialAccountRetrieveAFinancialAccountPaymentDetail:
         else:
             payment_data = response_data
         
-        logger.info("✓ 成功获取支付详情:")
-        logger.info(f"  account_number: {payment_data.get('account_number', '(not present)')}")
-        logger.info(f"  routing_number: {payment_data.get('routing_number', '(not present)')}")
+        # 验证必需字段存在（assert，不是 logger）
+        required_fields = ["account_number", "routing_number"]
+        for field in required_fields:
+            assert field in payment_data, f"支付详情缺少必需字段: '{field}'"
+            logger.info(f"  ✓ {field}: {payment_data.get(field)}")
+
+        logger.info("✓ 成功获取支付详情")
 
     def test_retrieve_payment_detail_with_invalid_id(self, login_session):
         """
@@ -113,16 +117,13 @@ class TestFinancialAccountRetrieveAFinancialAccountPaymentDetail:
         
         response_data = detail_response.json()
         
-        # 检查响应结构
-        logger.info("验证响应结构")
-        if "code" in response_data:
-            logger.info(f"  code: {response_data.get('code')}")
-        if "data" in response_data:
-            payment_data = response_data["data"]
-            logger.info(f"  data.account_number: {payment_data.get('account_number', '(not present)')}")
-            logger.info(f"  data.routing_number: {payment_data.get('routing_number', '(not present)')}")
-        else:
-            logger.info(f"  account_number: {response_data.get('account_number', '(not present)')}")
-            logger.info(f"  routing_number: {response_data.get('routing_number', '(not present)')}")
-        
+        # 验证响应结构和必需字段
+        logger.info("验证响应结构和必需字段")
+        payment_data = response_data.get("data", response_data)
+
+        required_fields = ["account_number", "routing_number"]
+        for field in required_fields:
+            assert field in payment_data, f"支付详情响应缺少必需字段: '{field}'"
+            logger.info(f"  ✓ {field}: {payment_data.get(field)}")
+
         logger.info("✓ 响应结构验证完成")
