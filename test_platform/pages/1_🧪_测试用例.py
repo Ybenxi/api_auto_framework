@@ -87,32 +87,31 @@ else:
             
             for idx, (method_name, docstring) in enumerate(test_methods, 1):
                 with st.expander(f"🧪 测试场景{idx}: {method_name}", expanded=False):
-                    # 提取场景描述
                     lines = docstring.strip().split('\n')
-                    scenario_desc = lines[0] if lines else "无描述"
+                    scenario_desc = lines[0].strip() if lines else "无描述"
                     
+                    # 显示场景描述（第一行）
                     st.markdown(f"**{scenario_desc}**")
                     
-                    # 验证点
-                    verification_points = [
-                        line.strip() for line in lines 
-                        if line.strip() and (
-                            line.strip().startswith(('1.', '2.', '3.', '4.', '5.', '-', '•'))
-                            or '验证' in line
-                        )
-                    ]
+                    # 从第二行开始提取验证点，排除"验证点："标题行
+                    verification_points = []
+                    for line in lines[1:]:
+                        stripped = line.strip()
+                        if not stripped:
+                            continue
+                        # 排除"验证点："标题行
+                        if stripped in ("验证点：", "验证点:"):
+                            continue
+                        # 只收集以数字序号或符号开头的行
+                        if stripped.startswith(('1.', '2.', '3.', '4.', '5.', '6.', '7.', '8.', '9.', '-', '•')):
+                            verification_points.append(stripped)
                     
                     if verification_points:
                         st.markdown("**验证点：**")
                         for vp in verification_points:
-                            # 清理行首的数字和符号
                             clean_vp = re.sub(r'^[\d\.\-•\s]+', '', vp).strip()
                             if clean_vp:
                                 st.markdown(f"- {clean_vp}")
-                    
-                    # 显示完整docstring
-                    with st.expander("查看完整描述", expanded=False):
-                        st.code(docstring.strip(), language="text")
         else:
             st.warning("⚠️ 未找到测试方法")
         
