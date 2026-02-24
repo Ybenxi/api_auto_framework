@@ -68,8 +68,17 @@ class TestContactUpdate:
         
         assert updated_contact.get("first_name") == new_first_name, \
             f"first_name 未更新: 期望 {new_first_name}, 实际 {updated_contact.get('first_name')}"
-        
-        logger.info("✓ 成功更新 Contact first_name:")
+
+        # Detail 二次确认：调用详情接口验证数据已落库
+        logger.info("调用 Detail 接口二次确认数据已落库")
+        detail_response = contact_api.get_contact_detail(contact_id)
+        assert detail_response.status_code == 200
+        detail_body = detail_response.json()
+        detail_contact = detail_body.get("data") if "data" in detail_body else detail_body
+        assert detail_contact.get("first_name") == new_first_name, \
+            f"Detail 接口确认: first_name 未落库: 期望 {new_first_name}, 实际 {detail_contact.get('first_name')}"
+
+        logger.info("✓ 成功更新 Contact first_name（已确认落库）:")
         logger.info(f"  ID: {updated_contact['id']}")
         logger.info(f"  原始 first_name: {original_first_name}")
         logger.info(f"  新 first_name: {updated_contact.get('first_name')}")

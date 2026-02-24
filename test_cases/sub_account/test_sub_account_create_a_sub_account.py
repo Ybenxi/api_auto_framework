@@ -70,6 +70,21 @@ class TestSubAccountCreateASubAccount:
         else:
             created_sub_account = response_data
         
+        # 验证返回了 ID
+        assert created_sub_account.get("id") is not None, "创建的 Sub Account ID 为 None"
+
+        # Echo 验证：返回值与发送值一致
+        logger.info("验证 Echo 字段")
+        assert created_sub_account.get("name") == unique_name, \
+            f"name 不一致: 发送 '{unique_name}', 返回 '{created_sub_account.get('name')}'"
+        assert created_sub_account.get("financial_account_id") == financial_account_id, \
+            f"financial_account_id 不一致: 发送 '{financial_account_id}', 返回 '{created_sub_account.get('financial_account_id')}'"
+
+        # 必需字段验证（assert，不是 logger）
+        required_fields = ["id", "name", "financial_account_id", "status"]
+        for field in required_fields:
+            assert field in created_sub_account, f"创建响应缺少必需字段: '{field}'"
+
         logger.info("✓ Sub Account 创建成功:")
         logger.info(f"  ID: {created_sub_account.get('id')}")
         logger.info(f"  Name: {created_sub_account.get('name')}")
@@ -187,12 +202,18 @@ class TestSubAccountCreateASubAccount:
                 created = response_data
             
             expected_fields = ["id", "name", "financial_account_id", "status"]
-            
-            logger.info("验证响应字段")
+
+            logger.info("验证响应字段（assert）")
             for field in expected_fields:
-                value = created.get(field, "(not present)")
-                logger.info(f"  {field}: {value}")
-            
+                assert field in created, f"创建响应缺少必需字段: '{field}'"
+                logger.info(f"  ✓ {field}: {created.get(field)}")
+
+            # Echo 验证
+            assert created.get("name") == unique_name, \
+                f"name 不一致: 发送 '{unique_name}', 返回 '{created.get('name')}'"
+            assert created.get("financial_account_id") == financial_account_id, \
+                f"financial_account_id 不一致"
+
             logger.info("✓ 响应结构验证完成")
         else:
             logger.info(f"  创建失败，状态码: {create_response.status_code}")

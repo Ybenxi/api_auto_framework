@@ -70,9 +70,17 @@ class TestCounterpartyCreateCounterparty:
         # 5. 验证必需字段
         required_fields = ["id", "name", "type", "payment_type", "assign_account_ids"]
         assert_fields_present(response_body, required_fields, "Counterparty")
-        
+
+        # Echo 验证：返回值与发送值一致
+        assert response_body.get("name") == counterparty_data["name"], \
+            f"name 不一致: 发送 '{counterparty_data['name']}', 返回 '{response_body.get('name')}'"
+        assert response_body.get("type") == counterparty_data["type"], \
+            f"type 不一致: 发送 '{counterparty_data['type']}', 返回 '{response_body.get('type')}'"
+        assert response_body.get("payment_type") == counterparty_data["payment_type"], \
+            f"payment_type 不一致: 发送 '{counterparty_data['payment_type']}', 返回 '{response_body.get('payment_type')}'"
+
         counterparty_id = response_body["id"]
-        logger.info("✓ 创建成功 - ID: {counterparty_id}, Name: {response_body.get('name')}")
+        logger.info(f"✓ 创建成功 - ID: {counterparty_id}, Name: {response_body.get('name')}")
 
     def test_create_counterparty_success_wire(self, counterparty_api, login_session):
         """
@@ -116,8 +124,20 @@ class TestCounterpartyCreateCounterparty:
         # 4. 验证响应
         assert_status_ok(response)
         response_body = response.json()
-        
-        logger.info("✓ 创建成功 - ID: {response_body.get('id')}")
+
+        # 验证必需字段
+        required_fields = ["id", "name", "type", "payment_type"]
+        assert_fields_present(response_body, required_fields, "Wire Counterparty")
+
+        # Echo 验证
+        assert response_body.get("name") == counterparty_data["name"], \
+            f"name 不一致: 发送 '{counterparty_data['name']}', 返回 '{response_body.get('name')}'"
+        assert response_body.get("type") == counterparty_data["type"], \
+            f"type 不一致"
+        assert response_body.get("payment_type") == counterparty_data["payment_type"], \
+            f"payment_type 不一致"
+
+        logger.info(f"✓ 创建成功 - ID: {response_body.get('id')}, Name: {response_body.get('name')}")
 
     def test_create_counterparty_missing_required_field(self, counterparty_api):
         """
