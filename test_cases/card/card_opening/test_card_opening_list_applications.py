@@ -22,42 +22,54 @@ class TestCardOpeningListApplications:
         测试场景1：成功获取申请列表
         验证点：
         1. 接口返回 200
-        2. 返回列表结构正确
+        2. 响应 code == 200
+        3. content 是数组
         """
         logger.info("测试场景1：成功获取申请列表")
-        
+
         response = card_opening_api.list_applications(page=0, size=10)
-        
+
         assert_status_ok(response)
-        
+
         response_body = response.json()
         assert response_body.get("code") == 200
-        assert_list_structure(response_body)
-        
-        logger.info(f"✓ 申请列表获取成功，返回 {len(response_body.get('data', {}).get('content', []))} 个申请")
 
-    def test_list_with_status_filter(self, card_opening_api):
+        # Card Opening 响应有 data 包装层
+        content = response_body.get("data", {}).get("content", [])
+        assert isinstance(content, list), "content 不是数组"
+
+        logger.info(f"✓ 申请列表获取成功，返回 {len(content)} 个申请")
+
+    @pytest.mark.parametrize("status", ["approved", "pending", "rejected"])
+    def test_list_with_status_filter(self, card_opening_api, status):
         """
-        测试场景2：按status筛选申请
+        测试场景2：按 status 筛选申请（覆盖主要枚举值）
         验证点：
         1. 接口返回 200
-        2. status参数生效
+        2. 返回的每条申请 status 均与筛选值一致
         """
-        logger.info("测试场景2：按status筛选")
-        
-        response = card_opening_api.list_applications(status="approved", size=10)
-        
+        logger.info(f"测试场景2：按 status='{status}' 筛选")
+
+        response = card_opening_api.list_applications(status=status, size=10)
+
         assert_status_ok(response)
-        
+
         response_body = response.json()
-        content = response_body.get("data", {}).get("content", [])
-        
-        # 验证筛选结果
-        if content:
+        data = response_body.get("data")
+        if data is None:
+            logger.info("  ⚠️ 响应无 data 字段，跳过")
+            return
+
+        content = data.get("content", [])
+        logger.info(f"  返回 {len(content)} 条申请")
+
+        if not content:
+            logger.info(f"  ⚠️ status='{status}' 无数据，跳过筛选值验证")
+        else:
             for app in content:
-                logger.debug(f"申请状态: {app.get('status')}")
-        
-        logger.info("✓ status筛选验证通过")
+                assert app.get("status") == status, \
+                    f"筛选结果包含非 {status} 状态: {app.get('status')}"
+            logger.info(f"✓ {len(content)} 条申请均为 {status} 状态")
 
     def test_pagination_first_page(self, card_opening_api):
         """
@@ -67,12 +79,16 @@ class TestCardOpeningListApplications:
         2. 分页信息正确
         """
         logger.info("测试场景3：分页查询-第一页")
-        
+
         response = card_opening_api.list_applications(page=0, size=5)
-        
+
         assert_status_ok(response)
-        assert_pagination(response, page=0, size=5)
-        
+
+        data = response.json().get("data", {})
+        assert data.get("size") == 5, f"size 不正确: {data.get('size')}"
+        assert data.get("number") == 0, f"number 不正确: {data.get('number')}"
+        assert len(data.get("content", [])) <= 5, "返回数量超过 size=5"
+
         logger.info("✓ 第一页分页验证通过")
 
     def test_pagination_second_page(self, card_opening_api):
@@ -99,19 +115,21 @@ class TestCardOpeningListApplications:
         测试场景5：查询结果为空
         验证点：
         1. 接口返回 200
-        2. 返回空content
+        2. 返回空 content
         """
         logger.info("测试场景5：查询结果为空")
-        
+
         response = card_opening_api.list_applications(status="NONEXISTENT_STATUS_999")
-        
+
         assert_status_ok(response)
-        
+
         response_body = response.json()
-        data = response_body.get("data", {})
+        data = response_body.get("data") or {}
         content = data.get("content", [])
-        
-        logger.info(f"✓ 空结果验证通过，content长度: {len(content)}")
+
+        assert len(content) == 0, f"期望空列表，实际返回 {len(content)} 条"
+
+        logger.info(f"✓ 空结果验证通过")
 
     def test_birthdate_field_name_inconsistency(self, card_opening_api):
         """

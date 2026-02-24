@@ -78,24 +78,28 @@ class TestCounterpartyListCounterparties:
         filtered_content = filtered_response.json().get("content", [])
         logger.info("✓ 筛选完成 - 获取到 {len(filtered_content)} 个结果")
 
-    def test_list_counterparties_with_status_filter(self, counterparty_api):
+    @pytest.mark.parametrize("status", ["Approved", "Pending", "Rejected", "Terminated"])
+    def test_list_counterparties_with_status_filter(self, counterparty_api, status):
         """
-        测试场景3：使用 status 参数筛选
+        测试场景3：使用 status 参数筛选（覆盖全部4个枚举值）
         验证点：
         1. 接口返回 200
-        2. status 筛选功能正常工作
+        2. 返回的每条数据 status 均与筛选值一致
         """
-        test_statuses = ["Approved", "Pending", "Rejected", "Terminated"]
-        
-        logger.info("\n测试 status 筛选")
-        for status in test_statuses:
-            response = counterparty_api.list_counterparties(status=status, page=0, size=10)
-            assert_status_ok(response)
-            
-            content = response.json().get("content", [])
-            logger.info(f"  {status}: {len(content)} 个结果")
-        
-        logger.info("✓ status 筛选测试完成")
+        logger.info(f"\n测试 status='{status}' 筛选")
+        response = counterparty_api.list_counterparties(status=status, page=0, size=10)
+        assert_status_ok(response)
+
+        content = response.json().get("content", [])
+        logger.info(f"  返回 {len(content)} 个结果")
+
+        if not content:
+            logger.info(f"  ⚠️ status='{status}' 无数据，跳过筛选值验证")
+        else:
+            for cp in content:
+                assert cp.get("status") == status, \
+                    f"筛选结果包含非 {status} 状态: status={cp.get('status')}, id={cp.get('id')}"
+            logger.info(f"✓ {len(content)} 条数据均为 {status} 状态")
 
     def test_list_counterparties_with_payment_type_filter(self, counterparty_api):
         """

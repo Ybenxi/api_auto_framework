@@ -24,33 +24,51 @@ class TestCardDisputeList:
         测试场景1：成功获取争议列表
         验证点：
         1. 接口返回 200
-        2. 返回列表结构正确
+        2. 响应 code == 200
+        3. content 是数组
         """
         logger.info("测试场景1：成功获取争议列表")
-        
+
         response = card_dispute_api.list_disputes(page=0, size=10)
-        
+
         assert_status_ok(response)
-        
+
         response_body = response.json()
         assert response_body.get("code") == 200
-        assert_list_structure(response_body)
-        
-        logger.info(f"✓ 争议列表获取成功")
 
-    def test_filter_by_status(self, card_dispute_api):
+        # Card 响应有 data 包装层
+        content = response_body.get("data", {}).get("content", [])
+        assert isinstance(content, list), "content 不是数组"
+
+        logger.info(f"✓ 争议列表获取成功，返回 {len(content)} 条争议")
+
+    @pytest.mark.parametrize("status", [
+        DisputeStatus.NEW,
+        DisputeStatus.SUBMITTED,
+        DisputeStatus.RESULT
+    ])
+    def test_filter_by_status(self, card_dispute_api, status):
         """
-        测试场景2：按status筛选
+        测试场景2：按 status 筛选（覆盖全部3个枚举值）
         验证点：
-        1. status参数生效
+        1. 接口返回 200
+        2. 返回的每条争议 status 均与筛选值一致
         """
-        logger.info("测试场景2：按status筛选")
-        
-        response = card_dispute_api.list_disputes(status=DisputeStatus.NEW, size=10)
-        
+        logger.info(f"测试场景2：按 status='{status}' 筛选")
+
+        response = card_dispute_api.list_disputes(status=status, size=10)
         assert_status_ok(response)
-        
-        logger.info("✓ status筛选验证通过")
+
+        content = response.json().get("data", {}).get("content", [])
+        logger.info(f"  返回 {len(content)} 条争议")
+
+        if not content:
+            logger.info(f"  ⚠️ status='{status}' 无数据，跳过筛选值验证")
+        else:
+            for dispute in content:
+                assert dispute.get("status") == str(status), \
+                    f"筛选结果包含非 {status} 状态: {dispute.get('status')}"
+            logger.info(f"✓ {len(content)} 条争议均为 {status} 状态")
 
     def test_filter_by_card_id(self, card_dispute_api):
         """

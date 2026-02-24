@@ -98,13 +98,17 @@ class TestOpenBankingListAuthorizedAccounts:
         filtered_data = filtered_response.json().get("data", [])
         logger.info("筛选后获取到 {len(filtered_data)} 个账户")
         
-        # 5. 验证筛选结果
-        if len(filtered_data) > 0:
+        # 5. 验证筛选结果包含关键词
+        if filtered_data:
             logger.info("验证筛选结果包含搜索关键词")
             for account in filtered_data:
                 account_name_value = account.get("account_name", "")
-                logger.info(f"  账户名称: {account_name_value}")
-        
+                assert search_name.lower() in account_name_value.lower(), \
+                    f"筛选结果 account_name='{account_name_value}' 不包含关键词 '{search_name}'"
+                logger.info(f"  ✓ 账户名称: {account_name_value}")
+        else:
+            logger.info(f"  ⚠️ 筛选结果为空（关键词: '{search_name}'）")
+
         logger.info("✓ name 参数筛选测试完成")
 
     def test_list_authorized_accounts_response_structure(self, open_banking_api):
