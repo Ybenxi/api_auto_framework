@@ -63,7 +63,9 @@ class FinancialAccountAPI:
         if source is not None:
             params["source"] = source
         if account_ids is not None:
-            params["account_ids"] = ",".join(account_ids)
+            # 使用重复key格式：account_ids=id1&account_ids=id2
+            # requests 传入列表时自动生成重复key格式
+            params["account_ids"] = account_ids
         if record_type is not None:
             params["record_type"] = record_type
         
