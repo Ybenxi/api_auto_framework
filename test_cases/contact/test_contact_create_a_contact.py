@@ -522,3 +522,47 @@ class TestContactCreate:
                 logger.info(f"  建议：first_name 应该有非空验证")
         else:
             logger.info("✓ API 拒绝空字符串（返回 HTTP 状态码 {create_response.status_code}）")
+
+    def test_create_contact_with_invisible_account_id(self, login_session):
+        """
+        测试场景9：使用不在当前用户 visible 范围内的 Account ID
+        验证点：
+        1. 使用他人账户 ID：241010195849720143（yhan account Sanchez，不属于当前用户）
+        2. 服务器返回 200 OK（统一错误处理）
+        3. 业务错误码 code == 506
+        4. error_message == "visibility permission deny"
+        """
+        import time as time_module
+        contact_api = ContactAPI(session=login_session)
+
+        # 使用不在当前用户 visible 范围内的 Account ID
+        invisible_account_id = "241010195849720143"  # yhan account Sanchez，不属于当前用户
+
+        contact_data = {
+            "account_id": invisible_account_id,
+            "first_name": "Auto TestYan",
+            "last_name": "Contact Invisible",
+            "birth_date": "1990-01-01",
+            "email": f"auto_invisible_{int(time_module.time())}@example.com"
+        }
+
+        logger.info(f"使用不在 visible 范围内的 Account ID: {invisible_account_id}")
+        create_response = contact_api.create_contact(contact_data)
+
+        assert create_response.status_code == 200, \
+            f"服务器应该返回 200（统一错误处理），实际: {create_response.status_code}"
+
+        response_body = create_response.json()
+        logger.info(f"  响应: {response_body}")
+
+        assert response_body.get("code") == 506, \
+            f"越权 Account ID 应该返回 code=506，实际: {response_body.get('code')}"
+
+        error_msg = response_body.get("error_message", "")
+        assert "visibility permission deny" in error_msg.lower(), \
+            f"error_message 应包含 'visibility permission deny'，实际: {error_msg}"
+
+        assert response_body.get("data") is None, \
+            "越权时 data 应为 None"
+
+        logger.info(f"✓ 越权 Account ID 校验通过: code=506, msg={error_msg}")

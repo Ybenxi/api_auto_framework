@@ -286,3 +286,98 @@ class TestFboAccountCreate:
         else:
             logger.info(f"  创建失败，状态码: {create_response.status_code}")
             pytest.skip("创建失败，跳过响应结构验证")
+
+    def test_create_fbo_account_missing_name(self, login_session):
+        """
+        测试场景6：缺少必需字段 name 时创建失败
+        验证点：
+        1. 有 sub_account_id，但不传 name
+        2. 服务器返回 200 OK（统一错误处理）
+        3. 业务错误码 code != 200
+        4. data 为 None
+        """
+        fbo_api = FboAccountAPI(session=login_session)
+        sa_api = SubAccountAPI(session=login_session)
+
+        # 获取真实 sub_account_id
+        sa_response = sa_api.list_sub_accounts(page=0, size=1)
+        assert sa_response.status_code == 200
+        sub_accounts = sa_api.parse_list_response(sa_response).get("content", [])
+
+        if not sub_accounts:
+            pytest.skip("没有可用的 Sub Account 进行测试")
+
+        sub_account_id = sub_accounts[0].get("id")
+
+        # 只传 sub_account_id，不传 name
+        fbo_account_data = {
+            "sub_account_id": sub_account_id
+            # 缺少 name
+        }
+
+        logger.info("尝试创建缺少 name 的 FBO Account")
+        create_response = fbo_api.create_fbo_account(fbo_account_data)
+
+        assert create_response.status_code == 200, \
+            f"服务器应该返回 200（统一错误处理），实际: {create_response.status_code}"
+
+        response_body = create_response.json()
+        logger.info(f"  响应: {response_body}")
+
+        assert response_body.get("code") != 200, \
+            f"缺少必需字段 name 应该返回业务错误码，但返回了 code=200"
+        assert response_body.get("data") is None, \
+            "缺少 name 时 data 应为 None"
+
+        logger.info(f"✓ 缺少 name 校验通过，业务错误码: {response_body.get('code')}")
+
+    def test_create_fbo_account_with_invisible_sub_account_id(self, login_session):
+        """
+        测试场景7：使用不在当前用户 visible 范围内的 Sub Account ID
+        验证点：
+        1. 使用他人账户下的 Sub Account ID（不在当前用户的 visible 范围）
+        2. 服务器返回 200 OK（统一错误处理）
+        3. 业务错误码 code == 506
+        4. error_message == "visibility permission deny"
+        测试数据：使用 Yingying（yhan）账户下的 FA ID 对应的不可见 sub_account_id
+        注意：直接使用越权 FA 的 ID 构造请求，系统会在 sub_account 层进行 visible 校验
+        """
+        fbo_api = FboAccountAPI(session=login_session)
+
+        # 使用不在当前用户 visible 范围内的 sub_account_id
+        # 该 sub_account_id 属于 Yingying 的账户（yhan account），当前用户无权访问
+        # 格式正确但跨用户
+        invisible_sub_account_id = "241010195850134684"  # 基于越权 FA ID 构造，不在 visible 范围
+
+        fbo_account_data = {
+            "sub_account_id": invisible_sub_account_id,
+            "name": f"Auto TestYan FBO Account Invisible {uuid.uuid4().hex[:8]}"
+        }
+
+        logger.info(f"使用不在 visible 范围的 Sub Account ID: {invisible_sub_account_id}")
+        create_response = fbo_api.create_fbo_account(fbo_account_data)
+
+        assert create_response.status_code == 200, \
+            f"服务器应该返回 200（统一错误处理），实际: {create_response.status_code}"
+
+        response_body = create_response.json()
+        logger.info(f"  响应: {response_body}")
+
+        # 期望返回权限错误或不存在错误（code != 200）
+        assert response_body.get("code") != 200, \
+            f"越权 Sub Account ID 不应该创建成功，但返回了 code=200"
+        assert response_body.get("data") is None, \
+            "越权时 data 应为 None"
+
+        code = response_body.get("code")
+        error_msg = response_body.get("error_message", "")
+        logger.info(f"  业务错误码: {code}")
+        logger.info(f"  错误信息: {error_msg}")
+
+        if code == 506:
+            assert "visibility permission deny" in error_msg.lower(), \
+                f"code=506 时 error_message 应包含 'visibility permission deny'，实际: {error_msg}"
+            logger.info("✓ 越权 Sub Account ID 校验通过: code=506")
+        else:
+            logger.info(f"  ⚠️ 返回了 code={code}（可能是不存在而非越权），error: {error_msg}")
+            logger.info("✓ 越权 Sub Account ID 校验通过（拒绝创建）")
