@@ -87,6 +87,26 @@ class DataCleanup:
             db_manager: 数据库管理器实例
         """
         self.db = db_manager
+        # 跟踪测试创建的ID，用于自动清理（直接存在实例上，避免模块级变量冲突）
+        self._tracked_ids: Dict[str, List[str]] = {module: [] for module in self.CLEANUP_RULES}
+
+    def track(self, module: str, resource_id: str):
+        """
+        跟踪测试创建的ID（测试结束后自动清理）
+
+        Args:
+            module: 模块名称（如 "sub_account", "fbo_account", "contact", "counterparty"）
+            resource_id: 资源ID
+
+        Example:
+            if db_cleanup:
+                db_cleanup.track("sub_account", created_id)
+        """
+        if module not in self._tracked_ids:
+            self._tracked_ids[module] = []
+        if resource_id:
+            self._tracked_ids[module].append(str(resource_id))
+            logger.debug(f"✓ 已跟踪 {module} ID: {resource_id}")
     
     def cleanup_by_ids(self, module: str, ids: List[str], dry_run: bool = True) -> Dict[str, int]:
         """

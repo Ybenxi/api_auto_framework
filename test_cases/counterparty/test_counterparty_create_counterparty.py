@@ -19,7 +19,7 @@ class TestCounterpartyCreateCounterparty:
     创建 Counterparty 接口测试用例集
     """
 
-    def test_create_counterparty_success_ach(self, counterparty_api, login_session):
+    def test_create_counterparty_success_ach(self, counterparty_api, login_session, db_cleanup):
         """
         测试场景1：成功创建 ACH 类型的 Counterparty
         验证点：
@@ -88,7 +88,11 @@ class TestCounterpartyCreateCounterparty:
         counterparty_id = counterparty_data_resp["id"]
         logger.info(f"✓ 创建成功 - ID: {counterparty_id}, Name: {counterparty_data_resp.get('name')}")
 
-    def test_create_counterparty_success_wire(self, counterparty_api, login_session):
+        # 跟踪 ID，测试结束后自动清理
+        if db_cleanup:
+            db_cleanup.track("counterparty", counterparty_id)
+
+    def test_create_counterparty_success_wire(self, counterparty_api, login_session, db_cleanup):
         """
         测试场景2：成功创建 Wire 类型的 Counterparty
         验证点：
@@ -150,6 +154,10 @@ class TestCounterpartyCreateCounterparty:
             f"payment_type 不一致"
 
         logger.info(f"✓ 创建成功 - ID: {wire_data_resp.get('id')}, Name: {wire_data_resp.get('name')}")
+
+        # 跟踪 ID，测试结束后自动清理
+        if db_cleanup:
+            db_cleanup.track("counterparty", wire_data_resp.get("id"))
 
     def test_create_counterparty_missing_required_field(self, counterparty_api):
         """
@@ -220,7 +228,7 @@ class TestCounterpartyCreateCounterparty:
         else:
             logger.info("✓ 系统正确拒绝 - 状态码: {response.status_code}")
 
-    def test_create_counterparty_draft_mode(self, counterparty_api, login_session):
+    def test_create_counterparty_draft_mode(self, counterparty_api, login_session, db_cleanup):
         """
         测试场景5：创建草稿模式的 Counterparty
         验证点：
@@ -257,7 +265,13 @@ class TestCounterpartyCreateCounterparty:
         
         if response.status_code == 200:
             response_body = response.json()
-            payment_enable = response_body.get("payment_enable")
+            # Draft 模式：响应可能有 data 包装层
+            draft_data = response_body.get("data", response_body)
+            if draft_data and draft_data.get("id"):
+                # 跟踪 ID，测试结束后自动清理
+                if db_cleanup:
+                    db_cleanup.track("counterparty", draft_data.get("id"))
+            payment_enable = draft_data.get("payment_enable") if draft_data else None
             logger.info("✓ 创建成功 - payment_enable: {payment_enable}")
         else:
             logger.info(f"⚠ 返回错误: {response.status_code}")

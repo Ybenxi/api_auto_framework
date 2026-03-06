@@ -605,7 +605,9 @@ def db_cleanup():
         logger.info("=" * 60)
         
         total_cleaned = 0
-        for module, ids in test_created_ids.items():
+        # 优先使用 cleaner 实例上跟踪的 ID（避免模块级变量多实例问题）
+        tracked = cleaner._tracked_ids if cleaner else {}
+        for module, ids in tracked.items():
             if ids:
                 logger.info(f"\n清理 {module}: {len(ids)} 条记录")
                 logger.debug(f"ID列表: {ids}")

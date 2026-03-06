@@ -17,7 +17,7 @@ class TestSubAccountCreateASubAccount:
     Sub Account 创建接口测试用例集
     """
 
-    def test_create_sub_account_success(self, login_session):
+    def test_create_sub_account_success(self, login_session, db_cleanup):
         """
         测试场景1：成功创建 Sub Account
         验证点：
@@ -84,6 +84,10 @@ class TestSubAccountCreateASubAccount:
         required_fields = ["id", "name", "financial_account_id", "status"]
         for field in required_fields:
             assert field in created_sub_account, f"创建响应缺少必需字段: '{field}'"
+
+        # 跟踪 ID，测试结束后自动清理
+        if db_cleanup:
+            db_cleanup.track("sub_account", created_sub_account.get("id"))
 
         logger.info("✓ Sub Account 创建成功:")
         logger.info(f"  ID: {created_sub_account.get('id')}")
@@ -161,7 +165,7 @@ class TestSubAccountCreateASubAccount:
         
         logger.info("✓ 无效 Financial Account ID 测试完成，业务错误码: {response_body.get('code')}")
 
-    def test_create_sub_account_response_structure(self, login_session):
+    def test_create_sub_account_response_structure(self, login_session, db_cleanup):
         """
         测试场景4：验证创建响应的数据结构
         验证点：
@@ -214,12 +218,17 @@ class TestSubAccountCreateASubAccount:
             assert created.get("financial_account_id") == financial_account_id, \
                 f"financial_account_id 不一致"
 
+            # 跟踪 ID，测试结束后自动清理
+            # 跟踪 ID，测试结束后自动清理
+            if db_cleanup:
+                db_cleanup.track("sub_account", created.get("id"))
+
             logger.info("✓ 响应结构验证完成")
         else:
             logger.info(f"  创建失败，状态码: {create_response.status_code}")
             pytest.skip("创建失败，跳过响应结构验证")
 
-    def test_create_sub_account_then_verify_in_list(self, login_session):
+    def test_create_sub_account_then_verify_in_list(self, login_session, db_cleanup):
         """
         测试场景5：创建 Sub Account 后立即在列表中查询，验证数据一致性
         验证点：
@@ -262,7 +271,11 @@ class TestSubAccountCreateASubAccount:
         created_id = created.get("id")
         
         assert created_id is not None, "创建的 Sub Account ID 为 None"
-        
+
+        # 跟踪 ID，测试结束后自动清理
+        if db_cleanup:
+            db_cleanup.track("sub_account", created_id)
+
         # 立即调用 List 接口筛选
         logger.info("立即在列表中查询刚创建的 Sub Account")
         list_response = sa_api.list_sub_accounts(name=unique_name)
@@ -339,7 +352,7 @@ class TestSubAccountCreateASubAccount:
 
         logger.info(f"✓ 缺少 name 校验通过，业务错误码: {response_body.get('code')}")
 
-    def test_create_sub_account_with_initial_balance_zero(self, login_session):
+    def test_create_sub_account_with_initial_balance_zero(self, login_session, db_cleanup):
         """
         测试场景7：显式传入 initial_balance=0（默认值验证）
         验证点：
@@ -382,6 +395,10 @@ class TestSubAccountCreateASubAccount:
         # 查详情验证 balance
         sa_id = created.get("id")
         logger.info(f"  创建成功 ID: {sa_id}，查询详情验证 balance")
+
+        # 跟踪 ID，测试结束后自动清理
+        if db_cleanup:
+            db_cleanup.track("sub_account", sa_id)
 
         detail_resp = sa_api.get_sub_account_detail(sa_id)
         assert detail_resp.status_code == 200

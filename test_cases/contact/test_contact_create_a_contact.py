@@ -23,7 +23,7 @@ class TestContactCreate:
     Contact 创建接口测试用例集
     """
 
-    def test_create_contact_with_required_fields(self, login_session):
+    def test_create_contact_with_required_fields(self, login_session, db_cleanup):
         """
         测试场景1：使用必需字段创建 Contact
         验证点：
@@ -109,6 +109,10 @@ class TestContactCreate:
         assert created_contact.get("email") == contact_data["email"], \
             f"email 不匹配: 期望 {contact_data['email']}, 实际 {created_contact.get('email')}"
         
+        # 跟踪 ID，测试结束后自动清理
+        if db_cleanup:
+            db_cleanup.track("contact", created_contact["id"])
+        
         logger.info("✓ 成功创建 Contact:")
         logger.info(f"  ID: {created_contact['id']}")
         logger.info(f"  Name: {created_contact.get('name')}")
@@ -116,7 +120,7 @@ class TestContactCreate:
         logger.info(f"  Email: {created_contact.get('email')}")
         logger.info(f"  Status: {created_contact.get('status')}")
 
-    def test_create_contact_with_all_fields(self, login_session):
+    def test_create_contact_with_all_fields(self, login_session, db_cleanup):
         """
         测试场景2：使用所有字段创建 Contact（包括可选字段）
         验证点：
@@ -213,6 +217,10 @@ class TestContactCreate:
         
         # ssn_tin 可能返回脱敏后的值，只验证字段存在
         logger.info(f"  ssn_tin: {created_contact.get('ssn_tin')}")
+
+        # 跟踪 ID，测试结束后自动清理
+        if db_cleanup:
+            db_cleanup.track("contact", created_contact["id"])
         
         logger.info("✓ 成功创建 Contact（包含所有字段）:")
         logger.info(f"  ID: {created_contact['id']}")
@@ -220,7 +228,7 @@ class TestContactCreate:
         logger.info(f"  Phone: {created_contact.get('phone')}")
         logger.info(f"  Gender: {created_contact.get('gender')}")
 
-    def test_create_contact_with_ssn(self, login_session):
+    def test_create_contact_with_ssn(self, login_session, db_cleanup):
         """
         测试场景3：创建 Contact 并包含加密的 SSN
         验证点：
@@ -282,6 +290,10 @@ class TestContactCreate:
         logger.info("验证 ssn_tin 字段存在")
         ssn_tin = created_contact.get("ssn_tin")
         logger.info(f"  ssn_tin: {ssn_tin}")
+
+        # 跟踪 ID，测试结束后自动清理
+        if db_cleanup:
+            db_cleanup.track("contact", created_contact["id"])
         
         logger.info("✓ 成功创建 Contact（包含 SSN）:")
         logger.info(f"  ID: {created_contact['id']}")
@@ -410,7 +422,7 @@ class TestContactCreate:
             else:
                 logger.info(f"⚠ API 未验证 phone 格式")
 
-    def test_create_contact_then_retrieve_detail(self, login_session):
+    def test_create_contact_then_retrieve_detail(self, login_session, db_cleanup):
         """
         测试场景7：创建 Contact 后立即查询详情，验证数据一致性
         验证点：
@@ -452,7 +464,11 @@ class TestContactCreate:
         contact_id = created_contact.get("id")
         
         assert contact_id is not None, "创建的 Contact ID 为 None"
-        
+
+        # 跟踪 ID，测试结束后自动清理
+        if db_cleanup:
+            db_cleanup.track("contact", contact_id)
+
         # 立即调用 Detail 接口
         logger.info("立即查询 Contact 详情 (ID: {contact_id})")
         detail_response = contact_api.get_contact_detail(contact_id)

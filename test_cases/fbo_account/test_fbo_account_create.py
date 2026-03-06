@@ -18,7 +18,7 @@ class TestFboAccountCreate:
     FBO Account 创建接口测试用例集
     """
 
-    def test_create_fbo_account_success(self, login_session):
+    def test_create_fbo_account_success(self, login_session, db_cleanup):
         """
         测试场景1：成功创建 FBO Account
         验证点：
@@ -84,6 +84,10 @@ class TestFboAccountCreate:
         required_fields = ["id", "name", "sub_account_id", "status", "account_identifier"]
         for field in required_fields:
             assert field in created_fbo_account, f"创建响应缺少必需字段: '{field}'"
+
+        # 跟踪 ID，测试结束后自动清理
+        if db_cleanup:
+            db_cleanup.track("fbo_account", created_fbo_account.get("id"))
 
         logger.info("✓ FBO Account 创建成功:")
         logger.info(f"  ID: {created_fbo_account.get('id')}")
@@ -162,7 +166,7 @@ class TestFboAccountCreate:
         
         logger.info("✓ 无效 Sub Account ID 测试完成，业务错误码: {response_body.get('code')}")
 
-    def test_create_fbo_account_then_retrieve_detail(self, login_session):
+    def test_create_fbo_account_then_retrieve_detail(self, login_session, db_cleanup):
         """
         测试场景4：创建 FBO Account 后立即查询详情，验证数据一致性
         验证点：
@@ -206,7 +210,11 @@ class TestFboAccountCreate:
         fbo_id = created_fbo.get("id")
         
         assert fbo_id is not None, "创建的 FBO Account ID 为 None"
-        
+
+        # 跟踪 ID，测试结束后自动清理
+        if db_cleanup:
+            db_cleanup.track("fbo_account", fbo_id)
+
         # 立即调用 Detail 接口
         logger.info("立即查询 FBO Account 详情 (ID: {fbo_id})")
         detail_response = fbo_api.get_fbo_account_detail(fbo_id)
@@ -229,7 +237,7 @@ class TestFboAccountCreate:
         logger.info(f"  Name: {detail_fbo.get('name')}")
         logger.info(f"  Account Identifier: {detail_fbo.get('account_identifier')}")
 
-    def test_create_fbo_account_response_structure(self, login_session):
+    def test_create_fbo_account_response_structure(self, login_session, db_cleanup):
         """
         测试场景5：验证创建响应的数据结构
         验证点：
@@ -281,6 +289,11 @@ class TestFboAccountCreate:
                 f"name 不一致: 发送 '{unique_name}', 返回 '{created.get('name')}'"
             assert created.get("sub_account_id") == sub_account_id, \
                 f"sub_account_id 不一致"
+
+            # 跟踪 ID，测试结束后自动清理
+            # 跟踪 ID，测试结束后自动清理
+            if db_cleanup:
+                db_cleanup.track("fbo_account", created.get("id"))
 
             logger.info("✓ 响应结构验证完成")
         else:
