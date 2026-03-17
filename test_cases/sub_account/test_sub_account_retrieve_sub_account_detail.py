@@ -153,13 +153,11 @@ class TestSubAccountRetrieveSubAccountDetail:
         parsed_detail = sa_api.parse_detail_response(detail_response)
         assert not parsed_detail.get("error")
 
-        # 验证必需字段（实际API响应中存在的字段）
         detail_fields = [
             "id", "name", "financial_account_id", "status",
             "balance", "available_balance", "account_identifier",
             "created_date"
         ]
-        # 注意：description 字段 API 实际未返回，不做断言
 
         logger.info("验证详情响应字段")
         for field in detail_fields:
@@ -167,3 +165,40 @@ class TestSubAccountRetrieveSubAccountDetail:
             logger.info(f"  ✓ {field}: {parsed_detail.get(field)}")
 
         logger.info("✓ 详情响应结构验证完成")
+
+    def test_retrieve_sub_account_detail_with_invisible_id(self, login_session):
+        """
+        测试场景5：使用不在当前用户 visible 范围内的 sub_account_id 查询详情
+        验证点：
+        1. 使用他人的 Sub Account（通过越权 FA ID 关联，实际不在 visible 范围内）
+        2. 服务器返回 200 OK（统一错误处理设计）
+        3. 响应体 code == 506
+        4. error_message 包含 "visibility permission deny"
+        5. data 为 null
+        """
+        sa_api = SubAccountAPI(session=login_session)
+
+        # 使用不在当前用户 visible 范围内的 Sub Account ID
+        # 通过越权账户 241010195849720143（yhan account Sanchez）关联的 sub account
+        invisible_sa_id = "241010195849720143"  # yhan account（不属于当前用户）
+        logger.info(f"使用不在 visible 范围内的 Sub Account ID: {invisible_sa_id}")
+
+        detail_response = sa_api.get_sub_account_detail(invisible_sa_id)
+
+        assert detail_response.status_code == 200, \
+            f"服务器应该返回 200（统一错误处理），实际: {detail_response.status_code}"
+
+        response_body = detail_response.json()
+        logger.info(f"  响应: {response_body}")
+
+        assert response_body.get("code") == 506, \
+            f"越权 Sub Account ID 应该返回 code=506，实际: {response_body.get('code')}"
+
+        error_msg = response_body.get("error_message", "")
+        assert "visibility permission deny" in error_msg.lower(), \
+            f"error_message 应包含 'visibility permission deny'，实际: {error_msg}"
+
+        assert response_body.get("data") is None, \
+            "visibility 拒绝时 data 应为 null"
+
+        logger.info(f"✓ 越权 Sub Account ID 校验通过: code=506, msg={error_msg}")

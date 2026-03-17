@@ -136,7 +136,7 @@ class TestSubAccountRetrieveRelatedFboAccounts:
         测试场景4：验证 FBO Account 响应字段完整性
         验证点：
         1. 接口返回 200
-        2. FBO Account 对象包含必需字段
+        2. FBO Account 对象包含必需字段（assert 断言）
         """
         sa_api = SubAccountAPI(session=login_session)
         
@@ -160,16 +160,51 @@ class TestSubAccountRetrieveRelatedFboAccounts:
         
         if len(fbo_accounts) > 0:
             fbo = fbo_accounts[0]
-            expected_fields = [
+            required_fields = [
                 "id", "name", "sub_account_id", "status",
                 "balance", "available_balance", "account_number", "routing_number"
             ]
             
-            logger.info("验证 FBO Account 字段")
-            for field in expected_fields:
-                value = fbo.get(field, "(not present)")
-                logger.info(f"  {field}: {value}")
+            logger.info("验证 FBO Account 必需字段")
+            for field in required_fields:
+                assert field in fbo, f"FBO Account 缺少必需字段: '{field}'"
+                logger.info(f"  ✓ {field}: {fbo.get(field)}")
             
             logger.info("✓ 字段验证完成")
         else:
-            logger.info("  跳过字段验证（列表为空）")
+            logger.info("  跳过字段验证（FBO Account 列表为空）")
+
+    def test_retrieve_related_fbo_accounts_with_invalid_sub_account_id(self, login_session):
+        """
+        测试场景5：使用不存在/错误的 sub_account_id 查询
+        验证点：
+        1. 使用格式正确但不存在的 sub_account_id
+        2. 接口返回 200（统一错误处理设计）
+        3. 返回的 content 是空列表，或者 code != 200
+        （实际行为：服务端查不到数据，返回空列表 或 业务错误）
+        """
+        sa_api = SubAccountAPI(session=login_session)
+
+        invalid_sa_id = "999999999999999999"  # 不存在的 sub_account_id
+        logger.info(f"使用不存在的 sub_account_id: {invalid_sa_id}")
+
+        fbo_response = sa_api.get_related_fbo_accounts(invalid_sa_id, page=0, size=10)
+
+        assert fbo_response.status_code == 200, \
+            f"服务器应该返回 200（统一错误处理），实际: {fbo_response.status_code}"
+
+        response_body = fbo_response.json()
+        logger.info(f"  响应: {response_body}")
+
+        # 两种合法结果：
+        # 1. 业务错误码（code != 200）：直接返回错误
+        # 2. 成功但空列表：ID 不存在，无数据
+        if isinstance(response_body, dict) and "code" in response_body and response_body.get("code") != 200:
+            logger.info(f"  返回业务错误码: code={response_body.get('code')}, msg={response_body.get('error_message')}")
+        else:
+            parsed_fbo = sa_api.parse_list_response(fbo_response)
+            assert len(parsed_fbo.get("content", [])) == 0, \
+                f"不存在的 sub_account_id 应返回空列表，实际有 {len(parsed_fbo.get('content', []))} 条"
+            logger.info("  返回空列表")
+
+        logger.info("✓ 无效 sub_account_id 验证通过")

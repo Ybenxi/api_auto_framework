@@ -224,3 +224,34 @@ class TestSubAccountRetrieveRelatedPositions:
             logger.info(f"  ✓ {field}: {pos.get(field)}")
 
         logger.info("✓ 字段完整性验证通过")
+
+    def test_retrieve_related_positions_with_invisible_sub_account_id(self, login_session):
+        """
+        测试场景6：使用不在当前用户 visible 范围内的 sub_account_id 查询持仓
+        验证点：
+        1. 使用他人账户关联的 sub_account_id（不属于当前用户）
+        2. 服务器返回 200 OK（统一错误处理设计）
+        3. 返回空列表 或 code != 200（服务端按 visible 范围过滤）
+        """
+        sa_api = SubAccountAPI(session=login_session)
+
+        invisible_sa_id = "241010195849720143"  # yhan account（不属于当前用户）
+        logger.info(f"使用不在 visible 范围内的 Sub Account ID: {invisible_sa_id}")
+
+        positions_response = sa_api.get_related_positions(invisible_sa_id, page=0, size=10)
+
+        assert positions_response.status_code == 200, \
+            f"服务器应该返回 200（统一错误处理），实际: {positions_response.status_code}"
+
+        response_body = positions_response.json()
+        logger.info(f"  响应: {response_body}")
+
+        if isinstance(response_body, dict) and "code" in response_body and response_body.get("code") != 200:
+            logger.info(f"  返回业务错误码: code={response_body.get('code')}, msg={response_body.get('error_message')}")
+        else:
+            parsed_pos = sa_api.parse_list_response(positions_response)
+            assert len(parsed_pos.get("content", [])) == 0, \
+                f"越权 Sub Account ID 应返回空持仓列表，实际有 {len(parsed_pos.get('content', []))} 条"
+            logger.info("  越权 Sub Account ID 返回空持仓列表")
+
+        logger.info("✓ 越权 Sub Account ID 持仓查询验证通过")

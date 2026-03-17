@@ -244,3 +244,34 @@ class TestSubAccountRetrieveRelatedMoneyMovementTransactions:
         logger.info(f"  总交易数: {parsed_txn['total_elements']}")
         logger.info(f"  每页大小: {parsed_txn['size']}, 当前页: {parsed_txn['number']}")
         logger.info(f"  实际返回: {len(parsed_txn.get('content', []))} 条")
+
+    def test_retrieve_related_transactions_with_invisible_sub_account_id(self, login_session):
+        """
+        测试场景7：使用不在当前用户 visible 范围内的 sub_account_id 查询交易
+        验证点：
+        1. 使用他人账户关联的 sub_account_id（不属于当前用户）
+        2. 服务器返回 200 OK（统一错误处理设计）
+        3. 返回空列表 或 code != 200（服务端按 visible 范围过滤）
+        """
+        sa_api = SubAccountAPI(session=login_session)
+
+        invisible_sa_id = "241010195849720143"  # yhan account（不属于当前用户）
+        logger.info(f"使用不在 visible 范围内的 Sub Account ID: {invisible_sa_id}")
+
+        txn_response = sa_api.get_related_transactions(invisible_sa_id, page=0, size=10)
+
+        assert txn_response.status_code == 200, \
+            f"服务器应该返回 200（统一错误处理），实际: {txn_response.status_code}"
+
+        response_body = txn_response.json()
+        logger.info(f"  响应: {response_body}")
+
+        if isinstance(response_body, dict) and "code" in response_body and response_body.get("code") != 200:
+            logger.info(f"  返回业务错误码: code={response_body.get('code')}, msg={response_body.get('error_message')}")
+        else:
+            parsed_txn = sa_api.parse_list_response(txn_response)
+            assert len(parsed_txn.get("content", [])) == 0, \
+                f"越权 Sub Account ID 应返回空交易列表，实际有 {len(parsed_txn.get('content', []))} 条"
+            logger.info("  越权 Sub Account ID 返回空交易列表")
+
+        logger.info("✓ 越权 Sub Account ID 交易查询验证通过")

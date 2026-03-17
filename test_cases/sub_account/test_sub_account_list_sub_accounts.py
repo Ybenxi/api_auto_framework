@@ -269,3 +269,33 @@ class TestSubAccountListSubAccounts:
             f"total_elements 应该为 0，实际为 {parsed.get('total_elements')}"
 
         logger.info("✓ 空结果验证通过")
+
+    def test_list_sub_accounts_with_invisible_fa_id(self, login_session):
+        """
+        测试场景8：使用不在当前用户 visible 范围内的 financial_account_id 筛选
+        验证点：
+        1. 使用他人的 FA ID：241010195850134683（ACTC Yhan FA，不属于当前用户）
+        2. 接口返回 200
+        3. 返回的 content 是空列表（服务端按 visible 范围过滤，不返回他人数据）
+        4. total_elements 为 0
+        """
+        sa_api = SubAccountAPI(session=login_session)
+
+        invisible_fa_id = "241010195850134683"  # ACTC Yhan FA，属于 Yingying，不属于当前用户
+        logger.info(f"使用不在 visible 范围内的 FA ID 筛选: {invisible_fa_id}")
+
+        response = sa_api.list_sub_accounts(financial_account_id=invisible_fa_id, size=10)
+
+        assert response.status_code == 200, f"接口返回状态码错误: {response.status_code}"
+
+        parsed = sa_api.parse_list_response(response)
+        assert not parsed.get("error"), f"响应解析失败: {parsed.get('message')}"
+
+        logger.info(f"  返回数据: content={len(parsed['content'])}条, total_elements={parsed.get('total_elements')}")
+
+        assert len(parsed["content"]) == 0, \
+            f"越权 FA ID 筛选应返回空列表，但实际返回 {len(parsed['content'])} 条数据"
+        assert parsed.get("total_elements") == 0, \
+            f"越权 FA ID 筛选 total_elements 应为 0，实际: {parsed.get('total_elements')}"
+
+        logger.info("✓ 越权 FA ID 筛选返回空列表验证通过")
