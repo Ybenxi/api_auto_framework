@@ -18,6 +18,40 @@ st.set_page_config(
 st.markdown("""
 <style>
     footer {visibility: hidden;}
+    /* 终端样式容器 */
+    .terminal-box {
+        background-color: #0d1117;
+        color: #e6edf3;
+        font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+        font-size: 13px;
+        line-height: 1.6;
+        padding: 16px 18px;
+        border-radius: 8px;
+        border: 1px solid #30363d;
+        white-space: pre-wrap;
+        word-break: break-all;
+        overflow-y: auto;
+        max-height: 600px;
+    }
+    /* PASSED 绿色 */
+    .log-passed  { color: #3fb950; font-weight: bold; }
+    /* FAILED 红色 */
+    .log-failed  { color: #f85149; font-weight: bold; }
+    /* ERROR 亮红 */
+    .log-error   { color: #ff7b72; font-weight: bold; }
+    /* WARNING 黄色 */
+    .log-warning { color: #d29922; }
+    /* SKIPPED 灰色 */
+    .log-skipped { color: #8b949e; }
+    /* 测试场景行（PASSED/FAILED 行）高亮背景 */
+    .log-line-passed  { background-color: rgba(63,185,80,0.07); display: block; border-radius: 3px; }
+    .log-line-failed  { background-color: rgba(248,81,73,0.10); display: block; border-radius: 3px; }
+    /* 摘要行（最后统计）高亮 */
+    .log-summary { color: #58a6ff; font-weight: bold; }
+    /* 普通行 */
+    .log-normal  { color: #e6edf3; }
+    /* 分隔线 */
+    .log-sep     { color: #30363d; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -42,6 +76,65 @@ def read_run_status() -> dict:
     return {}
 
 
+def _html_escape(text: str) -> str:
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _colorize_line(raw: str) -> str:
+    """把一行日志转成带 HTML 颜色的 span"""
+    line = _html_escape(raw.rstrip("\n"))
+    stripped = raw.strip()
+
+    # 空行/分隔线
+    if not stripped or set(stripped) <= set("=-_"):
+        return f'<span class="log-sep">{line}</span>'
+
+    # pytest 最终统计行
+    if re.search(r'\d+ (passed|failed|error)', stripped):
+        line = re.sub(r'(\d+ passed)', r'<span class="log-passed">\1</span>', line)
+        line = re.sub(r'(\d+ failed)', r'<span class="log-failed">\1</span>', line)
+        line = re.sub(r'(\d+ error)', r'<span class="log-error">\1</span>', line)
+        line = re.sub(r'(\d+ skipped)', r'<span class="log-skipped">\1</span>', line)
+        return f'<span class="log-summary">{line}</span>'
+
+    # PASSED 行
+    if " PASSED" in stripped:
+        line = line.replace(" PASSED", ' <span class="log-passed">PASSED</span>')
+        return f'<span class="log-line-passed">{line}</span>'
+
+    # FAILED 行
+    if " FAILED" in stripped:
+        line = line.replace(" FAILED", ' <span class="log-failed">FAILED</span>')
+        return f'<span class="log-line-failed">{line}</span>'
+
+    # ERROR 行
+    if stripped.startswith("ERROR") or "ERROR" in stripped[:20]:
+        return f'<span class="log-error">{line}</span>'
+
+    # WARNING 行
+    if "WARNING" in stripped or "WARN" in stripped:
+        return f'<span class="log-warning">{line}</span>'
+
+    # SKIPPED 行
+    if " SKIPPED" in stripped or stripped.startswith("SKIP"):
+        return f'<span class="log-skipped">{line}</span>'
+
+    return f'<span class="log-normal">{line}</span>'
+
+
+def render_log_terminal(log_content: str, reverse: bool = True):
+    """把日志内容渲染为黑色终端样式，支持倒序"""
+    lines = log_content.splitlines(keepends=True)
+    if reverse:
+        lines = list(reversed(lines))
+    colored_lines = [_colorize_line(l) for l in lines]
+    inner_html = "\n".join(colored_lines)
+    st.markdown(
+        f'<div class="terminal-box">{inner_html}</div>',
+        unsafe_allow_html=True
+    )
+
+
 def render_result(status: dict):
     """根据 run_status.json 渲染结果区域"""
     state = status.get("state", "")
@@ -56,8 +149,8 @@ def render_result(status: dict):
         st.info(f"⏳ 测试运行中... 开始时间: {start_time}  已用时: {elapsed:.0f}s")
         log_content = RUN_LOG.read_text(encoding="utf-8", errors="replace") if RUN_LOG.exists() else ""
         if log_content:
-            st.markdown("**📺 实时输出：**")
-            st.code(log_content, language="bash")
+            st.markdown("**📺 实时输出（最新在上）：**")
+            render_log_terminal(log_content, reverse=True)
         else:
             st.caption("等待输出...")
         # 2秒后自动刷新
@@ -90,8 +183,8 @@ def render_result(status: dict):
         # 完整输出
         log_content = RUN_LOG.read_text(encoding="utf-8", errors="replace") if RUN_LOG.exists() else ""
         if log_content:
-            with st.expander("📝 查看完整输出", expanded=False):
-                st.code(log_content, language="bash")
+            with st.expander("📝 查看完整输出（最新在上）", expanded=False):
+                render_log_terminal(log_content, reverse=True)
 
     elif state == "error":
         st.error(f"❌ 运行出错：{status.get('error', '未知错误')}")
