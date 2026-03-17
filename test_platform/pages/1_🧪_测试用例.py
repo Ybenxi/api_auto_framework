@@ -62,8 +62,9 @@ if not test_files:
 else:
     file_path = module_path / selected_file
 
-    # 文件名标题，用 markdown 避免 subheader 自动生成锚点链接
-    st.markdown(f"#### 📝 {selected_file}")
+    # 文件名标题，用 HTML 避免 Streamlit markdown 自动生成锚点链接
+    st.markdown(f"<h4 style='margin:0'>📝 {selected_file}</h4>", unsafe_allow_html=True)
+    st.markdown(" ")
 
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
@@ -81,15 +82,12 @@ else:
             # 展开状态（默认收起）
             expanded = st.session_state.get("expand_all_state", False)
 
-            # 文件名 + 场景数 + 切换按钮同一行
-            hdr_col1, hdr_col2 = st.columns([6, 1])
-            with hdr_col1:
-                st.markdown(f"共找到 **{total}** 个测试场景")
-            with hdr_col2:
-                btn_label = "📁 收起全部" if expanded else "📂 展开全部"
-                if st.button(btn_label, key="toggle_all"):
-                    st.session_state["expand_all_state"] = not expanded
-                    st.rerun()
+            st.markdown(f"共找到 **{total}** 个测试场景")
+
+            btn_label = "📁 收起全部" if expanded else "📂 展开全部"
+            if st.button(btn_label, key="toggle_all"):
+                st.session_state["expand_all_state"] = not expanded
+                st.rerun()
 
             for idx, (method_name, docstring) in enumerate(test_methods, 1):
                 with st.expander(f"🧪 测试场景{idx}: {method_name}", expanded=expanded):
