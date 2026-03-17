@@ -32,6 +32,7 @@ st.subheader("🎯 选择运行模式")
 run_mode = st.selectbox(
     "运行方式",
     ["按模块运行", "按文件运行", "运行全部"],
+    index=2,
     label_visibility="collapsed"
 )
 

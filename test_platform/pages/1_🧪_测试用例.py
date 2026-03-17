@@ -10,7 +10,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 隐藏页脚
 st.markdown("""
 <style>
     footer {visibility: hidden;}
@@ -36,76 +35,79 @@ if not modules:
     st.error("❌ 未找到包含测试文件的模块")
     st.stop()
 
-selected_module = st.selectbox("📁 选择模块", modules, index=0)
+# 模块 + 文件选择放一行两列
+sel_col1, sel_col2 = st.columns(2)
+
+with sel_col1:
+    selected_module = st.selectbox("📁 选择模块", modules, index=0)
 
 module_path = test_cases_dir / selected_module
+test_files = sorted(module_path.glob("test_*.py"))
 
-# 读取README
-readme_file = module_path / "README.md"
-if readme_file.exists():
-    with st.expander("📖 模块说明", expanded=False):
-        try:
-            with open(readme_file, 'r', encoding='utf-8') as f:
-                st.markdown(f.read())
-        except Exception as e:
-            st.error(f"读取README失败: {str(e)}")
+with sel_col2:
+    if test_files:
+        selected_file = st.selectbox(
+            "📄 选择测试文件",
+            [f.name for f in test_files],
+            index=0
+        )
+    else:
+        st.warning("⚠️ 该模块暂无测试文件")
+        st.stop()
 
 st.markdown("---")
-
-# 测试文件列表
-test_files = sorted(module_path.glob("test_*.py"))
 
 if not test_files:
     st.warning("⚠️ 该模块暂无测试文件")
 else:
-    # 选择测试文件
-    selected_file = st.selectbox(
-        "📄 选择测试文件", 
-        [f.name for f in test_files],
-        index=0
-    )
-    
     file_path = module_path / selected_file
-    
+
     # 解析测试用例
     st.subheader(f"📝 {selected_file}")
-    
+
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()
-        
-        # 提取测试方法和docstring
-        # 匹配 def test_xxx(self, ...): """docstring"""
+
         test_methods = re.findall(
-            r'def (test_\w+)\([^)]*\):\s*"""(.*?)"""', 
-            content, 
+            r'def (test_\w+)\([^)]*\):\s*"""(.*?)"""',
+            content,
             re.DOTALL
         )
-        
+
         if test_methods:
-            st.info(f"共找到 **{len(test_methods)}** 个测试场景")
-            
+            total = len(test_methods)
+            st.info(f"共找到 **{total}** 个测试场景")
+
+            # 一键展开/收起按钮
+            btn_col1, btn_col2, _ = st.columns([1, 1, 6])
+            with btn_col1:
+                if st.button("📂 一键展开", key="expand_all"):
+                    st.session_state["expand_all_state"] = True
+            with btn_col2:
+                if st.button("📁 一键收起", key="collapse_all"):
+                    st.session_state["expand_all_state"] = False
+
+            # 读取展开状态（默认收起）
+            expanded = st.session_state.get("expand_all_state", False)
+
             for idx, (method_name, docstring) in enumerate(test_methods, 1):
-                with st.expander(f"🧪 测试场景{idx}: {method_name}", expanded=False):
+                with st.expander(f"🧪 测试场景{idx}: {method_name}", expanded=expanded):
                     lines = docstring.strip().split('\n')
                     scenario_desc = lines[0].strip() if lines else "无描述"
-                    
-                    # 显示场景描述（第一行）
+
                     st.markdown(f"**{scenario_desc}**")
-                    
-                    # 从第二行开始提取验证点，排除"验证点："标题行
+
                     verification_points = []
                     for line in lines[1:]:
                         stripped = line.strip()
                         if not stripped:
                             continue
-                        # 排除"验证点："标题行
                         if stripped in ("验证点：", "验证点:"):
                             continue
-                        # 只收集以数字序号或符号开头的行
                         if stripped.startswith(('1.', '2.', '3.', '4.', '5.', '6.', '7.', '8.', '9.', '-', '•')):
                             verification_points.append(stripped)
-                    
+
                     if verification_points:
                         st.markdown("**验证点：**")
                         for vp in verification_points:
@@ -114,13 +116,12 @@ else:
                                 st.markdown(f"- {clean_vp}")
         else:
             st.warning("⚠️ 未找到测试方法")
-        
-        # 代码预览
+
         with st.expander("📄 查看完整代码", expanded=False):
             st.code(content, language="python")
-            
+
     except Exception as e:
         st.error(f"❌ 读取文件失败: {str(e)}")
 
 st.markdown("---")
-st.caption("💡 提示：点击展开查看测试场景详情")
+st.caption("💡 提示：点击展开查看测试场景详情，或使用一键展开/收起按钮")

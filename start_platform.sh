@@ -47,4 +47,4 @@ echo "📝 使用 Ctrl+C 停止服务"
 echo ""
 
 # 启动 Streamlit（前台运行，Ctrl+C 时同时停止）
-streamlit run test_platform/app.py
+streamlit run "test_platform/首页.py"
