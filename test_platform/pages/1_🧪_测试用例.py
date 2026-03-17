@@ -62,8 +62,8 @@ if not test_files:
 else:
     file_path = module_path / selected_file
 
-    # 解析测试用例
-    st.subheader(f"📝 {selected_file}")
+    # 文件名标题，用 markdown 避免 subheader 自动生成锚点链接
+    st.markdown(f"#### 📝 {selected_file}")
 
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
@@ -77,19 +77,19 @@ else:
 
         if test_methods:
             total = len(test_methods)
-            st.info(f"共找到 **{total}** 个测试场景")
 
-            # 一键展开/收起按钮
-            btn_col1, btn_col2, _ = st.columns([1, 1, 6])
-            with btn_col1:
-                if st.button("📂 一键展开", key="expand_all"):
-                    st.session_state["expand_all_state"] = True
-            with btn_col2:
-                if st.button("📁 一键收起", key="collapse_all"):
-                    st.session_state["expand_all_state"] = False
-
-            # 读取展开状态（默认收起）
+            # 展开状态（默认收起）
             expanded = st.session_state.get("expand_all_state", False)
+
+            # 文件名 + 场景数 + 切换按钮同一行
+            hdr_col1, hdr_col2 = st.columns([6, 1])
+            with hdr_col1:
+                st.markdown(f"共找到 **{total}** 个测试场景")
+            with hdr_col2:
+                btn_label = "📁 收起全部" if expanded else "📂 展开全部"
+                if st.button(btn_label, key="toggle_all"):
+                    st.session_state["expand_all_state"] = not expanded
+                    st.rerun()
 
             for idx, (method_name, docstring) in enumerate(test_methods, 1):
                 with st.expander(f"🧪 测试场景{idx}: {method_name}", expanded=expanded):
