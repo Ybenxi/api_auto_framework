@@ -191,16 +191,32 @@ class TestTradingOrderList:
         """
         logger.info("测试场景6：使用日期范围筛选")
 
+        start_date = "2025-01-01"
+        end_date = "2025-12-31"
         response = trading_order_api.list_orders(
-            start_date="2025-01-01",
-            end_date="2025-12-31",
+            start_date=start_date,
+            end_date=end_date,
             size=10
         )
 
         assert_status_ok(response)
 
-        orders = response.json().get("content", [])
-        logger.info(f"  2025年日期范围内返回 {len(orders)} 条订单")
+        response_body = response.json()
+        content_data = response_body.get("data", response_body)
+        orders = content_data.get("content", [])
+        logger.info(f"  日期范围内返回 {len(orders)} 条订单")
+
+        # 验证返回数据的日期在范围内
+        if orders:
+            for order in orders:
+                created_at = order.get("created_at") or order.get("create_date") or order.get("created_date", "")
+                if created_at and len(created_at) >= 10:
+                    order_date = created_at[:10]
+                    assert start_date <= order_date <= end_date, \
+                        f"订单日期 '{order_date}' 不在范围 [{start_date}, {end_date}] 内"
+            logger.info(f"✓ 日期范围筛选验证通过")
+        else:
+            logger.info("  无数据返回，跳过日期字段验证")
 
         logger.info("✓ 日期范围参数处理正常")
 

@@ -40,53 +40,106 @@ class TestCardTransactions:
 
     def test_filter_by_card_number(self, card_management_api):
         """
-        测试场景2：按card_number筛选
+        测试场景2：按 card_number 筛选（先获取真实值再筛选）
         验证点：
         1. 接口返回 200
-        2. card_number参数生效
+        2. 返回的每条交易 card_number 与筛选值匹配
         """
-        logger.info("测试场景2：按card_number筛选")
-        
-        response = card_management_api.list_card_transactions(card_number="test_card_number", size=10)
-        
+        logger.info("测试场景2：按 card_number 筛选")
+
+        # 先获取真实 card_number
+        base_response = card_management_api.list_card_transactions(size=1)
+        assert_status_ok(base_response)
+        base_content = base_response.json().get("data", {}).get("content", [])
+
+        if not base_content:
+            pytest.skip("无交易数据，跳过 card_number 筛选测试")
+
+        real_card_number = base_content[0].get("card_number")
+        if not real_card_number:
+            pytest.skip("card_number 字段为空，跳过")
+
+        logger.info(f"  使用真实 card_number: {real_card_number}")
+        response = card_management_api.list_card_transactions(card_number=real_card_number, size=10)
         assert_status_ok(response)
-        
-        logger.info("✓ card_number筛选验证通过")
+
+        content = response.json().get("data", {}).get("content", [])
+        logger.info(f"  筛选返回 {len(content)} 条交易")
+
+        if content:
+            for txn in content:
+                assert txn.get("card_number") == real_card_number, \
+                    f"返回交易 card_number='{txn.get('card_number')}' 与筛选值 '{real_card_number}' 不一致"
+        logger.info("✓ card_number 筛选验证通过")
 
     def test_filter_by_time_range(self, card_management_api):
         """
-        测试场景3：按时间范围筛选
+        测试场景3：按时间范围筛选，验证返回数据在范围内
         验证点：
-        1. start_time和end_time参数生效
-        2. 时间格式：yyyy-MM-dd HH:mm:ss
+        1. start_time 和 end_time 参数生效
+        2. 返回的每条交易时间在筛选范围内
+        3. 时间格式：yyyy-MM-dd HH:mm:ss
         """
         logger.info("测试场景3：按时间范围筛选")
-        
+
+        start_time = "2024-01-01 00:00:00"
+        end_time = "2025-12-31 23:59:59"
+
         response = card_management_api.list_card_transactions(
-            start_time="2024-01-01 00:00:00",
-            end_time="2024-12-31 23:59:59",
+            start_time=start_time,
+            end_time=end_time,
             size=10
         )
-        
+
         assert_status_ok(response)
-        
-        logger.info("✓ 时间范围筛选验证通过")
+
+        content = response.json().get("data", {}).get("content", [])
+        logger.info(f"  返回 {len(content)} 条交易")
+
+        if content:
+            for txn in content:
+                txn_time = txn.get("created_at") or txn.get("transaction_time") or txn.get("create_date", "")
+                if txn_time and len(txn_time) >= 10:
+                    txn_date = txn_time[:10]
+                    assert "2024-01-01" <= txn_date <= "2025-12-31", \
+                        f"交易时间 '{txn_date}' 不在范围内 [2024-01-01, 2025-12-31]"
+            logger.info(f"✓ 时间范围筛选验证通过，{len(content)} 条数据均在范围内")
 
     def test_filter_by_merchant(self, card_management_api):
         """
-        测试场景4：按商户筛选
+        测试场景4：按商户名称筛选，验证返回数据包含关键词
         验证点：
-        1. merchant_id和merchant_name参数生效
+        1. merchant_name 参数生效
+        2. 返回的每条交易 merchant_name 包含关键词
         """
         logger.info("测试场景4：按商户筛选")
-        
-        response = card_management_api.list_card_transactions(
-            merchant_name="Test Merchant",
-            size=10
-        )
-        
+
+        # 先获取真实 merchant_name
+        base_response = card_management_api.list_card_transactions(size=1)
+        assert_status_ok(base_response)
+        base_content = base_response.json().get("data", {}).get("content", [])
+
+        if not base_content:
+            pytest.skip("无交易数据，跳过 merchant 筛选测试")
+
+        real_merchant = base_content[0].get("merchant_name", "")
+        if not real_merchant:
+            pytest.skip("merchant_name 字段为空，跳过")
+
+        keyword = real_merchant[:4] if len(real_merchant) >= 4 else real_merchant
+        logger.info(f"  使用关键词: '{keyword}'（来自 merchant_name='{real_merchant}'）")
+
+        response = card_management_api.list_card_transactions(merchant_name=keyword, size=10)
         assert_status_ok(response)
-        
+
+        content = response.json().get("data", {}).get("content", [])
+        logger.info(f"  返回 {len(content)} 条交易")
+
+        if content:
+            for txn in content:
+                merchant = txn.get("merchant_name", "") or ""
+                assert keyword.lower() in merchant.lower(), \
+                    f"返回交易 merchant_name='{merchant}' 不包含关键词 '{keyword}'"
         logger.info("✓ 商户筛选验证通过")
 
     def test_is_virtual_type_inconsistency(self, card_management_api):

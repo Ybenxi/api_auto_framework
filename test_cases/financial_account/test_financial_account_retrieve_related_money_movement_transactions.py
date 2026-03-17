@@ -234,8 +234,76 @@ class TestFinancialAccountRetrieveRelatedMoneyMovementTransactions:
         先 list 获取真实交易日期，再用日期范围筛选，验证返回数据在范围内
         验证点：
         1. 接口返回 200
-        2. 日期参数被接受（不报错）
+        2. 返回的每条交易创建日期在筛选范围内（或与筛选日期匹配）
         """
+        fa_api = FinancialAccountAPI(session=login_session)
+
+        fa_id = self._get_fa_id(fa_api)
+        if not fa_id:
+            pytest.skip("没有可用的 Financial Account")
+
+        base_resp = fa_api.get_related_transactions(fa_id, page=0, size=1)
+        assert base_resp.status_code == 200
+        base_parsed = fa_api.parse_list_response(base_resp)
+        base_txns = base_parsed.get("content", [])
+
+        if not base_txns:
+            pytest.skip(f"FA {fa_id} 无交易数据，跳过日期筛选测试")
+
+        created_date = base_txns[0].get("create_date") or base_txns[0].get("created_date", "")
+        date_str = created_date[:10] if created_date and len(created_date) >= 10 else "2024-01-01"
+
+        logger.info(f"  使用日期范围: {date_str} ~ {date_str}")
+
+        txn_response = fa_api.get_related_transactions(
+            fa_id, start_date=date_str, end_date=date_str, page=0, size=10
+        )
+        assert txn_response.status_code == 200, \
+            f"日期筛选接口返回错误: {txn_response.status_code}"
+
+        parsed_txn = fa_api.parse_list_response(txn_response)
+        transactions = parsed_txn.get("content", [])
+        logger.info(f"  返回 {len(transactions)} 条")
+
+        # 验证返回数据的日期在筛选范围内
+        if transactions:
+            for txn in transactions:
+                txn_date = txn.get("create_date") or txn.get("created_date", "")
+                if txn_date and len(txn_date) >= 10:
+                    assert txn_date[:10] == date_str, \
+                        f"返回交易日期 '{txn_date[:10]}' 不在筛选日期 '{date_str}' 范围内"
+            logger.info(f"✓ 日期范围筛选验证通过，所有 {len(transactions)} 条数据日期匹配")
+        else:
+            logger.info("  无数据返回，跳过日期字段验证")
+
+        logger.info("✓ 日期筛选测试完成")
+
+    def test_retrieve_related_transactions_with_invisible_fa_id(self, login_session):
+        """
+        测试场景7：使用越权 FA ID 查询交易 → 返回空或拒绝
+        验证点：
+        1. 使用越权 FA ID：241010195850134683（ACTC Yhan FA）
+        2. 服务器返回 200
+        3. 返回空列表 或 code=506
+        """
+        fa_api = FinancialAccountAPI(session=login_session)
+
+        invisible_fa_id = "241010195850134683"  # ACTC Yhan FA
+        logger.info(f"使用越权 FA ID 查询交易: {invisible_fa_id}")
+
+        txn_response = fa_api.get_related_transactions(invisible_fa_id, page=0, size=10)
+        assert txn_response.status_code == 200
+
+        response_body = txn_response.json()
+        if isinstance(response_body, dict) and response_body.get("code") == 506:
+            logger.info("  返回 code=506 visibility permission deny")
+        else:
+            parsed_txn = fa_api.parse_list_response(txn_response)
+            assert len(parsed_txn.get("content", [])) == 0, \
+                f"越权 FA ID 应返回空列表，实际返回 {len(parsed_txn.get('content', []))} 条"
+            logger.info("  越权 FA ID 返回空交易列表")
+
+        logger.info("✓ 越权 FA ID 交易查询验证通过")
         fa_api = FinancialAccountAPI(session=login_session)
 
         fa_id = self._get_fa_id(fa_api)

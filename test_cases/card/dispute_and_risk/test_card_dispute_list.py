@@ -72,36 +72,69 @@ class TestCardDisputeList:
 
     def test_filter_by_card_id(self, card_dispute_api):
         """
-        测试场景3：按card_id筛选
+        测试场景3：按 card_id 筛选（先获取真实 card_id 再筛选）
         验证点：
-        1. card_id参数生效
+        1. card_id 参数生效
+        2. 返回的每条争议 card_id 与筛选值一致
         """
-        logger.info("测试场景3：按card_id筛选")
-        
-        response = card_dispute_api.list_disputes(card_id="test_card_id", size=10)
-        
+        logger.info("测试场景3：按 card_id 筛选")
+
+        # 先获取真实 card_id
+        base_response = card_dispute_api.list_disputes(size=1)
+        assert_status_ok(base_response)
+        base_content = base_response.json().get("data", {}).get("content", [])
+
+        if not base_content:
+            pytest.skip("无争议数据，跳过 card_id 筛选测试")
+
+        real_card_id = base_content[0].get("card_id")
+        if not real_card_id:
+            pytest.skip("card_id 字段为空，跳过")
+
+        logger.info(f"  使用真实 card_id: {real_card_id}")
+        response = card_dispute_api.list_disputes(card_id=real_card_id, size=10)
         assert_status_ok(response)
-        
-        logger.info("✓ card_id筛选验证通过")
+
+        content = response.json().get("data", {}).get("content", [])
+        logger.info(f"  筛选返回 {len(content)} 条争议")
+
+        if content:
+            for dispute in content:
+                assert dispute.get("card_id") == real_card_id, \
+                    f"返回争议 card_id='{dispute.get('card_id')}' 与筛选值 '{real_card_id}' 不一致"
+        logger.info("✓ card_id 筛选验证通过")
 
     def test_filter_by_time_range(self, card_dispute_api):
         """
-        测试场景4：按时间范围筛选
+        测试场景4：按时间范围筛选，验证返回数据在范围内
         验证点：
-        1. startTime和endTime参数生效
-        2. 注意：使用驼峰命名
+        1. startTime 和 endTime 参数生效
+        2. 返回的每条争议时间在筛选范围内
         """
         logger.info("测试场景4：按时间范围筛选")
-        
+
+        start_time = "2024-01-01"
+        end_time = "2025-12-31"
+
         response = card_dispute_api.list_disputes(
-            start_time="2024-01-01",
-            end_time="2024-12-31",
+            start_time=start_time,
+            end_time=end_time,
             size=10
         )
-        
+
         assert_status_ok(response)
-        
-        logger.info("✓ 时间范围筛选验证通过")
+
+        content = response.json().get("data", {}).get("content", [])
+        logger.info(f"  返回 {len(content)} 条争议")
+
+        if content:
+            for dispute in content:
+                created_at = dispute.get("created_at") or dispute.get("create_date", "")
+                if created_at and len(created_at) >= 10:
+                    dispute_date = created_at[:10]
+                    assert start_time <= dispute_date <= end_time, \
+                        f"争议日期 '{dispute_date}' 不在范围 [{start_time}, {end_time}] 内"
+            logger.info(f"✓ 时间范围筛选验证通过，{len(content)} 条数据均在范围内")
 
     def test_disputed_reason_type(self, card_dispute_api):
         """

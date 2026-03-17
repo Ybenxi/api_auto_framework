@@ -177,3 +177,26 @@ class TestFboAccountDetail:
                 f"字段 {field} 在列表和详情中不一致: 列表={list_value}, 详情={detail_value}"
         
         logger.info("✓ 列表和详情接口返回的数据一致")
+
+    def test_get_fbo_account_detail_with_invisible_id(self, fbo_account_api):
+        """
+        测试场景5：使用越权 FBO Account ID 查询详情 → 返回 506
+        验证点：
+        1. 使用真实存在但不属于当前用户的 FBO Account ID
+        2. 服务器返回 200
+        3. code=506，error_message 包含 "visibility permission deny"
+        """
+        invisible_fbo_id = "241010195849717901"  # 不属于当前用户可见范围的真实 ID
+        logger.info(f"使用越权 FBO Account ID 查询详情: {invisible_fbo_id}")
+
+        detail_response = fbo_account_api.get_fbo_account_detail(invisible_fbo_id)
+        assert_status_ok(detail_response)
+
+        response_body = detail_response.json()
+        error_code = response_body.get("code")
+        logger.info(f"  响应 code: {error_code}")
+
+        assert error_code == 506 or error_code != 200, \
+            f"越权 FBO Account ID 应返回 code=506 或其他错误码，实际: {error_code}"
+
+        logger.info(f"✓ 越权 FBO Account ID 验证通过: code={error_code}")

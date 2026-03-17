@@ -273,3 +273,25 @@ class TestOpenBankingListAuthorizedAccounts:
         logger.info(f"  Code: {parsed['code']}")
         logger.info(f"  账户数量: {len(parsed['data'])}")
         logger.info(f"  Error Message: {parsed.get('error_message')}")
+
+    def test_list_authorized_accounts_with_invisible_account_id(self, open_banking_api):
+        """
+        测试场景7：当前用户可见的授权账户不包含越权 account 的数据
+        验证点：
+        1. 接口返回 200
+        2. 列表中的账户不属于越权 account：241010195849720143
+        """
+        invisible_account_id = "241010195849720143"  # yhan account Sanchez
+        logger.info(f"验证授权账户列表不包含越权 account 数据")
+
+        response = open_banking_api.list_authorized_accounts()
+        assert_status_ok(response, 200)
+
+        data = response.json().get("data", [])
+
+        for account in data:
+            acc_id = account.get("id")
+            assert acc_id != invisible_account_id, \
+                f"列表中出现了越权 account_id: {invisible_account_id}"
+
+        logger.info(f"✓ 授权账户数据隔离验证通过，返回 {len(data)} 条，无越权数据")

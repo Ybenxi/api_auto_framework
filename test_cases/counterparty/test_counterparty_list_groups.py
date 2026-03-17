@@ -74,9 +74,17 @@ class TestCounterpartyListGroups:
         logger.info(f"使用 name 筛选: {group_name}")
         filtered_response = counterparty_api.list_counterparty_groups(name=group_name)
         assert_status_ok(filtered_response)
-        
+
         filtered_content = filtered_response.json().get("content", [])
-        logger.info("✓ 筛选完成 - 获取到 {len(filtered_content)} 个结果")
+        logger.info(f"  筛选返回 {len(filtered_content)} 个结果")
+
+        # 验证返回的每条数据 name 包含筛选关键词
+        if filtered_content:
+            keyword = group_name[:4] if len(group_name) >= 4 else group_name
+            for group in filtered_content:
+                assert keyword.lower() in group.get("name", "").lower(), \
+                    f"返回 group name='{group.get('name')}' 不包含关键词 '{keyword}'"
+        logger.info("✓ name 筛选结果验证通过")
 
     def test_list_groups_pagination(self, counterparty_api):
         """
@@ -141,6 +149,22 @@ class TestCounterpartyListGroups:
         assert_list_structure(parsed, required_fields=["content", "total_elements"])
         
         logger.info("✓ 解析成功 - Group 数量: {len(parsed['content'])}, 总数: {parsed['total_elements']}")
+
+    def test_list_groups_nonexistent_name_returns_empty(self, counterparty_api):
+        """
+        测试场景7：搜索不存在的 group name → 返回空列表
+        验证点：
+        1. 返回 200
+        2. content 为空数组
+        3. total_elements 为 0
+        """
+        logger.info("使用不存在的 name 搜索 groups")
+        response = counterparty_api.list_counterparty_groups(name="NonExistentGroup_AutoTestYan_999")
+        assert_status_ok(response)
+
+        content = response.json().get("content", [])
+        assert len(content) == 0, f"不存在的 name 应返回空列表，实际返回 {len(content)} 条"
+        logger.info("✓ 不存在的 name 返回空列表验证通过")
 
     def test_list_groups_empty_result(self, counterparty_api):
         """

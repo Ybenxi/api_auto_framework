@@ -349,3 +349,32 @@ class TestOpenBankingListConnectedExternalAccounts:
         logger.info(f"  Code: {parsed['code']}")
         logger.info(f"  外部账户数量: {len(parsed['data'])}")
         logger.info(f"  Error Message: {parsed.get('error_message')}")
+
+    def test_list_connected_accounts_with_invisible_account_id(self, open_banking_api, login_session):
+        """
+        测试场景7：使用越权 account_id 查询已连接外部账户 → 返回空或拒绝
+        验证点：
+        1. 使用越权 account_id：241010195849720143
+        2. 服务器返回 200
+        3. data 为空数组 或 code=506
+        """
+        from api.account_api import AccountAPI
+
+        invisible_account_id = "241010195849720143"  # yhan account Sanchez
+        logger.info(f"使用越权 account_id 查询已连接外部账户: {invisible_account_id}")
+
+        response = open_banking_api.list_connected_external_accounts(account_id=invisible_account_id)
+        assert response.status_code == 200
+
+        response_body = response.json()
+        code = response_body.get("code")
+
+        if code == 506:
+            logger.info("  返回 code=506 visibility permission deny")
+        else:
+            data = response_body.get("data", [])
+            assert len(data) == 0, \
+                f"越权 account_id 应返回空列表，实际返回 {len(data)} 条"
+            logger.info("  越权 account_id 返回空外部账户列表")
+
+        logger.info("✓ 越权 account_id 验证通过")

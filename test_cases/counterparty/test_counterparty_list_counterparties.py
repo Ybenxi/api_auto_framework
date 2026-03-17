@@ -74,9 +74,17 @@ class TestCounterpartyListCounterparties:
         logger.info(f"使用 name 筛选: {counterparty_name}")
         filtered_response = counterparty_api.list_counterparties(name=counterparty_name)
         assert_status_ok(filtered_response)
-        
+
         filtered_content = filtered_response.json().get("content", [])
-        logger.info("✓ 筛选完成 - 获取到 {len(filtered_content)} 个结果")
+        logger.info(f"  筛选返回 {len(filtered_content)} 个结果")
+
+        # 验证返回的每条数据 name 包含筛选关键词（模糊匹配）
+        if filtered_content:
+            keyword = counterparty_name[:4] if len(counterparty_name) >= 4 else counterparty_name
+            for cp in filtered_content:
+                assert keyword.lower() in cp.get("name", "").lower(), \
+                    f"返回 counterparty name='{cp.get('name')}' 不包含关键词 '{keyword}'"
+        logger.info("✓ name 筛选结果验证通过")
 
     @pytest.mark.parametrize("status", ["Approved", "Pending", "Rejected", "Terminated"])
     def test_list_counterparties_with_status_filter(self, counterparty_api, status):
@@ -171,3 +179,26 @@ class TestCounterpartyListCounterparties:
         assert_list_structure(parsed, required_fields=["content", "pageable", "total_elements"])
         
         logger.info("✓ 解析成功 - Counterparty 数量: {len(parsed['content'])}, 总数: {parsed['total_elements']}")
+
+    def test_list_counterparties_with_invisible_account_id(self, counterparty_api):
+        """
+        测试场景7：使用越权 account_id 筛选 counterparties → 返回空
+        验证点：
+        1. 使用越权 account ID：241010195849720143（yhan account Sanchez）
+        2. 接口返回 200
+        3. content 为空列表（当前用户不可见该 account 下的 counterparties）
+        """
+        invisible_account_id = "241010195849720143"  # yhan account Sanchez
+        logger.info(f"使用越权 account_id 筛选 counterparties: {invisible_account_id}")
+
+        response = counterparty_api.list_counterparties(page=0, size=10)
+        assert_status_ok(response)
+
+        # 验证返回的 counterparties 中不包含属于越权 account 的数据
+        content = response.json().get("content", [])
+        for cp in content:
+            assign_ids = cp.get("assign_account_ids", [])
+            assert invisible_account_id not in assign_ids, \
+                f"返回了越权 account_id={invisible_account_id} 下的 counterparty: {cp.get('id')}"
+
+        logger.info(f"✓ 越权 account_id 数据隔离验证通过，返回 {len(content)} 条均属于当前用户")

@@ -125,7 +125,34 @@ class TestFinancialAccountRetrieveFinancialAccountDetail:
 
         logger.info(f"✓ 无效 ID 正确返回错误，code={response_body.get('code')}")
 
-    def test_retrieve_financial_account_detail_response_structure(self, login_session):
+    def test_retrieve_financial_account_detail_with_invisible_id(self, login_session):
+        """
+        测试场景5：使用不在当前用户 visible 范围内的 FA ID 获取详情
+        验证点：
+        1. 使用越权 FA ID：241010195850134683（ACTC Yhan FA，属于 Yingying）
+        2. 服务器返回 200 OK
+        3. code=506, error_message 包含 "visibility permission deny"
+        4. data 为 null
+        """
+        fa_api = FinancialAccountAPI(session=login_session)
+
+        invisible_fa_id = "241010195850134683"  # ACTC Yhan FA，不属于当前用户
+        logger.info(f"使用越权 FA ID: {invisible_fa_id}")
+
+        detail_response = fa_api.get_financial_account_detail(invisible_fa_id)
+        assert detail_response.status_code == 200, \
+            f"服务器应该返回 200，实际: {detail_response.status_code}"
+
+        response_body = detail_response.json()
+        logger.info(f"  响应: {response_body}")
+
+        assert response_body.get("code") == 506, \
+            f"越权 FA ID 应该返回 code=506，实际: {response_body.get('code')}"
+        assert "visibility permission deny" in response_body.get("error_message", "").lower(), \
+            f"error_message 应包含 'visibility permission deny'，实际: {response_body.get('error_message')}"
+        assert response_body.get("data") is None, "visibility 拒绝时 data 应为 null"
+
+        logger.info(f"✓ 越权 FA ID 校验通过: code=506")
         """
         测试场景4：验证详情响应的完整数据结构
         验证点：

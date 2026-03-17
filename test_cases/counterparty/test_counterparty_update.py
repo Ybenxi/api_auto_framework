@@ -328,3 +328,27 @@ class TestCounterpartyUpdate:
         
         logger.info("✓ 响应结构验证通过")
         logger.info(f"  包含字段: {', '.join(required_fields)}")
+
+    def test_update_counterparty_with_invisible_id(self, counterparty_api):
+        """
+        测试场景7：使用越权 Counterparty ID 更新 → 返回 506 或其他错误
+        验证点：
+        1. 使用越权 Counterparty ID：241010195849717901（Chaolong actc ach 11）
+        2. 服务器返回 200
+        3. code=506 或 code!=200，data 为 null
+        """
+        invisible_cp_id = "241010195849717901"  # Chaolong actc ach 11
+        update_data = {"name": "Auto TestYan InvisibleUpdate"}
+
+        logger.info(f"使用越权 Counterparty ID 更新: {invisible_cp_id}")
+        update_response = counterparty_api.update_counterparty(invisible_cp_id, update_data)
+
+        assert update_response.status_code == 200
+
+        response_body = update_response.json()
+        error_code = response_body.get("code")
+
+        assert error_code != 200, \
+            f"越权 Counterparty ID 应返回错误码，实际: {error_code}"
+
+        logger.info(f"✓ 越权 Counterparty ID 更新被拒绝: code={error_code}")

@@ -1,0 +1,1 @@
+{"state": "done", "start_time": "2026-03-17 14:56:04", "start_ts": 1773730564.5717802, "cmd": "pytest test_cases/ -v", "duration": 506.4, "returncode": 1, "passed": 544, "failed": 54, "skipped": 281}

@@ -71,7 +71,32 @@ class TestFinancialAccountRetrieveRelatedSubAccounts:
 
         logger.info("✓ Related Sub Accounts 获取成功")
 
-    def test_retrieve_related_sub_accounts_with_name_filter(self, login_session):
+    def test_retrieve_related_sub_accounts_with_invisible_fa_id(self, login_session):
+        """
+        测试场景6：使用越权 FA ID 查询 Sub Accounts → 返回空或拒绝
+        验证点：
+        1. 使用越权 FA ID：241010195850134683（ACTC Yhan FA）
+        2. 服务器返回 200
+        3. 返回空列表 或 code=506
+        """
+        fa_api = FinancialAccountAPI(session=login_session)
+
+        invisible_fa_id = "241010195850134683"  # ACTC Yhan FA
+        logger.info(f"使用越权 FA ID 查询 Sub Accounts: {invisible_fa_id}")
+
+        sub_response = fa_api.get_related_sub_accounts(invisible_fa_id, page=0, size=10)
+        assert sub_response.status_code == 200
+
+        response_body = sub_response.json()
+        if isinstance(response_body, dict) and response_body.get("code") == 506:
+            logger.info("  返回 code=506 visibility permission deny")
+        else:
+            parsed_sub = fa_api.parse_list_response(sub_response)
+            assert len(parsed_sub.get("content", [])) == 0, \
+                f"越权 FA ID 应返回空列表，实际返回 {len(parsed_sub.get('content', []))} 条"
+            logger.info("  越权 FA ID 返回空 Sub Accounts 列表")
+
+        logger.info("✓ 越权 FA ID Sub Accounts 查询验证通过")
         """
         测试场景2：使用 name 模糊筛选 Sub Accounts
         先获取真实 name，用前4字符做关键词，验证每条结果包含关键词

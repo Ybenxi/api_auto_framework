@@ -52,20 +52,19 @@ class TestFinancialAccountListFinancialAccounts:
 
         logger.info("✓ 测试通过")
 
-    def test_list_financial_accounts_with_status_filter(self, login_session):
+    @pytest.mark.parametrize("status", ["Open", "Closed", "Pending"])
+    def test_list_financial_accounts_with_status_filter(self, login_session, status):
         """
-        测试场景2：使用 status 筛选 Financial Accounts
+        测试场景2：使用 status 筛选 Financial Accounts（覆盖全部枚举值）
         验证点：
         1. 接口返回 200
-        2. 返回数据结构正确
-        3. 返回的每条数据 status 均为 "Open"
+        2. 返回的每条数据 status 均与筛选值一致
         """
         fa_api = FinancialAccountAPI(session=login_session)
 
-        logger.info("使用 status='Open' 筛选 Financial Accounts")
-        list_response = fa_api.list_financial_accounts(status="Open", size=10)
+        logger.info(f"使用 status='{status}' 筛选 Financial Accounts")
+        list_response = fa_api.list_financial_accounts(status=status, size=10)
 
-        logger.info("验证 HTTP 状态码为 200")
         assert list_response.status_code == 200, \
             f"接口返回状态码错误: {list_response.status_code}"
 
@@ -76,14 +75,12 @@ class TestFinancialAccountListFinancialAccounts:
         logger.info(f"  返回 {len(accounts)} 个 Financial Accounts")
 
         if not accounts:
-            pytest.skip("无 Open 状态的数据，无法验证筛选正确性")
-
-        logger.info("验证每条数据的 status 均为 Open")
-        for account in accounts:
-            assert account.get("status") == "Open", \
-                f"筛选结果包含非 Open 状态: status={account.get('status')}, id={account.get('id')}"
-
-        logger.info(f"✓ {len(accounts)} 条数据均为 Open 状态")
+            logger.info(f"  ⚠️ status='{status}' 无数据，跳过筛选值验证")
+        else:
+            for account in accounts:
+                assert account.get("status") == status, \
+                    f"筛选结果包含非 {status} 状态: status={account.get('status')}, id={account.get('id')}"
+            logger.info(f"✓ {len(accounts)} 条数据均为 {status} 状态")
 
     @pytest.mark.parametrize("source", ["Managed", "Illiquid", "Unmanaged"])
     def test_list_financial_accounts_with_source_filter(self, login_session, source):
@@ -431,3 +428,27 @@ class TestFinancialAccountListFinancialAccounts:
                 f"返回了不在筛选列表中的 account_id: {account.get('account_id')}"
 
         logger.info(f"✓ account_ids 多值筛选验证通过，返回 {len(accounts)} 条")
+
+    def test_list_financial_accounts_with_invisible_account_ids(self, login_session):
+        """
+        测试场景12：使用不在当前用户 visible 范围内的 account_ids 筛选
+        验证点：
+        1. 使用越权 Profile Account ID：241010195849720143（yhan account Sanchez）
+        2. 接口返回 200
+        3. content 为空列表（服务端按 visible 范围过滤）
+        """
+        fa_api = FinancialAccountAPI(session=login_session)
+
+        invisible_account_id = "241010195849720143"  # yhan account Sanchez
+        logger.info(f"使用越权 account_ids 筛选: {invisible_account_id}")
+
+        response = fa_api.list_financial_accounts(account_ids=[invisible_account_id])
+        assert response.status_code == 200, f"接口应返回 200，实际: {response.status_code}"
+
+        parsed = fa_api.parse_list_response(response)
+        accounts = parsed.get("content", [])
+
+        assert len(accounts) == 0, \
+            f"越权 account_ids 应返回空列表，实际返回 {len(accounts)} 条"
+
+        logger.info("✓ 越权 account_ids 返回空列表验证通过")

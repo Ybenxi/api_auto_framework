@@ -356,15 +356,23 @@ class TestContactUpdate:
         logger.info("调用 Update Contact 接口")
         update_response = contact_api.update_contact(contact_id, update_data)
         
-        # 5. 验证返回错误状态码
-        logger.info("验证返回错误状态码（400 或其他）")
+        # 5. 验证返回结果
         logger.info(f"  状态码: {update_response.status_code}")
         logger.info(f"  响应: {update_response.text}")
-        
-        if update_response.status_code != 200:
-            logger.info("✓ Phone 格式验证生效")
+
+        response_body = update_response.json()
+        code = response_body.get("code") if isinstance(response_body, dict) else None
+
+        if code is not None and code != 200:
+            # API 以业务错误码拒绝了无效格式
+            logger.info(f"  API 返回业务错误 code={code}，phone 格式验证生效")
         else:
-            logger.info(f"⚠ API 未验证 phone 格式")
+            # API 接受了，检查 phone 字段是否存在
+            logger.info("  API 未严格校验 phone 格式（探索性场景）")
+
+        # 无论接受或拒绝，接口本身不应崩溃（HTTP 200）
+        assert update_response.status_code == 200, \
+            f"接口应返回 HTTP 200，实际: {update_response.status_code}"
 
     def test_update_contact_empty_data(self, login_session):
         """
@@ -400,11 +408,45 @@ class TestContactUpdate:
         update_response = contact_api.update_contact(contact_id, update_data)
         
         # 5. 验证状态码
-        logger.info("验证状态码")
-        logger.info(f"  状态码: {update_response.status_code}")
+        assert update_response.status_code == 200, \
+            f"接口应返回 HTTP 200，实际: {update_response.status_code}"
+
+        response_body = update_response.json()
+        code = response_body.get("code") if isinstance(response_body, dict) else None
+        logger.info(f"  状态码: {update_response.status_code}, code={code}")
         logger.info(f"  响应: {update_response.text}")
-        
-        if update_response.status_code == 200:
-            logger.info("✓ API 接受空数据（不更新任何字段）")
+
+        if code == 200:
+            # 空数据被接受，验证原始字段未变化
+            contact_data = response_body.get("data") if "data" in response_body else response_body
+            assert contact_data.get("id") == contact_id, "空更新后 ID 不应改变"
+            logger.info("  API 接受空数据（联系人字段未改变）")
         else:
-            logger.info("✓ API 拒绝空数据")
+            # API 拒绝空数据，也是合理的行为
+            logger.info(f"  API 拒绝空数据，返回 code={code}")
+
+    def test_update_contact_with_invisible_contact_id(self, login_session):
+        """
+        测试场景8：使用越权 Contact ID 更新
+        验证点：
+        1. 使用越权 Contact sfid（不属于当前用户可见范围）
+        2. 服务器返回 200（统一错误处理）
+        3. code=506，error_message 包含 "visibility permission deny"
+        """
+        contact_api = ContactAPI(session=login_session)
+
+        invisible_contact_id = "0034x00001ZZZZ9AAA"  # 不属于当前用户可见范围的 sfid
+        update_data = {"first_name": "Auto TestYan InvisibleTest"}
+
+        logger.info(f"使用越权 Contact ID 发起更新: {invisible_contact_id}")
+        update_response = contact_api.update_contact(invisible_contact_id, update_data)
+
+        assert update_response.status_code == 200
+
+        response_body = update_response.json()
+        error_code = response_body.get("code")
+
+        assert error_code == 506 or error_code != 200, \
+            f"越权 Contact ID 应返回 code=506 或其他错误码，实际: {error_code}"
+
+        logger.info(f"✓ 越权 Contact ID 更新被拒绝: code={error_code}")

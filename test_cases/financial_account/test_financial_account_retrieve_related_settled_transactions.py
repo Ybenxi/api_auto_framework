@@ -86,8 +86,47 @@ class TestFinancialAccountRetrieveRelatedSettledTransactions:
         先获取真实交易日期再用于筛选
         验证点：
         1. 接口返回 200
-        2. 日期参数正常处理
+        2. 返回的每条交易 settle_date 在筛选的日期范围内
         """
+        fa_api = FinancialAccountAPI(session=login_session)
+
+        fa_id = self._get_fa_id(fa_api)
+        if not fa_id:
+            pytest.skip("没有可用的 Financial Account")
+
+        base_resp = fa_api.get_settled_transactions(fa_id, page=0, size=1)
+        assert base_resp.status_code == 200
+        base_parsed = fa_api.parse_list_response(base_resp)
+        base_txns = base_parsed.get("content", [])
+
+        if not base_txns:
+            pytest.skip(f"FA {fa_id} 无已结算交易数据，跳过日期筛选测试")
+
+        date_val = base_txns[0].get("settle_date") or base_txns[0].get("trade_date", "")
+        date_str = date_val[:10] if date_val and len(date_val) >= 10 else "2024-01-01"
+
+        logger.info(f"使用日期范围筛选: {date_str}")
+        settled_response = fa_api.get_settled_transactions(
+            fa_id, begin_date=date_str, end_date=date_str, page=0, size=10
+        )
+        assert settled_response.status_code == 200
+
+        parsed_settled = fa_api.parse_list_response(settled_response)
+        transactions = parsed_settled.get("content", [])
+        logger.info(f"  返回 {len(transactions)} 条匹配的交易记录")
+
+        # 验证返回数据的 settle_date 在筛选日期范围内
+        if transactions:
+            for txn in transactions:
+                settle_date = txn.get("settle_date") or txn.get("trade_date", "")
+                if settle_date and len(settle_date) >= 10:
+                    assert settle_date[:10] == date_str, \
+                        f"返回交易 settle_date='{settle_date[:10]}' 不在筛选日期 '{date_str}' 范围内"
+            logger.info(f"✓ 日期范围筛选验证通过，所有 {len(transactions)} 条数据日期匹配")
+        else:
+            logger.info("  无数据返回，跳过日期字段验证")
+
+        logger.info("✓ 日期筛选测试完成")
         fa_api = FinancialAccountAPI(session=login_session)
 
         fa_id = self._get_fa_id(fa_api)
@@ -228,3 +267,30 @@ class TestFinancialAccountRetrieveRelatedSettledTransactions:
             logger.info(f"  ✓ {field}: {txn.get(field)}")
 
         logger.info("✓ 字段完整性验证通过")
+
+    def test_retrieve_settled_transactions_with_invisible_fa_id(self, login_session):
+        """
+        测试场景6：使用越权 FA ID 查询已结算交易 → 返回空或拒绝
+        验证点：
+        1. 使用越权 FA ID：241010195850134683（ACTC Yhan FA）
+        2. 服务器返回 200
+        3. 返回空列表 或 code=506
+        """
+        fa_api = FinancialAccountAPI(session=login_session)
+
+        invisible_fa_id = "241010195850134683"  # ACTC Yhan FA
+        logger.info(f"使用越权 FA ID 查询已结算交易: {invisible_fa_id}")
+
+        settled_response = fa_api.get_settled_transactions(invisible_fa_id, page=0, size=10)
+        assert settled_response.status_code == 200
+
+        response_body = settled_response.json()
+        if isinstance(response_body, dict) and response_body.get("code") == 506:
+            logger.info("  返回 code=506 visibility permission deny")
+        else:
+            parsed_settled = fa_api.parse_list_response(settled_response)
+            assert len(parsed_settled.get("content", [])) == 0, \
+                f"越权 FA ID 应返回空列表，实际返回 {len(parsed_settled.get('content', []))} 条"
+            logger.info("  越权 FA ID 返回空已结算交易列表")
+
+        logger.info("✓ 越权 FA ID 已结算交易查询验证通过")

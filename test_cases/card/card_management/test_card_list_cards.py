@@ -65,13 +65,20 @@ class TestCardListCards:
         else:
             # ⚠️ 已知问题：实际API返回值与枚举定义不一致
             # Active → Activate, Pending → Pending_Activation
-            # 此处验证筛选结果的状态一致性（所有返回值相同），而非固定枚举值
-            statuses = set(card.get("card_status") for card in content)
-            logger.warning(f"  ⚠️ 实际返回的 card_status 值: {statuses}（枚举定义: {card_status}）")
-            # 确保所有返回数据的 card_status 一致（说明筛选参数生效）
-            assert len(statuses) <= 2, \
-                f"筛选结果包含超过2种不同 card_status: {statuses}"
-            logger.info(f"✓ card_status 筛选生效，返回 {len(content)} 张卡片")
+            # 枚举映射关系
+            status_map = {
+                "Active": ["Active", "Activate"],
+                "Pending": ["Pending", "Pending_Activation"],
+                "Locked": ["Locked"],
+                "Expired": ["Expired"],
+            }
+            expected_values = status_map.get(str(card_status), [str(card_status)])
+
+            for card in content:
+                actual = card.get("card_status")
+                assert actual in expected_values, \
+                    f"筛选结果 card_status='{actual}' 不在预期值 {expected_values} 中（筛选参数: {card_status}）"
+            logger.info(f"✓ card_status='{card_status}' 筛选验证通过，返回 {len(content)} 张")
 
     @pytest.mark.parametrize("network", [CardNetwork.VISA, CardNetwork.MASTERCARD])
     def test_filter_by_network(self, card_management_api, network):

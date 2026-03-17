@@ -228,3 +228,55 @@ class TestFinancialAccountRetrieveRelatedPositions:
             logger.info(f"  ✓ {field}: {pos.get(field)}")
 
         logger.info("✓ 字段完整性验证通过")
+
+    def test_retrieve_related_positions_with_invalid_fa_id(self, login_session):
+        """
+        测试场景6：使用无效 FA ID 查询持仓
+        验证点：
+        1. 使用格式无效 ID："invalid_fa_id_99999"
+        2. 服务器返回 200
+        3. 返回空列表 或 code != 200
+        """
+        fa_api = FinancialAccountAPI(session=login_session)
+
+        logger.info("使用无效 FA ID 查询持仓")
+        positions_response = fa_api.get_related_positions("invalid_fa_id_99999", page=0, size=10)
+        assert positions_response.status_code == 200
+
+        response_body = positions_response.json()
+        if isinstance(response_body, dict) and "code" in response_body and response_body.get("code") != 200:
+            logger.info(f"  返回业务错误 code={response_body.get('code')}")
+        else:
+            parsed_positions = fa_api.parse_list_response(positions_response)
+            assert len(parsed_positions.get("content", [])) == 0, \
+                f"无效 FA ID 应返回空列表，实际返回 {len(parsed_positions.get('content', []))} 条"
+            logger.info("  无效 FA ID 返回空持仓列表")
+
+        logger.info("✓ 无效 FA ID 持仓查询验证通过")
+
+    def test_retrieve_related_positions_with_invisible_fa_id(self, login_session):
+        """
+        测试场景7：使用越权 FA ID 查询持仓 → 返回空或拒绝
+        验证点：
+        1. 使用越权 FA ID：241010195850134683（ACTC Yhan FA）
+        2. 服务器返回 200
+        3. 返回空列表 或 code=506
+        """
+        fa_api = FinancialAccountAPI(session=login_session)
+
+        invisible_fa_id = "241010195850134683"  # ACTC Yhan FA
+        logger.info(f"使用越权 FA ID 查询持仓: {invisible_fa_id}")
+
+        positions_response = fa_api.get_related_positions(invisible_fa_id, page=0, size=10)
+        assert positions_response.status_code == 200
+
+        response_body = positions_response.json()
+        if isinstance(response_body, dict) and response_body.get("code") == 506:
+            logger.info("  返回 code=506 visibility permission deny")
+        else:
+            parsed_positions = fa_api.parse_list_response(positions_response)
+            assert len(parsed_positions.get("content", [])) == 0, \
+                f"越权 FA ID 应返回空持仓列表，实际返回 {len(parsed_positions.get('content', []))} 条"
+            logger.info("  越权 FA ID 返回空持仓列表")
+
+        logger.info("✓ 越权 FA ID 持仓查询验证通过")

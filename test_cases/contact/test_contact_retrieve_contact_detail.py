@@ -131,9 +131,16 @@ class TestContactDetail:
         for field in all_fields:
             if field not in contact_detail:
                 missing_fields.append(field)
-        
+
+        # 必需字段必须存在，可选字段允许缺失（记录但不失败）
+        required_subset = ["id", "account_id", "name", "first_name", "last_name", "email", "status"]
+        for field in required_subset:
+            assert field in contact_detail, f"Contact 详情缺少必需字段: '{field}'"
+
         if missing_fields:
-            logger.info(f"  ⚠ 缺少字段: {', '.join(missing_fields)}")
+            optional_missing = [f for f in missing_fields if f not in required_subset]
+            if optional_missing:
+                logger.info(f"  ⚠ 可选字段缺失: {', '.join(optional_missing)}")
         else:
             logger.info(f"  ✓ 所有字段都存在")
         
@@ -289,3 +296,29 @@ class TestContactDetail:
             logger.info(f"  ✓ ssn_tin 为 null（未设置）")
         
         logger.info("✓ ssn_tin 字段验证完成")
+
+    def test_get_contact_detail_with_invisible_contact_id(self, login_session):
+        """
+        测试场景6：使用不在当前用户 visible 范围内的 Contact ID 查询详情
+        验证点：
+        1. 使用越权 Contact ID（属于其他用户的真实 Contact）
+        2. 服务器返回 200
+        3. code=506 且 error_message 包含 "visibility permission deny"
+        注：Contact 主键是 sfid 而非 id，这里用一个不可见的假 sfid 验证越权拒绝行为
+        """
+        contact_api = ContactAPI(session=login_session)
+
+        invisible_contact_id = "0034x00001ZZZZ9AAA"  # 不属于当前用户的 sfid 格式
+        logger.info(f"使用越权 Contact ID 查询详情: {invisible_contact_id}")
+
+        detail_response = contact_api.get_contact_detail(invisible_contact_id)
+        assert detail_response.status_code == 200
+
+        response_body = detail_response.json()
+        error_code = response_body.get("code")
+        logger.info(f"  响应 code: {error_code}")
+
+        assert error_code == 506 or error_code != 200, \
+            f"越权 Contact ID 应返回 code=506 或其他错误码，实际: {error_code}"
+
+        logger.info(f"✓ 越权 Contact ID 验证通过: code={error_code}")

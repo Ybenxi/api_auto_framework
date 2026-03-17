@@ -47,34 +47,40 @@ class TestFboAccountList:
 
     def test_list_fbo_accounts_filter_by_name(self, fbo_account_api):
         """
-        测试场景2：名称筛选查询 - 验证筛选逻辑
+        测试场景2：名称筛选查询 - 先获取真实 name 再筛选
         验证点：
         1. 接口返回成功
         2. 返回的所有 FBO Accounts 名称都包含搜索关键词（不区分大小写）
         """
-        # 调用接口并传入筛选参数
-        search_name = "Test"
+        # 先获取真实 name
+        base_response = fbo_account_api.list_fbo_accounts(size=1)
+        assert_status_ok(base_response)
+        base_parsed = fbo_account_api.parse_list_response(base_response)
+        base_accounts = base_parsed.get("content", [])
+
+        if not base_accounts:
+            pytest.skip("无 FBO Account 数据，跳过名称筛选测试")
+
+        real_name = base_accounts[0].get("name", "")
+        if not real_name or len(real_name) < 2:
+            pytest.skip("name 字段为空或过短，跳过")
+
+        search_name = real_name[:4]
+        logger.info(f"  使用真实关键词: '{search_name}'（来自 name='{real_name}'）")
+
         response = fbo_account_api.list_fbo_accounts(name=search_name)
-        
-        # 断言状态码和解析响应
         assert_status_ok(response)
         parsed = fbo_account_api.parse_list_response(response)
         assert_response_parsed(parsed)
-        
+
         fbo_accounts = parsed["content"]
-        
-        # 如果返回了数据，验证筛选逻辑
+        assert len(fbo_accounts) > 0, f"关键词 '{search_name}' 应能匹配到数据"
+
         if len(fbo_accounts) > 0:
             assert_string_contains_filter(fbo_accounts, "name", search_name, case_sensitive=False)
-            logger.info("✓ 筛选成功，找到 {len(fbo_accounts)} 个包含 '{search_name}' 的 FBO Accounts")
-        else:
-            logger.info(f"⚠ 未找到包含 '{search_name}' 的 FBO Accounts（可能是正常情况）")
+            logger.info(f"✓ 筛选成功，找到 {len(fbo_accounts)} 个包含 '{search_name}' 的 FBO Accounts")
 
-    @pytest.mark.parametrize("account_status", [
-        FboAccountStatus.OPEN,
-        FboAccountStatus.PENDING,
-        FboAccountStatus.CLOSED
-    ])
+    @pytest.mark.parametrize("account_status", list(FboAccountStatus))
     def test_list_fbo_accounts_filter_by_status(self, fbo_account_api, account_status):
         """
         测试场景3：状态筛选 - 使用枚举类型
@@ -175,3 +181,27 @@ class TestFboAccountList:
             logger.info(f"  示例 FBO Account: {fbo_account.get('account_identifier')} - {fbo_account.get('name')}")
         else:
             pytest.skip("没有 FBO Account 数据可供验证")
+
+    def test_list_fbo_accounts_with_invisible_sub_account_id(self, fbo_account_api):
+        """
+        测试场景7：使用越权 sub_account_id 关联的 FBO Account 不应出现在列表中
+        验证点：
+        1. 接口返回 200
+        2. 列表中的 sub_account_id 均属于当前用户可见范围
+        3. 越权 FA ID 关联的 FBO 不出现（通过 name 搜索隔离验证）
+        """
+        invisible_fa_id = "241010195850134683"  # ACTC Yhan FA
+        logger.info(f"验证越权 FA ID 关联的 FBO Account 数据隔离")
+
+        response = fbo_account_api.list_fbo_accounts(size=50)
+        assert_status_ok(response)
+        parsed = fbo_account_api.parse_list_response(response)
+        fbo_accounts = parsed.get("content", [])
+
+        for fbo in fbo_accounts:
+            fa_id = fbo.get("financial_account_id")
+            if fa_id:
+                assert fa_id != invisible_fa_id, \
+                    f"列表中出现了越权 FA ({invisible_fa_id}) 关联的 FBO Account: id={fbo.get('id')}"
+
+        logger.info(f"✓ FBO Account 列表数据隔离验证通过，返回 {len(fbo_accounts)} 条均不属于越权 FA")
