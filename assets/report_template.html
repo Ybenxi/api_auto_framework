@@ -242,6 +242,11 @@
                 <span data-lang="en" style="display:none;">Failed</span>
                 (<span id="tab-failed-count">0</span>)
             </div>
+            <div class="tab-item" onclick="filterCases('skipped')" data-filter="skipped">
+                <span data-lang="zh">跳过</span>
+                <span data-lang="en" style="display:none;">Skipped</span>
+                (<span id="tab-skipped-count">0</span>)
+            </div>
         </div>
 
         <!-- Filter Bar (Module + Search) -->
@@ -321,6 +326,8 @@
         let currentFilter = 'all';
         let currentModuleFilter = 'all';
         let currentSearchText = '';
+        // 全局总计（固定不变，不随筛选更新）
+        let globalStats = { passed: 0, failed: 0, skipped: 0, total: 0 };
 
         // Initialize report
         function initReport() {
@@ -436,8 +443,10 @@
                 });
             });
 
-            // Update stats
+            // Update stats（固定总计，不随筛选变化）
             const total = stats.passed + stats.failed + stats.skipped;
+            globalStats = { passed: stats.passed, failed: stats.failed, skipped: stats.skipped, total: total };
+            
             document.getElementById('cnt-passed').innerText = stats.passed;
             document.getElementById('cnt-failed').innerText = stats.failed;
             document.getElementById('cnt-skipped').innerText = stats.skipped;
@@ -452,6 +461,7 @@
             document.getElementById('tab-all-count').innerText = total;
             document.getElementById('tab-passed-count').innerText = stats.passed;
             document.getElementById('tab-failed-count').innerText = stats.failed;
+            document.getElementById('tab-skipped-count').innerText = stats.skipped;
 
             // Draw chart
             new Chart(document.getElementById('summaryChart'), {
@@ -653,20 +663,23 @@
                 }
             });
             
-            // Update dynamic statistics (新增：动态更新统计数字)
+            // Update dynamic statistics (Tab计数随筛选更新；右上角固定不变)
             const visibleTotal = visibleStats.passed + visibleStats.failed + visibleStats.skipped;
             
-            document.getElementById('cnt-passed').innerText = visibleStats.passed;
-            document.getElementById('cnt-failed').innerText = visibleStats.failed;
-            document.getElementById('cnt-skipped').innerText = visibleStats.skipped;
+            // 右上角总览统计：始终显示全局总数，不随筛选变化
+            document.getElementById('cnt-passed').innerText = globalStats.passed;
+            document.getElementById('cnt-failed').innerText = globalStats.failed;
+            document.getElementById('cnt-skipped').innerText = globalStats.skipped;
             
-            document.getElementById('pct-passed').innerText = `(${visibleTotal ? Math.round((visibleStats.passed/visibleTotal)*100) : 0}%)`;
-            document.getElementById('pct-failed').innerText = `(${visibleTotal ? Math.round((visibleStats.failed/visibleTotal)*100) : 0}%)`;
-            document.getElementById('pct-skipped').innerText = `(${visibleTotal ? Math.round((visibleStats.skipped/visibleTotal)*100) : 0}%)`;
+            document.getElementById('pct-passed').innerText = `(${globalStats.total ? Math.round((globalStats.passed/globalStats.total)*100) : 0}%)`;
+            document.getElementById('pct-failed').innerText = `(${globalStats.total ? Math.round((globalStats.failed/globalStats.total)*100) : 0}%)`;
+            document.getElementById('pct-skipped').innerText = `(${globalStats.total ? Math.round((globalStats.skipped/globalStats.total)*100) : 0}%)`;
             
+            // Tab 计数：显示筛选后的当前可见数量
             document.getElementById('tab-all-count').innerText = visibleTotal;
             document.getElementById('tab-passed-count').innerText = visibleStats.passed;
             document.getElementById('tab-failed-count').innerText = visibleStats.failed;
+            document.getElementById('tab-skipped-count').innerText = visibleStats.skipped;
             
             // Handle empty state (新增：空数据状态)
             const listBody = document.getElementById('case-list');
