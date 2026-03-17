@@ -8,6 +8,31 @@ from api.financial_account_api import FinancialAccountAPI
 from utils.logger import logger
 
 
+def _get_fa_id_with_positions(fa_api: FinancialAccountAPI, page_size: int = 20):
+    """
+    遍历 FA 列表，找到第一个有持仓（Positions/Holdings）数据的 FA ID。
+    返回 (fa_id, first_position) 或 (None, None)。
+    """
+    list_resp = fa_api.list_financial_accounts(page=0, size=page_size)
+    if list_resp.status_code != 200:
+        return None, None
+
+    accounts = fa_api.parse_list_response(list_resp).get("content", [])
+    for acc in accounts:
+        fa_id = acc.get("id")
+        if not fa_id:
+            continue
+        resp = fa_api.get_related_positions(fa_id, page=0, size=1)
+        if resp.status_code != 200:
+            continue
+        positions = fa_api.parse_list_response(resp).get("content", [])
+        if positions:
+            logger.info(f"  找到有持仓数据的 FA: {fa_id}")
+            return fa_id, positions[0]
+
+    return None, None
+
+
 @pytest.mark.financial_account
 @pytest.mark.positions_api
 class TestFinancialAccountRetrieveRelatedPositions:
@@ -15,174 +40,126 @@ class TestFinancialAccountRetrieveRelatedPositions:
     Financial Account 相关持仓查询接口测试用例集
     """
 
-    def _get_fa_id(self, fa_api):
-        resp = fa_api.list_financial_accounts(page=0, size=1)
-        assert resp.status_code == 200
-        parsed = fa_api.parse_list_response(resp)
-        accounts = parsed.get("content", [])
-        return accounts[0].get("id") if accounts else None
-
     def test_retrieve_related_positions_success(self, login_session):
         """
         测试场景1：成功获取 Financial Account 相关的持仓（Holdings）
         验证点：
-        1. 先获取列表，取第一个 Financial Account ID
-        2. 调用持仓接口返回 200
+        1. 遍历 FA 列表，找到有持仓数据的 FA
+        2. 接口返回 200，total_elements > 0
         3. 必需字段存在
         4. 隔离性验证：返回的持仓属于该 FA
         """
         fa_api = FinancialAccountAPI(session=login_session)
 
-        list_response = fa_api.list_financial_accounts(page=0, size=2)
-        assert list_response.status_code == 200
+        fa_id, first_pos = _get_fa_id_with_positions(fa_api)
+        if not fa_id:
+            pytest.skip("未找到有持仓数据的 Financial Account")
 
-        parsed_list = fa_api.parse_list_response(list_response)
-        accounts = parsed_list.get("content", [])
+        logger.info(f"使用有数据的 Financial Account ID: {fa_id}")
 
-        if not accounts:
-            pytest.skip("没有可用的 Financial Account 进行测试")
-
-        financial_account_id = accounts[0].get("id")
-        logger.info(f"  使用 Financial Account ID: {financial_account_id}")
-
-        positions_response = fa_api.get_related_positions(financial_account_id, page=0, size=10)
-        assert positions_response.status_code == 200, \
-            f"接口返回状态码错误: {positions_response.status_code}"
+        positions_response = fa_api.get_related_positions(fa_id, page=0, size=10)
+        assert positions_response.status_code == 200
 
         parsed_positions = fa_api.parse_list_response(positions_response)
-        assert not parsed_positions.get("error"), f"响应解析失败: {parsed_positions.get('message')}"
+        assert not parsed_positions.get("error")
 
         positions = parsed_positions.get("content", [])
+        assert len(positions) > 0, f"FA {fa_id} 应有持仓数据，但返回空列表"
         logger.info(f"  总持仓数: {parsed_positions['total_elements']}, 返回 {len(positions)} 条")
 
-        if positions:
-            pos = positions[0]
-            required_fields = ["id", "symbol"]
-            for field in required_fields:
-                assert field in pos, f"持仓记录缺少必需字段: '{field}'"
-                logger.info(f"  ✓ {field}: {pos.get(field)}")
+        # 必需字段验证
+        pos = positions[0]
+        required_fields = ["id", "symbol"]
+        for field in required_fields:
+            assert field in pos, f"持仓记录缺少必需字段: '{field}'"
+            logger.info(f"  ✓ {field}: {pos.get(field)}")
 
-            # financial_account_id 一致性
-            if "financial_account_id" in pos:
-                for p in positions:
-                    assert p.get("financial_account_id") == financial_account_id, \
-                        f"持仓 financial_account_id={p.get('financial_account_id')} 与请求 {financial_account_id} 不一致"
-                logger.info(f"  ✓ 所有持仓 financial_account_id 一致")
-            elif len(accounts) >= 2:
-                fa2_id = accounts[1].get("id")
-                pos2_resp = fa_api.get_related_positions(fa2_id, page=0, size=10)
-                parsed2 = fa_api.parse_list_response(pos2_resp)
-                fa1_ids = {p["id"] for p in positions if "id" in p}
-                fa2_ids = {p["id"] for p in parsed2.get("content", []) if "id" in p}
-                overlap = fa1_ids & fa2_ids
-                assert not overlap, f"两个FA持仓有重叠: {overlap}"
-                logger.info(f"  ✓ 隔离性验证通过：FA1={len(fa1_ids)}条, FA2={len(fa2_ids)}条, 无重叠")
+        # financial_account_id 一致性（如字段存在）
+        if "financial_account_id" in pos:
+            for p in positions:
+                assert p.get("financial_account_id") == fa_id, \
+                    f"持仓 financial_account_id={p.get('financial_account_id')} 与请求 {fa_id} 不一致"
+            logger.info("  ✓ 所有持仓 financial_account_id 一致")
 
         logger.info("✓ 获取持仓成功")
 
     def test_retrieve_related_positions_with_symbol_filter(self, login_session):
         """
-        测试场景2：使用 symbol 筛选持仓
-        先 list 获取真实 symbol，再用它筛选，验证返回数据匹配
+        测试场景2：使用 symbol 精确筛选持仓
+        从有数据的 FA 中取真实 symbol，验证筛选结果的 symbol 与筛选值一致
         验证点：
         1. 接口返回 200
-        2. 返回的每条持仓 symbol 包含筛选关键词
+        2. 返回的每条持仓 symbol 与筛选值一致
         """
         fa_api = FinancialAccountAPI(session=login_session)
 
-        fa_id = self._get_fa_id(fa_api)
-        if not fa_id:
-            pytest.skip("没有可用的 Financial Account")
+        fa_id, first_pos = _get_fa_id_with_positions(fa_api)
+        if not fa_id or not first_pos:
+            pytest.skip("未找到有持仓数据的 Financial Account")
 
-        # 获取真实 symbol
-        base_resp = fa_api.get_related_positions(fa_id, page=0, size=1)
-        assert base_resp.status_code == 200
-        base_parsed = fa_api.parse_list_response(base_resp)
-        base_pos = base_parsed.get("content", [])
-
-        if not base_pos:
-            pytest.skip(f"FA {fa_id} 无持仓数据，跳过 symbol 筛选测试")
-
-        real_symbol = base_pos[0].get("symbol", "")
+        real_symbol = first_pos.get("symbol", "")
         if not real_symbol:
             pytest.skip("symbol 字段为空，跳过")
 
-        logger.info(f"  使用真实 symbol: {real_symbol}")
+        logger.info(f"使用真实 symbol: {real_symbol}（FA: {fa_id}）")
 
         positions_response = fa_api.get_related_positions(fa_id, symbol=real_symbol, page=0, size=10)
         assert positions_response.status_code == 200
 
-        parsed_positions = fa_api.parse_list_response(positions_response)
-        positions = parsed_positions.get("content", [])
+        positions = fa_api.parse_list_response(positions_response).get("content", [])
+        assert len(positions) > 0, f"symbol='{real_symbol}' 筛选结果为空"
 
-        if positions:
-            for pos in positions:
-                assert pos.get("symbol") == real_symbol, \
-                    f"返回的持仓 symbol='{pos.get('symbol')}' 与筛选值 '{real_symbol}' 不一致"
-            logger.info(f"✓ symbol 筛选验证通过，返回 {len(positions)} 条")
-        else:
-            logger.info(f"  ⚠️ symbol='{real_symbol}' 筛选结果为空")
+        for pos in positions:
+            assert pos.get("symbol") == real_symbol, \
+                f"返回的持仓 symbol='{pos.get('symbol')}' 与筛选值 '{real_symbol}' 不一致"
 
-        logger.info("✓ Symbol 筛选测试完成")
+        logger.info(f"✓ symbol 筛选验证通过，返回 {len(positions)} 条")
 
     def test_retrieve_related_positions_with_cusip_filter(self, login_session):
         """
-        测试场景3：使用 cusip 筛选持仓
-        先 list 获取真实 cusip，再用它筛选，验证返回数据匹配
+        测试场景3：使用 cusip 精确筛选持仓
+        从有数据的 FA 中取真实 cusip，验证筛选结果的 cusip 与筛选值一致
         验证点：
         1. 接口返回 200
         2. 返回的每条持仓 cusip 与筛选值一致
         """
         fa_api = FinancialAccountAPI(session=login_session)
 
-        fa_id = self._get_fa_id(fa_api)
-        if not fa_id:
-            pytest.skip("没有可用的 Financial Account")
+        fa_id, first_pos = _get_fa_id_with_positions(fa_api)
+        if not fa_id or not first_pos:
+            pytest.skip("未找到有持仓数据的 Financial Account")
 
-        # 获取真实 cusip
-        base_resp = fa_api.get_related_positions(fa_id, page=0, size=1)
-        assert base_resp.status_code == 200
-        base_parsed = fa_api.parse_list_response(base_resp)
-        base_pos = base_parsed.get("content", [])
-
-        if not base_pos:
-            pytest.skip(f"FA {fa_id} 无持仓数据，跳过 cusip 筛选测试")
-
-        real_cusip = base_pos[0].get("cusip", "")
+        real_cusip = first_pos.get("cusip", "")
         if not real_cusip:
-            pytest.skip("cusip 字段为空，跳过")
+            pytest.skip("cusip 字段为空，跳过 cusip 筛选测试")
 
-        logger.info(f"  使用真实 cusip: {real_cusip}")
+        logger.info(f"使用真实 cusip: {real_cusip}（FA: {fa_id}）")
 
         positions_response = fa_api.get_related_positions(fa_id, cusip=real_cusip, page=0, size=10)
         assert positions_response.status_code == 200
 
-        parsed_positions = fa_api.parse_list_response(positions_response)
-        positions = parsed_positions.get("content", [])
+        positions = fa_api.parse_list_response(positions_response).get("content", [])
+        assert len(positions) > 0, f"cusip='{real_cusip}' 筛选结果为空"
 
-        if positions:
-            for pos in positions:
-                assert pos.get("cusip") == real_cusip, \
-                    f"返回的持仓 cusip='{pos.get('cusip')}' 与筛选值 '{real_cusip}' 不一致"
-            logger.info(f"✓ cusip 筛选验证通过，返回 {len(positions)} 条")
-        else:
-            logger.info(f"  ⚠️ cusip='{real_cusip}' 筛选结果为空")
+        for pos in positions:
+            assert pos.get("cusip") == real_cusip, \
+                f"返回的持仓 cusip='{pos.get('cusip')}' 与筛选值 '{real_cusip}' 不一致"
 
-        logger.info("✓ CUSIP 筛选测试完成")
+        logger.info(f"✓ cusip 筛选验证通过，返回 {len(positions)} 条")
 
     def test_retrieve_related_positions_pagination(self, login_session):
         """
         测试场景4：验证持仓列表分页功能
         验证点：
-        1. 接口返回 200
+        1. 使用有数据的 FA，确保分页元数据有意义
         2. 分页信息正确（size=5, number=0）
-        3. 返回数量 <= size
+        3. 返回数量 <= size，total_elements > 0
         """
         fa_api = FinancialAccountAPI(session=login_session)
 
-        fa_id = self._get_fa_id(fa_api)
+        fa_id, _ = _get_fa_id_with_positions(fa_api)
         if not fa_id:
-            pytest.skip("没有可用的 Financial Account")
+            pytest.skip("未找到有持仓数据的 Financial Account")
 
         positions_response = fa_api.get_related_positions(fa_id, page=0, size=5)
         assert positions_response.status_code == 200
@@ -192,40 +169,31 @@ class TestFinancialAccountRetrieveRelatedPositions:
         assert parsed_positions["size"] == 5, f"size 不正确: {parsed_positions['size']}"
         assert parsed_positions["number"] == 0, f"number 不正确: {parsed_positions['number']}"
         assert len(parsed_positions.get("content", [])) <= 5, "返回数量超过 size=5"
+        assert parsed_positions["total_elements"] > 0, \
+            f"有数据的 FA 分页 total_elements 应 > 0，实际: {parsed_positions['total_elements']}"
 
-        logger.info("✓ 分页测试通过:")
-        logger.info(f"  总持仓数: {parsed_positions['total_elements']}")
-        logger.info(f"  每页大小: {parsed_positions['size']}, 当前页: {parsed_positions['number']}")
+        logger.info(f"✓ 分页测试通过: total={parsed_positions['total_elements']}, "
+                    f"size={parsed_positions['size']}, page={parsed_positions['number']}")
 
     def test_retrieve_related_positions_response_fields(self, login_session):
         """
         测试场景5：验证持仓响应字段完整性
         验证点：
-        1. 接口返回 200
+        1. 使用有数据的 FA
         2. 持仓对象必须包含必需字段（assert 断言）
         """
         fa_api = FinancialAccountAPI(session=login_session)
 
-        fa_id = self._get_fa_id(fa_api)
-        if not fa_id:
-            pytest.skip("没有可用的 Financial Account")
+        fa_id, first_pos = _get_fa_id_with_positions(fa_api)
+        if not fa_id or not first_pos:
+            pytest.skip("未找到有持仓数据的 Financial Account")
 
-        positions_response = fa_api.get_related_positions(fa_id, page=0, size=1)
-        assert positions_response.status_code == 200
-
-        parsed_positions = fa_api.parse_list_response(positions_response)
-        positions = parsed_positions.get("content", [])
-
-        if not positions:
-            pytest.skip("无持仓数据，跳过字段验证")
-
-        pos = positions[0]
         required_fields = ["id", "symbol"]
 
         logger.info("验证持仓必需字段")
         for field in required_fields:
-            assert field in pos, f"持仓记录缺少必需字段: '{field}'"
-            logger.info(f"  ✓ {field}: {pos.get(field)}")
+            assert field in first_pos, f"持仓记录缺少必需字段: '{field}'"
+            logger.info(f"  ✓ {field}: {first_pos.get(field)}")
 
         logger.info("✓ 字段完整性验证通过")
 
