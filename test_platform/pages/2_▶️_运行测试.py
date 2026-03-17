@@ -1,12 +1,12 @@
-"""运行测试页面"""
+"""运行测试页面 - 支持实时输出 + 切换页面后恢复状态"""
 import streamlit as st
 from pathlib import Path
 import subprocess
 import time
-from datetime import datetime
-import re
-import sys
+import json
 import os
+import re
+from datetime import datetime
 
 st.set_page_config(
     page_title="运行测试 - API自动化测试平台",
@@ -15,7 +15,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 隐藏页脚
 st.markdown("""
 <style>
     footer {visibility: hidden;}
@@ -26,8 +25,94 @@ st.title("▶️ 运行测试")
 
 project_root = Path(__file__).parent.parent.parent
 test_cases_dir = project_root / "test_cases"
+reports_dir = project_root / "reports"
+reports_dir.mkdir(exist_ok=True)
 
-# 运行模式选择（使用选择框代替单选按钮）
+RUN_LOG = reports_dir / "running.log"
+RUN_STATUS = reports_dir / "run_status.json"
+
+
+def read_run_status() -> dict:
+    """读取运行状态文件，不存在则返回空"""
+    if RUN_STATUS.exists():
+        try:
+            return json.loads(RUN_STATUS.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+    return {}
+
+
+def render_result(status: dict):
+    """根据 run_status.json 渲染结果区域"""
+    state = status.get("state", "")
+    start_time = status.get("start_time", "")
+    cmd = status.get("cmd", "")
+
+    if cmd:
+        st.code(f"$ {cmd}", language="bash")
+
+    if state == "running":
+        elapsed = time.time() - status.get("start_ts", time.time())
+        st.info(f"⏳ 测试运行中... 开始时间: {start_time}  已用时: {elapsed:.0f}s")
+        log_content = RUN_LOG.read_text(encoding="utf-8", errors="replace") if RUN_LOG.exists() else ""
+        if log_content:
+            st.markdown("**📺 实时输出：**")
+            st.code(log_content, language="bash")
+        else:
+            st.caption("等待输出...")
+        # 2秒后自动刷新
+        time.sleep(2)
+        st.rerun()
+
+    elif state == "done":
+        duration = status.get("duration", 0)
+        returncode = status.get("returncode", -1)
+        if returncode == 0:
+            st.success(f"✅ 测试完成！耗时: {duration:.1f}s  开始时间: {start_time}")
+        else:
+            st.error(f"❌ 测试有失败项！耗时: {duration:.1f}s  开始时间: {start_time}")
+
+        # 统计信息
+        passed = status.get("passed", 0)
+        failed = status.get("failed", 0)
+        skipped = status.get("skipped", 0)
+        total = passed + failed + skipped
+        if total > 0:
+            st.markdown("---")
+            st.subheader("📈 测试统计")
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("✅ 通过", passed)
+            c2.metric("❌ 失败", failed)
+            c3.metric("⏭️ 跳过", skipped)
+            pass_rate = (passed / total) * 100
+            c4.metric("📊 通过率", f"{pass_rate:.1f}%")
+
+        # 完整输出
+        log_content = RUN_LOG.read_text(encoding="utf-8", errors="replace") if RUN_LOG.exists() else ""
+        if log_content:
+            with st.expander("📝 查看完整输出", expanded=False):
+                st.code(log_content, language="bash")
+
+    elif state == "error":
+        st.error(f"❌ 运行出错：{status.get('error', '未知错误')}")
+
+
+# ──────────────────────────────────────────────
+# 读取当前运行状态
+# ──────────────────────────────────────────────
+current_status = read_run_status()
+is_running = current_status.get("state") == "running"
+
+# 如果当前是 running，先展示进度（占整页），不显示配置区
+if is_running:
+    st.markdown("---")
+    st.subheader("📊 运行状态")
+    render_result(current_status)
+    st.stop()
+
+# ──────────────────────────────────────────────
+# 配置区（非运行中才显示）
+# ──────────────────────────────────────────────
 st.subheader("🎯 选择运行模式")
 run_mode = st.selectbox(
     "运行方式",
@@ -38,27 +123,22 @@ run_mode = st.selectbox(
 
 st.markdown("---")
 
-# 运行配置
 col1, col2 = st.columns(2)
 
 with col1:
-    # 只显示有测试文件的模块
     all_modules = [d for d in test_cases_dir.iterdir() if d.is_dir() and not d.name.startswith('__')]
     modules_with_tests = []
     for module_dir in all_modules:
-        test_files_count = list(module_dir.glob("test_*.py"))
-        if len(test_files_count) > 0:
+        if list(module_dir.glob("test_*.py")):
             modules_with_tests.append(module_dir.name)
-    
     modules = sorted(modules_with_tests)
-    
+
     if run_mode == "按模块运行":
         if not modules:
             st.error("❌ 未找到包含测试文件的模块")
             st.stop()
         selected_module = st.selectbox("📁 选择模块", modules)
         test_path = f"test_cases/{selected_module}/"
-        
     elif run_mode == "按文件运行":
         if not modules:
             st.error("❌ 未找到包含测试文件的模块")
@@ -66,7 +146,6 @@ with col1:
         selected_module = st.selectbox("📁 选择模块", modules)
         module_path = test_cases_dir / selected_module
         test_files = sorted([f.name for f in module_path.glob("test_*.py")])
-        
         if test_files:
             selected_file = st.selectbox("📄 选择文件", test_files)
             test_path = f"test_cases/{selected_module}/{selected_file}"
@@ -82,124 +161,100 @@ with col2:
         ["-v (详细输出)", "-s (显示print)", "--tb=short (简短回溯)", "-x (首次失败停止)"],
         default=["-v (详细输出)"]
     )
-    
-    # 转换为实际参数
-    actual_options = []
-    for opt in pytest_options:
-        actual_options.append(opt.split()[0])
+    actual_options = [opt.split()[0] for opt in pytest_options]
 
-# 显示将要执行的命令
 cmd_parts = ["pytest", test_path] + actual_options
 cmd_display = " ".join(cmd_parts)
-
 st.code(f"$ {cmd_display}", language="bash")
-
 st.markdown("---")
 
-# 运行按钮
+# 上次结果（如果有）
+if current_status.get("state") == "done":
+    with st.expander("📋 上次运行结果", expanded=False):
+        render_result(current_status)
+    st.markdown("---")
+
+# ──────────────────────────────────────────────
+# 开始运行按钮
+# ──────────────────────────────────────────────
 if st.button("🚀 开始运行", type="primary", key="btn_start_run"):
-    
-    # 运行信息
-    st.subheader("📊 运行状态")
-    
-    status_placeholder = st.empty()
-    output_placeholder = st.empty()
-    
-    with status_placeholder.container():
-        st.info(f"⏳ 正在运行测试... 开始时间: {datetime.now().strftime('%H:%M:%S')}")
-    
-    # 执行命令
-    start_time = time.time()
-    
-    try:
-        # 构建完整的执行命令，包含环境变量设置
-        venv_python = project_root / ".venv" / "bin" / "python"
-        
-        if venv_python.exists():
-            # 使用虚拟环境的python -m pytest
-            full_cmd = [
-                str(venv_python),
-                "-m", "pytest"
-            ] + cmd_parts[1:]  # 跳过原来的pytest命令
-        else:
-            # 回退到系统pytest
-            full_cmd = cmd_parts
-        
-        # 设置PYTHONPATH确保能导入项目模块
-        env = os.environ.copy()
-        env["PYTHONPATH"] = str(project_root)
-        
-        # 切换到项目根目录执行
-        result = subprocess.run(
-            full_cmd,
-            cwd=str(project_root),
-            capture_output=True,
-            text=True,
-            timeout=300,  # 5分钟超时
-            env=env
-        )
-        
-        end_time = time.time()
-        duration = end_time - start_time
-        
-        # 显示结果
-        with status_placeholder.container():
-            if result.returncode == 0:
-                st.success(f"✅ 测试完成！耗时: {duration:.2f}秒")
-            else:
-                st.error(f"❌ 测试失败！耗时: {duration:.2f}秒")
-        
-        # 输出详情
-        with output_placeholder.container():
-            st.subheader("📝 测试输出")
-            
-            tab1, tab2 = st.tabs(["标准输出", "错误输出"])
-            
-            with tab1:
-                if result.stdout:
-                    st.code(result.stdout, language="bash")
-                else:
-                    st.info("无标准输出")
-            
-            with tab2:
-                if result.stderr:
-                    st.code(result.stderr, language="bash")
-                else:
-                    st.info("无错误输出")
-        
-        # 提取统计信息
-        output = result.stdout + result.stderr
-        
-        # 使用正则提取统计数据
-        passed_match = re.search(r'(\d+) passed', output)
-        failed_match = re.search(r'(\d+) failed', output)
-        skipped_match = re.search(r'(\d+) skipped', output)
-        
-        passed = int(passed_match.group(1)) if passed_match else 0
-        failed = int(failed_match.group(1)) if failed_match else 0
-        skipped = int(skipped_match.group(1)) if skipped_match else 0
-        
-        if passed > 0 or failed > 0 or skipped > 0:
-            st.markdown("---")
-            st.subheader("📈 测试统计")
-            
-            col1, col2, col3, col4 = st.columns(4)
-            col1.metric("✅ 通过", passed)
-            col2.metric("❌ 失败", failed)
-            col3.metric("⏭️ 跳过", skipped)
-            
-            total = passed + failed + skipped
-            if total > 0:
-                pass_rate = (passed / total) * 100
-                col4.metric("📊 通过率", f"{pass_rate:.1f}%")
-        
-    except subprocess.TimeoutExpired:
-        with status_placeholder.container():
-            st.error("❌ 测试超时！（超过5分钟）")
-    
-    except Exception as e:
-        with status_placeholder.container():
-            st.error(f"❌ 运行出错：{str(e)}")
+
+    # 清空旧日志
+    RUN_LOG.write_text("", encoding="utf-8")
+
+    # 写入"运行中"状态
+    now = datetime.now()
+    RUN_STATUS.write_text(json.dumps({
+        "state": "running",
+        "start_time": now.strftime("%Y-%m-%d %H:%M:%S"),
+        "start_ts": time.time(),
+        "cmd": cmd_display,
+    }, ensure_ascii=False), encoding="utf-8")
+
+    # 构建完整命令
+    venv_python = project_root / ".venv" / "bin" / "python"
+    if venv_python.exists():
+        full_cmd = [str(venv_python), "-m", "pytest"] + cmd_parts[1:]
+    else:
+        full_cmd = cmd_parts
+
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(project_root)
+
+    # 用后台线程执行，主线程继续渲染
+    import threading
+
+    def run_pytest():
+        start_ts = time.time()
+        try:
+            process = subprocess.Popen(
+                full_cmd,
+                cwd=str(project_root),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                env=env,
+                bufsize=1
+            )
+            collected_output = []
+            for line in process.stdout:
+                collected_output.append(line)
+                # 实时追加写入日志文件
+                with open(RUN_LOG, "a", encoding="utf-8") as f:
+                    f.write(line)
+            process.wait()
+
+            duration = time.time() - start_ts
+            full_output = "".join(collected_output)
+
+            # 解析统计
+            passed = int(m.group(1)) if (m := re.search(r'(\d+) passed', full_output)) else 0
+            failed = int(m.group(1)) if (m := re.search(r'(\d+) failed', full_output)) else 0
+            skipped = int(m.group(1)) if (m := re.search(r'(\d+) skipped', full_output)) else 0
+
+            # 更新状态为完成
+            prev = json.loads(RUN_STATUS.read_text(encoding="utf-8"))
+            prev.update({
+                "state": "done",
+                "duration": round(duration, 1),
+                "returncode": process.returncode,
+                "passed": passed,
+                "failed": failed,
+                "skipped": skipped,
+            })
+            RUN_STATUS.write_text(json.dumps(prev, ensure_ascii=False), encoding="utf-8")
+
+        except Exception as e:
+            prev = json.loads(RUN_STATUS.read_text(encoding="utf-8")) if RUN_STATUS.exists() else {}
+            prev.update({"state": "error", "error": str(e)})
+            RUN_STATUS.write_text(json.dumps(prev, ensure_ascii=False), encoding="utf-8")
+
+    t = threading.Thread(target=run_pytest, daemon=True)
+    t.start()
+
+    # 立即刷新页面进入"运行中"模式
+    time.sleep(0.5)
+    st.rerun()
 
 st.markdown("---")
-st.caption("💡 提示：运行大量测试可能需要几分钟时间，请耐心等待")
+st.caption("💡 提示：运行中可切换其他页面，回来后仍可查看进度")
