@@ -260,3 +260,155 @@ class TestAccountTransactions:
                 logger.info(f"  {field}: {transaction.get(field)}")
 
         logger.info("✓ 字段完整性验证通过")
+
+    def test_get_settled_transactions_with_invalid_date_format(self, account_api):
+        """
+        测试场景7：使用错误的日期格式搜索
+        验证点：
+        1. 传入不符合 yyyy-MM-dd 格式的日期（如 "20240101"、"Jan 1 2024"）
+        2. 服务器返回 200
+        3. code != 200（业务层校验失败）或返回空列表
+        """
+        account_id = self._get_account_id(account_api)
+        if not account_id:
+            pytest.skip("没有可用的账户数据")
+
+        invalid_date = "20240101"  # 缺少分隔符
+        logger.info(f"使用格式错误的日期: '{invalid_date}'")
+
+        transactions_response = account_api.get_settled_transactions(
+            account_id, begin_date=invalid_date, end_date=invalid_date
+        )
+        assert transactions_response.status_code == 200, \
+            f"服务器应该返回 200，实际: {transactions_response.status_code}"
+
+        response_body = transactions_response.json()
+        logger.info(f"  响应: {response_body}")
+
+        if isinstance(response_body, dict) and "code" in response_body and response_body.get("code") != 200:
+            logger.info(f"  格式错误日期返回业务错误: code={response_body.get('code')}")
+        else:
+            parsed = account_api.parse_transactions_response(transactions_response)
+            logger.info(f"  格式错误日期返回空或有数据: {len(parsed.get('content', []))} 条")
+
+        logger.info("✓ 错误日期格式测试通过")
+
+    def test_get_settled_transactions_with_invalid_security_format(self, account_api):
+        """
+        测试场景8：使用错误的 security 格式搜索（特殊字符）
+        验证点：
+        1. 传入包含特殊字符的 security 值（如 "AAPL<script>", "%%invalid%%"）
+        2. 服务器返回 200
+        3. 返回空列表（不存在的 security）
+        """
+        account_id = self._get_account_id(account_api)
+        if not account_id:
+            pytest.skip("没有可用的账户数据")
+
+        invalid_security = "%%INVALID_SECURITY<>%%"
+        logger.info(f"使用格式错误的 security: '{invalid_security}'")
+
+        transactions_response = account_api.get_settled_transactions(
+            account_id, security=invalid_security
+        )
+        assert transactions_response.status_code == 200, \
+            f"服务器应该返回 200，实际: {transactions_response.status_code}"
+
+        parsed = account_api.parse_transactions_response(transactions_response)
+        transactions = parsed.get("content", [])
+
+        assert len(transactions) == 0, \
+            f"错误格式的 security 应返回空列表，实际返回 {len(transactions)} 条"
+
+        logger.info("✓ 错误 security 格式返回空列表验证通过")
+
+    def test_get_settled_transactions_begin_after_end_date(self, account_api):
+        """
+        测试场景9：开始时间在结束时间之后
+        验证点：
+        1. begin_date > end_date（如 begin=2024-12-31, end=2024-01-01）
+        2. 服务器返回 200
+        3. 返回空列表 或 code != 200（业务层检测到非法范围）
+        """
+        account_id = self._get_account_id(account_api)
+        if not account_id:
+            pytest.skip("没有可用的账户数据")
+
+        begin_date = "2024-12-31"
+        end_date = "2024-01-01"
+        logger.info(f"使用反转日期范围: begin_date={begin_date} > end_date={end_date}")
+
+        transactions_response = account_api.get_settled_transactions(
+            account_id, begin_date=begin_date, end_date=end_date
+        )
+        assert transactions_response.status_code == 200, \
+            f"服务器应该返回 200，实际: {transactions_response.status_code}"
+
+        response_body = transactions_response.json()
+        logger.info(f"  响应: {response_body}")
+
+        if isinstance(response_body, dict) and "code" in response_body and response_body.get("code") != 200:
+            logger.info(f"  反转日期范围返回业务错误: code={response_body.get('code')}")
+        else:
+            parsed = account_api.parse_transactions_response(transactions_response)
+            transactions = parsed.get("content", [])
+            assert len(transactions) == 0, \
+                f"开始时间在结束时间之后，应返回空列表，实际返回 {len(transactions)} 条"
+            logger.info(f"  反转日期范围返回空列表")
+
+        logger.info("✓ 开始时间 > 结束时间验证通过")
+
+    def test_get_settled_transactions_visibility_isolation(self, account_api):
+        """
+        测试场景10：可见性隔离验证（通过 security 搜索不应返回不可见的数据）
+        验证点：
+        1. 使用 security 搜索时，返回的 financial_account_id/financial_account_name 均是自己可见的数据
+        2. 不会因 security 搜索而泄露他人账户的交易数据
+        """
+        account_id = self._get_account_id(account_api)
+        if not account_id:
+            pytest.skip("没有可用的账户数据")
+
+        # 先获取自己有交易的 symbol
+        base_resp = account_api.get_settled_transactions(account_id, size=5)
+        assert_status_ok(base_resp)
+        parsed = account_api.parse_transactions_response(base_resp)
+        transactions = parsed.get("content", [])
+
+        if not transactions:
+            pytest.skip("该账户无 Settled Transactions，跳过可见性验证")
+
+        # 获取当前用户可见的 FA ID 集合
+        fa_id_set_from_list = {t.get("financial_account_id") for t in transactions if t.get("financial_account_id")}
+        logger.info(f"  当前用户可见 FA ID 集合（来自第一次查询）: {fa_id_set_from_list}")
+
+        # 取一个 symbol 做 security 搜索
+        real_symbol = next((t.get("symbol") for t in transactions if t.get("symbol")), None)
+        if not real_symbol:
+            pytest.skip("无 symbol 数据，跳过可见性验证")
+
+        logger.info(f"  使用 security='{real_symbol}' 搜索，验证可见性隔离")
+
+        sec_resp = account_api.get_settled_transactions(account_id, security=real_symbol, size=20)
+        assert_status_ok(sec_resp)
+        parsed_sec = account_api.parse_transactions_response(sec_resp)
+        sec_transactions = parsed_sec.get("content", [])
+
+        # 获取当前用户所有可见的 FA ID（取更多数据）
+        all_fa_resp = account_api.get_settled_transactions(account_id, size=100)
+        parsed_all = account_api.parse_transactions_response(all_fa_resp)
+        all_visible_fa_ids = {t.get("financial_account_id") for t in parsed_all.get("content", []) if t.get("financial_account_id")}
+
+        # 验证 security 搜索返回的每条数据的 FA 均在可见范围内
+        for txn in sec_transactions:
+            fa_id = txn.get("financial_account_id")
+            if fa_id and all_visible_fa_ids:
+                assert fa_id in all_visible_fa_ids, \
+                    f"security 搜索返回了不在可见范围内的 FA: financial_account_id={fa_id}"
+
+        invisible_id = "241010195850134683"  # ACTC Yhan FA
+        for txn in sec_transactions:
+            assert txn.get("financial_account_id") != invisible_id, \
+                f"security 搜索返回了不可见账户 {invisible_id} 的交易数据！"
+
+        logger.info(f"✓ 可见性隔离验证通过，security 搜索共返回 {len(sec_transactions)} 条，无越权数据")

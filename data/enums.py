@@ -51,13 +51,14 @@ class BusinessEntityType(str, Enum):
 class AccountStatus(str, Enum):
     """
     账户状态枚举
-    对应 API 文档中的 status 字段
+    对应 Profile Account Status 文档定义：
+    Active / Declined / Terminated / Pending / Hold
     """
     ACTIVE = "Active"
-    INACTIVE = "Inactive"
+    DECLINED = "Declined"
+    TERMINATED = "Terminated"
     PENDING = "Pending"
-    SUSPENDED = "Suspended"
-    CLOSED = "Closed"
+    HOLD = "Hold"
 
     def __str__(self):
         """返回枚举的实际值"""

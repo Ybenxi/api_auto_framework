@@ -17,7 +17,14 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("📊 历史报告")
+col_title, col_refresh = st.columns([8, 1])
+with col_title:
+    st.title("📊 历史报告")
+with col_refresh:
+    st.write("")
+    st.write("")
+    if st.button("🔄 刷新", key="btn_refresh_reports", use_container_width=True):
+        st.rerun()
 
 project_root = Path(__file__).parent.parent.parent
 reports_dir = project_root / "reports"
