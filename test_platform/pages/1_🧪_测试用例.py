@@ -82,7 +82,7 @@ else:
             # 展开状态（默认收起）
             expanded = st.session_state.get("expand_all_state", False)
 
-            st.markdown(f"共找到 **{total}** 个测试场景")
+            st.info(f"共找到 **{total}** 个测试场景")
 
             btn_label = "📁 收起全部" if expanded else "📂 展开全部"
             if st.button(btn_label, key="toggle_all"):
