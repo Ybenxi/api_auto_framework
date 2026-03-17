@@ -35,7 +35,7 @@ logger.add(
     format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} - {message}",
     level="DEBUG",
     rotation="00:00",  # 每天0点切割
-    retention="7 days",  # 保留7天
+    retention="90 days",  # 保留90天
     compression="zip",  # 压缩旧日志
     encoding="utf-8",
     backtrace=True,

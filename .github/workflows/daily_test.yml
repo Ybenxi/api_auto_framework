@@ -287,7 +287,33 @@ jobs:
           echo "邮件 HTML 文件已生成"
           cat reports/email_body.html
       
-      # 11. 发送邮件通知（使用 file:// 方式读取 HTML）
+      # 11. 从 email_config.json 读取收件人列表
+      - name: Read email recipients
+        if: always()
+        run: |
+          python3 << 'EOF'
+          import json
+          import os
+          from pathlib import Path
+          
+          config_file = Path("email_config.json")
+          if config_file.exists():
+              with open(config_file, "r", encoding="utf-8") as f:
+                  config = json.load(f)
+              recipients = config.get("recipients", [])
+              # 过滤空值，用逗号拼接
+              valid = [r.strip() for r in recipients if r.strip()]
+              mail_to = ",".join(valid) if valid else "byan@fintechautomation.com"
+          else:
+              mail_to = "byan@fintechautomation.com"
+          
+          with open(os.environ["GITHUB_ENV"], "a") as f:
+              f.write(f"MAIL_TO_LIST={mail_to}\n")
+          
+          print(f"收件人列表: {mail_to}")
+          EOF
+      
+      # 12. 发送邮件通知
       - name: Send email notification
         if: always()
         uses: dawidd6/action-send-mail@v3
@@ -297,10 +323,10 @@ jobs:
           username: ${{ secrets.MAIL_USERNAME }}
           password: ${{ secrets.MAIL_PASSWORD }}
           subject: '${{ env.BUILD_STATUS_ICON }} Ben xi Interface Test Report - ${{ env.TEST_DATE }}'
-          to: ${{ secrets.MAIL_TO }}
+          to: ${{ env.MAIL_TO_LIST }}
           from: ${{ secrets.MAIL_USERNAME }}
           html_body: file://reports/email_body.html
           attachments: |
             reports/final_report.html
-            test_cases.xlsx
+            reports/test_cases.xlsx
           convert_markdown: false

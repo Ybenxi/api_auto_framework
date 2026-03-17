@@ -796,8 +796,7 @@ def pytest_sessionfinish(session, exitstatus):
             f.write(final_html)
         logger.info(f"最新报告已更新: {latest_report_path}")
         
-        # 清理旧的带时间戳的报告，只保留最近5次
-        cleanup_old_reports(os.path.join(os.path.dirname(__file__), "..", "reports"))
+        # 报告永久保留，不再自动清理（可在测试平台手动删除）
 
 
 # --- 自动拦截 Requests 流量的辅助工具（修复版）---

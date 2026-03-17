@@ -274,13 +274,13 @@ def extract_test_cases(test_cases_dir: str = "test_cases") -> list:
     return all_test_cases
 
 
-def generate_excel(test_cases: list, output_file: str = "test_cases.xlsx"):
+def generate_excel(test_cases: list, output_file: str = "reports/test_cases.xlsx"):
     """
     生成 Excel 文件
     
     Args:
         test_cases: 测试用例列表
-        output_file: 输出文件名
+        output_file: 输出文件路径（相对于项目根目录），默认存到 reports/ 目录
     """
     # 创建 DataFrame
     df = pd.DataFrame(test_cases)
@@ -288,6 +288,9 @@ def generate_excel(test_cases: list, output_file: str = "test_cases.xlsx"):
     # 获取项目根目录
     project_root = Path(__file__).parent.parent
     output_path = project_root / output_file
+    
+    # 确保输出目录存在
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     
     # 生成 Excel 文件
     logger.info(f"[INFO] 生成 Excel 文件: {output_path}")
