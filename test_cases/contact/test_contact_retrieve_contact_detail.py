@@ -322,3 +322,83 @@ class TestContactDetail:
             f"越权 Contact ID 应返回 code=506 或其他错误码，实际: {error_code}"
 
         logger.info(f"✓ 越权 Contact ID 验证通过: code={error_code}")
+
+    def test_detail_fields_match_create(self, login_session, db_cleanup):
+        """
+        测试场景7：Detail 返回字段与创建时传入字段一一匹配
+        验证点：
+        1. 先创建一个 Contact（包含多个可选字段）
+        2. 立即调用 Detail 接口获取详情
+        3. 验证所有传入字段都出现在 Detail 中，值完全一致（无字段丢失）
+        4. 验证 Detail 中不应出现意外的多余关键字段（额外字段记录但不失败）
+        """
+        import time as time_module
+        contact_api = ContactAPI(session=login_session)
+
+        FIXED_ACCOUNT_ID = "251212054045554351"
+        unique_email = f"auto_detail_match_{int(time_module.time())}@example.com"
+        contact_data = {
+            "account_id": FIXED_ACCOUNT_ID,
+            "first_name": "Auto TestYan",
+            "last_name": "DetailMatch",
+            "birth_date": "1988-03-22",
+            "email": unique_email,
+            "phone": "+14155550202",
+            "gender": "Male",
+            "middle_name": "DetailTest",
+            "permanent_address": "99 Test Blvd",
+            "permanent_city": "Test City",
+            "permanent_state": "TX",
+            "permanent_postalcode": "75001",
+            "permanent_country": "United States",
+            "description": "Auto test for field matching"
+        }
+
+        # 创建
+        logger.info(f"创建 Contact: email={unique_email}")
+        create_resp = contact_api.create_contact(contact_data)
+        assert create_resp.status_code == 200
+        create_body = create_resp.json()
+        assert create_body.get("code") == 200, \
+            f"创建失败: code={create_body.get('code')}, msg={create_body.get('error_message')}"
+
+        created = create_body.get("data") or create_body
+        created_id = created.get("id")
+        assert created_id, "创建的 Contact ID 为空"
+
+        if db_cleanup:
+            db_cleanup.track("contact", created_id)
+
+        # 调用 Detail 接口
+        logger.info(f"调用 Detail 接口: id={created_id}")
+        detail_resp = contact_api.get_contact_detail(created_id)
+        assert detail_resp.status_code == 200
+        detail_body = detail_resp.json()
+        detail = detail_body.get("data") or detail_body
+
+        # 验证所有传入字段在 Detail 中值一致（不丢失）
+        logger.info("逐字段验证 Detail 与创建时传入值一致")
+        fields_to_check = [
+            "first_name", "last_name", "birth_date", "email",
+            "phone", "gender", "middle_name",
+            "permanent_address", "permanent_city", "permanent_state",
+            "permanent_postalcode", "permanent_country", "description"
+        ]
+        mismatches = []
+        for field in fields_to_check:
+            expected = contact_data.get(field)
+            actual = detail.get(field)
+            if actual == expected:
+                logger.info(f"  ✓ {field}: {actual}")
+            else:
+                mismatches.append(f"{field}: 期望 '{expected}', 实际 '{actual}'")
+                logger.info(f"  ✗ {field}: 期望 '{expected}', 实际 '{actual}'")
+
+        assert not mismatches, \
+            f"Detail 字段与创建值不一致:\n" + "\n".join(mismatches)
+
+        # 验证 account_id 回显
+        assert detail.get("account_id") == FIXED_ACCOUNT_ID, \
+            f"account_id 不匹配: 期望 {FIXED_ACCOUNT_ID}, 实际 {detail.get('account_id')}"
+
+        logger.info(f"✓ Detail 字段与创建字段完全匹配，id={created_id}")

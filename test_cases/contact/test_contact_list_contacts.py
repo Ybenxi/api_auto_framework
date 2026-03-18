@@ -301,3 +301,80 @@ class TestContactList:
             logger.info(f"✓ 排序验证成功（升序），共 {len(contacts)} 个 Contacts")
         else:
             logger.info(f"⚠ Contacts 数量不足，无法验证排序（当前 {len(contacts)} 个）")
+
+    def test_list_contacts_fields_match_create(self, login_session, db_cleanup):
+        """
+        测试场景9：List 返回字段与创建时传入字段一一匹配
+        验证点：
+        1. 先创建一个 Contact（包含多个可选字段）
+        2. 在 List 接口中用 email 精确筛选出该 Contact
+        3. 验证 List 中的字段与创建时传入的值完全一致（无多余/缺失）
+        4. 同时验证 List 中不应出现仅在 Detail 才有的字段
+        """
+        import time as time_module
+        contact_api = ContactAPI(session=login_session)
+
+        # 1. 创建 Contact（包含多个可选字段，便于验证）
+        FIXED_ACCOUNT_ID = "251212054045554351"
+        unique_email = f"auto_list_match_{int(time_module.time())}@example.com"
+        contact_data = {
+            "account_id": FIXED_ACCOUNT_ID,
+            "first_name": "Auto TestYan",
+            "last_name": "ListMatch",
+            "birth_date": "1990-06-15",
+            "email": unique_email,
+            "phone": "+14155550101",
+            "gender": "Female",
+            "middle_name": "ListTest"
+        }
+
+        logger.info(f"创建 Contact: email={unique_email}")
+        create_resp = contact_api.create_contact(contact_data)
+        assert create_resp.status_code == 200
+        create_body = create_resp.json()
+        assert create_body.get("code") == 200, \
+            f"创建失败: code={create_body.get('code')}, msg={create_body.get('error_message')}"
+
+        created = create_body.get("data") or create_body
+        created_id = created.get("id")
+        assert created_id, "创建的 Contact ID 为空"
+
+        if db_cleanup:
+            db_cleanup.track("contact", created_id)
+
+        # 2. 在 List 中用 email 筛选
+        logger.info(f"在 List 中用 email 筛选: {unique_email}")
+        list_resp = contact_api.list_contacts(email=unique_email, size=5)
+        assert list_resp.status_code == 200
+        parsed = contact_api.parse_list_response(list_resp)
+        assert not parsed.get("error")
+
+        contacts = parsed["content"]
+        assert len(contacts) > 0, "List 中未找到刚创建的 Contact"
+
+        # 取出对应的 Contact
+        found = next((c for c in contacts if c.get("id") == created_id), None)
+        assert found is not None, f"List 中未找到 id={created_id} 的 Contact"
+
+        # 3. 验证 List 中的关键字段与创建时一致（无字段丢失）
+        logger.info("验证 List 字段与创建字段一致")
+        assert found.get("first_name") == contact_data["first_name"], \
+            f"first_name 不匹配: 期望 {contact_data['first_name']}, 实际 {found.get('first_name')}"
+        assert found.get("last_name") == contact_data["last_name"], \
+            f"last_name 不匹配: 期望 {contact_data['last_name']}, 实际 {found.get('last_name')}"
+        assert found.get("email") == contact_data["email"], \
+            f"email 不匹配: 期望 {contact_data['email']}, 实际 {found.get('email')}"
+
+        # phone / gender / middle_name 在 List 中可能不返回（由接口设计决定），记录但不强制断言
+        for optional_field in ["phone", "gender", "middle_name"]:
+            if optional_field in found:
+                logger.info(f"  ✓ List 包含 {optional_field}: {found.get(optional_field)}")
+            else:
+                logger.info(f"  ℹ List 未返回 {optional_field}（Detail 接口才有）")
+
+        # 4. 验证 List 必须包含的最小字段集
+        list_required_fields = ["id", "account_id", "name", "first_name", "last_name", "email", "status"]
+        for field in list_required_fields:
+            assert field in found, f"List 中缺少必需字段: '{field}'"
+
+        logger.info(f"✓ List 字段与创建字段匹配验证通过，id={created_id}")

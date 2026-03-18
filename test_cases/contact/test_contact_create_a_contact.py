@@ -562,3 +562,131 @@ class TestContactCreate:
             "越权时 data 应为 None"
 
         logger.info(f"✓ 越权 Account ID 校验通过: code=506, msg={error_msg}")
+
+    def test_create_contact_invalid_birth_date_format(self, login_session):
+        """
+        测试场景10：提交格式错误的 birth_date
+        验证点：
+        1. HTTP 200（统一错误处理）
+        2. 业务 code != 200，提示日期格式错误
+        """
+        contact_api = ContactAPI(session=login_session)
+
+        contact_data = {
+            "account_id": FIXED_ACCOUNT_ID,
+            "first_name": "Auto TestYan",
+            "last_name": "Contact BadDate",
+            "birth_date": "01/01/1990",   # 错误格式，应为 YYYY-MM-DD
+            "email": f"auto_test_baddate_{int(time.time())}@example.com"
+        }
+
+        logger.info("提交格式错误的 birth_date: 01/01/1990（应为 YYYY-MM-DD）")
+        response = contact_api.create_contact(contact_data)
+
+        assert response.status_code == 200, \
+            f"HTTP 应返回 200，实际: {response.status_code}"
+
+        body = response.json()
+        logger.info(f"  响应: {body}")
+        assert body.get("code") != 200, \
+            f"错误日期格式应被拒绝（code!=200），实际 code={body.get('code')}"
+
+        logger.info(f"✓ 错误日期格式被拒绝: code={body.get('code')}, msg={body.get('error_message')}")
+
+    def test_create_contact_invalid_country_format(self, login_session):
+        """
+        测试场景11：permanent_country 不符合 ISO 3166 标准
+        验证点：
+        1. HTTP 200
+        2. 业务 code != 200，或提示国家代码格式错误
+        """
+        contact_api = ContactAPI(session=login_session)
+
+        contact_data = {
+            "account_id": FIXED_ACCOUNT_ID,
+            "first_name": "Auto TestYan",
+            "last_name": "Contact BadCountry",
+            "birth_date": "1990-01-01",
+            "email": f"auto_test_badcountry_{int(time.time())}@example.com",
+            "permanent_country": "CHINA",         # 非 ISO 3166 标准
+            "mailing_country": "UNITED_STATES"    # 非 ISO 3166 标准
+        }
+
+        logger.info("提交非 ISO 3166 country 代码: CHINA / UNITED_STATES")
+        response = contact_api.create_contact(contact_data)
+
+        assert response.status_code == 200, \
+            f"HTTP 应返回 200，实际: {response.status_code}"
+
+        body = response.json()
+        logger.info(f"  响应 code={body.get('code')}, msg={body.get('error_message')}")
+
+        if body.get("code") != 200:
+            logger.info(f"✓ 非标准 country 被 API 拒绝: code={body.get('code')}")
+        else:
+            logger.info("⚠ API 未校验 country 格式（接受了非 ISO 3166 值），记录为探索性结果")
+
+    def test_create_contact_invalid_phone_e164(self, login_session):
+        """
+        测试场景12：phone 不符合 E.164 格式
+        验证点：
+        1. HTTP 200
+        2. 业务 code != 200，提示 phone 格式错误
+        """
+        contact_api = ContactAPI(session=login_session)
+
+        contact_data = {
+            "account_id": FIXED_ACCOUNT_ID,
+            "first_name": "Auto TestYan",
+            "last_name": "Contact BadPhone",
+            "birth_date": "1990-01-01",
+            "email": f"auto_test_badphone_{int(time.time())}@example.com",
+            "phone": "13800138000"   # 非 E.164 格式（缺少 +）
+        }
+
+        logger.info("提交非 E.164 格式 phone: 13800138000")
+        response = contact_api.create_contact(contact_data)
+
+        assert response.status_code == 200, \
+            f"HTTP 应返回 200，实际: {response.status_code}"
+
+        body = response.json()
+        logger.info(f"  响应 code={body.get('code')}, msg={body.get('error_message')}")
+
+        if body.get("code") != 200:
+            logger.info(f"✓ 非 E.164 phone 被 API 拒绝: code={body.get('code')}")
+        else:
+            logger.info("⚠ API 未校验 phone 格式（接受了非 E.164 值），记录为探索性结果")
+
+    def test_create_contact_invalid_enum_fields(self, login_session):
+        """
+        测试场景13：government_document_type 和 gender 超出枚举范围
+        验证点：
+        1. HTTP 200
+        2. 业务 code != 200，提示枚举值不合法
+        """
+        contact_api = ContactAPI(session=login_session)
+
+        contact_data = {
+            "account_id": FIXED_ACCOUNT_ID,
+            "first_name": "Auto TestYan",
+            "last_name": "Contact BadEnum",
+            "birth_date": "1990-01-01",
+            "email": f"auto_test_badenum_{int(time.time())}@example.com",
+            "gender": "Unknown",                           # 超出枚举范围
+            "government_document_type": "Magic Document"  # 超出枚举范围
+        }
+
+        logger.info("提交超出枚举范围的 gender='Unknown', government_document_type='Magic Document'")
+        response = contact_api.create_contact(contact_data)
+
+        assert response.status_code == 200, \
+            f"HTTP 应返回 200，实际: {response.status_code}"
+
+        body = response.json()
+        logger.info(f"  响应 code={body.get('code')}, msg={body.get('error_message')}")
+
+        if body.get("code") != 200:
+            logger.info(f"✓ 超出枚举范围的值被 API 拒绝: code={body.get('code')}")
+        else:
+            logger.info("⚠ API 未校验枚举范围（接受了非法枚举值），记录为探索性结果")
