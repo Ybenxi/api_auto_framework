@@ -870,12 +870,16 @@ def pytest_sessionfinish(session, exitstatus):
         )
         
         # 注入数据
+        # 注意：json.dumps 后需要将 </ 转义为 <\/，防止响应体中的 </script> 等 HTML 标签
+        # 破坏 <script> 块结构（RFC 4627 / HTML5 规范允许此转义）
         env_info = {
             "env": os.getenv("ENV", "DEV"),
             "core": config.core
         }
-        final_html = template_content.replace("{{RESULTS_JSON}}", json.dumps(sorted_results, ensure_ascii=False))
-        final_html = final_html.replace("{{ENV_JSON}}", json.dumps(env_info, ensure_ascii=False))
+        results_json = json.dumps(sorted_results, ensure_ascii=False).replace("</", "<\\/")
+        env_json = json.dumps(env_info, ensure_ascii=False).replace("</", "<\\/")
+        final_html = template_content.replace("{{RESULTS_JSON}}", results_json)
+        final_html = final_html.replace("{{ENV_JSON}}", env_json)
         
         with open(report_path, 'w', encoding='utf-8') as f:
             f.write(final_html)
