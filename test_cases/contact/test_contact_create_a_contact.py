@@ -13,9 +13,6 @@ from utils.logger import logger
 # 固定的 Account ID（所有 Contact 均在此 Account 下创建）
 FIXED_ACCOUNT_ID = "251212054045554351"
 
-# 加密的 SSN（用于 Create Contact）
-ENCRYPTED_SSN = "Iuo0TzolcOs3otByGE7sAKHP3VI7NBuOsO5QqFLdfm7GyXbidGXPSKFMJZGOEQgjy6kI+vQ1kYopadZzLAA4zEu4y3Cpr5/FyFCbq5auxMyktMIa1uS7YFcXNLJerVvpA5csrHc3dXHPys2I6KLn/ncqjjIssF2sX4HcL8GxEPFgTVxD/U/HreN7s8EZC3r8ztZMDkUeGUF2rH/P2y/TH6+N9wGaRe2jpzSpZz3Y0ZZSBRFxFuLQxL52joDk2yKa9JjmHQc0v8nPh9o+eM1RFENMYGeNblsBdj3BM0PrMKo5CMN7np235syUM/yNJx1EVKWAd8C/n/TxHMkZ+BvSMQ=="
-
 
 @pytest.mark.contact
 class TestContactCreate:
@@ -122,11 +119,11 @@ class TestContactCreate:
 
     def test_create_contact_with_all_fields(self, login_session, db_cleanup):
         """
-        测试场景2：使用所有字段创建 Contact（包括可选字段）
+        测试场景2：使用所有字段创建 Contact（包括可选字段，不含 ssn_tin）
         验证点：
-        1. 接口返回 200 或 599（SSN 重复）
-        2. 返回的 Contact ID 存在（如果成功）
-        3. 可选字段（middle_name, phone, ssn_tin 等）正确保存
+        1. 接口返回 200，business code == 200
+        2. 返回的 Contact ID 存在
+        3. 可选字段（middle_name, phone, gender 等）正确保存
         """
         # 1. 初始化 API 对象
         contact_api = ContactAPI(session=login_session)
@@ -140,7 +137,6 @@ class TestContactCreate:
             "middle_name": "AllFields",
             "birth_date": "1985-05-15",
             "email": f"auto_test_full_{int(time.time())}@example.com",
-            "ssn_tin": ENCRYPTED_SSN,
             "phone": "+14155552671",
             "mobile_phone": "+14155552672",
             "home_phone": "+14155552673",
@@ -182,17 +178,13 @@ class TestContactCreate:
         assert create_response.status_code == 200, \
             f"Create Contact 接口返回状态码错误: {create_response.status_code}, Response: {create_response.text}"
         
-        # 5. 解析响应（修复：提取 data 字段，处理 SSN 重复）
+        # 5. 解析响应
         logger.info("解析响应并验证数据")
         response_body = create_response.json()
         
-        # 检查是否是 SSN 重复错误（code 599）
-        if response_body.get("code") == 599:
-            pytest.skip(
-                f"SSN/TIN 已存在于数据库中（code=599），无法验证全字段创建功能。"
-                f"请先清理测试数据后重新运行。错误信息: {response_body.get('error_message')}"
-            )
-        
+        assert response_body.get("code") == 200, \
+            f"业务 code 应为 200，实际: {response_body.get('code')}，错误: {response_body.get('error_message')}"
+
         # 检查响应结构（场景2）
         if "data" in response_body:
             created_contact = response_body["data"]
@@ -213,9 +205,6 @@ class TestContactCreate:
         
         assert created_contact.get("gender") == contact_data["gender"], \
             f"gender 不匹配"
-        
-        # ssn_tin 可能返回脱敏后的值，只验证字段存在
-        logger.info(f"  ssn_tin: {created_contact.get('ssn_tin')}")
 
         # 跟踪 ID，测试结束后自动清理
         if db_cleanup:
@@ -229,50 +218,43 @@ class TestContactCreate:
 
     def test_create_contact_with_ssn(self, login_session, db_cleanup):
         """
-        测试场景3：创建 Contact 并包含加密的 SSN
+        测试场景3：创建 Contact（不含 SSN，验证基础字段 + email 唯一性）
         验证点：
-        1. 接口返回 200 或 599（SSN 重复）
-        2. 返回的 Contact ID 存在（如果成功）
-        3. ssn_tin 字段存在（可能是脱敏后的值）
+        1. 接口返回 200，business code == 200
+        2. 返回的 Contact ID 存在
+        3. email 字段正确回显
         """
         # 1. 初始化 API 对象
         contact_api = ContactAPI(session=login_session)
         
-        # 2. 准备创建数据（包含 SSN）
-        logger.info("准备创建 Contact 数据（包含加密 SSN）")
+        # 2. 准备创建数据
+        logger.info("准备创建 Contact 数据")
         contact_data = {
             "account_id": FIXED_ACCOUNT_ID,
             "first_name": "Auto TestYan",
-            "last_name": "Contact SSN",
+            "last_name": "Contact Basic2",
             "birth_date": "1992-03-20",
-            "email": "ssn.test@example.com",
-            "ssn_tin": ENCRYPTED_SSN
+            "email": f"auto_test_basic2_{int(time.time())}@example.com"
         }
         
         logger.info(f"  Account ID: {FIXED_ACCOUNT_ID}")
         logger.info(f"  Name: {contact_data['first_name']} {contact_data['last_name']}")
         logger.info(f"  Email: {contact_data['email']}")
-        logger.info(f"  SSN: {ENCRYPTED_SSN[:50]}...")
         
         # 3. 调用 Create 接口
         logger.info("调用 Create Contact 接口")
         create_response = contact_api.create_contact(contact_data)
         
-        # 4. 断言状态码（修复：允许 200 或 599）
-        logger.info("验证 HTTP 状态码为 200")
+        # 4. 断言状态码
         assert create_response.status_code == 200, \
             f"Create Contact 接口返回状态码错误: {create_response.status_code}, Response: {create_response.text}"
         
-        # 5. 解析响应（修复：提取 data 字段，处理 SSN 重复）
+        # 5. 解析响应
         logger.info("解析响应并验证数据")
         response_body = create_response.json()
         
-        # 检查是否是 SSN 重复错误（code 599）
-        if response_body.get("code") == 599:
-            pytest.skip(
-                f"SSN/TIN 已存在于数据库中（code=599），无法验证 SSN 创建功能。"
-                f"请先清理测试数据后重新运行。错误信息: {response_body.get('error_message')}"
-            )
+        assert response_body.get("code") == 200, \
+            f"业务 code 应为 200，实际: {response_body.get('code')}，错误: {response_body.get('error_message')}"
         
         # 检查响应结构
         if "data" in response_body:
@@ -285,18 +267,17 @@ class TestContactCreate:
         assert "id" in created_contact, "响应中缺少 id 字段"
         assert created_contact["id"] is not None, "Contact ID 为 null"
         
-        # 7. 验证 ssn_tin 字段存在
-        logger.info("验证 ssn_tin 字段存在")
-        ssn_tin = created_contact.get("ssn_tin")
-        logger.info(f"  ssn_tin: {ssn_tin}")
+        # 7. 验证 email 回显
+        assert created_contact.get("email") == contact_data["email"], \
+            f"email 不匹配: 期望 {contact_data['email']}, 实际 {created_contact.get('email')}"
 
         # 跟踪 ID，测试结束后自动清理
         if db_cleanup:
             db_cleanup.track("contact", created_contact["id"])
         
-        logger.info("✓ 成功创建 Contact（包含 SSN）:")
+        logger.info("✓ 成功创建 Contact:")
         logger.info(f"  ID: {created_contact['id']}")
-        logger.info(f"  Name: {created_contact.get('name')}")
+        logger.info(f"  Email: {created_contact.get('email')}")
 
     def test_create_contact_missing_required_field(self, login_session):
         """
