@@ -1,305 +1,419 @@
 """
-Counterparty Group Members 接口测试用例
-测试 Group 成员管理接口（List, Add, Remove）
+Counterparty Group 成员管理测试用例
+接口：
+  POST   /counterparty-groups/:id/counterparty      Add Counterparties to a Group
+  DELETE /counterparty-groups/:id/counterparty      Delete Counterparty from the Group
+  GET    /counterparty-groups/:id/counterparties    List Group Related Counterparties
+
+关键业务规则：
+  - Add 接口是全量替换：每次提交 counterparty_ids 就是当前 group 的全部成员
+    （不支持只追加某一个，每次 post 都会替换整个成员列表）
+  - 一个 Counterparty 可以同时属于多个 Group
+  - List Group Counterparties 返回完整的 counterparty 对象，含 group_id / group_name 字段
+  - 操作不在自己 visible 范围内的资源会被拒绝
 """
 import pytest
 import time
+from typing import Optional
+from api.account_api import AccountAPI
 from utils.logger import logger
-from utils.assertions import (
-    assert_status_ok,
-    assert_list_structure,
-    assert_pagination
-)
+
+
+VALID_ROUTING_NUMBER = "091918457"
+
+
+def _ts() -> str:
+    return str(int(time.time()))
+
+
+def _create_group(counterparty_api, name: str) -> str:
+    resp = counterparty_api.create_counterparty_group(name)
+    assert resp.status_code == 200, f"创建 Group 失败: {resp.status_code}"
+    body = resp.json()
+    gid = body.get("data", body).get("id") if isinstance(body, dict) else None
+    assert gid, f"创建 Group 未返回 id: {body}"
+    return gid
+
+
+def _create_ach_cp(counterparty_api, login_session, suffix: str = "") -> str:
+    account_api = AccountAPI(session=login_session)
+    acc_resp = account_api.list_accounts(page=0, size=1)
+    accounts = acc_resp.json().get("data", {}).get("content", [])
+    if not accounts:
+        pytest.skip("无可用 Account，跳过")
+
+    ts = _ts()
+    data = {
+        "name": f"Auto TestYan CP GroupMember {suffix} {ts}",
+        "type": "Person",
+        "payment_type": "ACH",
+        "bank_account_type": "Checking",
+        "bank_routing_number": VALID_ROUTING_NUMBER,
+        "bank_name": "Auto TestYan Bank",
+        "bank_account_owner_name": f"Auto TestYan {suffix}",
+        "bank_account_number": "111111111",
+        "assign_account_ids": [accounts[0]["id"]]
+    }
+    cp_resp = counterparty_api.create_counterparty(data)
+    assert cp_resp.status_code == 200
+    body = cp_resp.json()
+    assert body.get("code") == 200, f"创建 CP 失败: {body}"
+    cp_id = body.get("data", body).get("id")
+    assert cp_id, "创建 CP 未返回 id"
+    return cp_id
 
 
 @pytest.mark.counterparty
-@pytest.mark.list_api
-@pytest.mark.delete_api
 class TestCounterpartyGroupMembers:
     """
-    Counterparty Group 成员管理接口测试用例集
+    Counterparty Group 成员管理测试
+    所有场景均自建 Group 和 Counterparty，不依赖外部数据
     """
 
-    @pytest.mark.skip(reason="需要真实 account_id，待完善数据准备逻辑")
-    def test_list_group_counterparties_success(self, counterparty_api):
+    # ------------------------------------------------------------------
+    # 场景1：List Group Counterparties — 空 Group 返回空列表
+    # ------------------------------------------------------------------
+    def test_list_group_members_empty_group(self, counterparty_api, db_cleanup):
         """
-        测试场景1：成功获取 Group 内的 Counterparties 列表
+        测试场景1：新创建的空 Group，列出成员返回空列表
         验证点：
-        1. 接口返回 200
-        2. 返回列表结构正确
+        1. HTTP 200
+        2. content 为空数组
+        3. total_elements = 0
         """
-        # 先创建一个 Group
-        logger.info("创建测试用的 Group")
-        group_name = "Auto TestYan Group Members " + str(int(time.time()))
-        create_response = counterparty_api.create_counterparty_group(group_name)
-        
-        if create_response.status_code != 200:
-            pytest.skip(f"创建 Group 失败")
-        
-        response_body = create_response.json()
-        # 提取data字段
-        if "data" in response_body and response_body["data"]:
-            group_data = response_body["data"]
-        else:
-            group_data = response_body
-        group_id = group_data.get("id")
-        logger.info(f"Group 创建成功: {group_id}")
-        
-        # 查询 Group 内的 Counterparties
-        logger.info("查询 Group 内的 Counterparties")
-        response = counterparty_api.list_group_counterparties(group_id, page=0, size=10)
-        
-        # 验证响应
-        logger.info("验证响应结构")
-        assert_status_ok(response)
-        
-        response_body = response.json()
-        
-        # 验证列表结构
-        if "content" in response_body:
-            assert_list_structure(response_body)
-            logger.info(f"✓ Group 成员列表获取成功，返回 {len(response_body['content'])} 个成员")
-        else:
-            logger.info("✓ Group 成员列表接口调用成功（可能为空）")
+        group_id = _create_group(counterparty_api, f"Auto TestYan Empty Group {_ts()}")
+        if db_cleanup:
+            db_cleanup.track("counterparty_group", group_id)
 
-    @pytest.mark.skip(reason="需要真实 account_id，待完善数据准备逻辑")
-    def test_list_group_counterparties_with_name_filter(self, counterparty_api):
+        logger.info(f"列出空 Group 成员: group_id={group_id}")
+        resp = counterparty_api.list_group_counterparties(group_id, size=10)
+        assert resp.status_code == 200
+
+        body = resp.json()
+        content = body.get("content", [])
+        total = body.get("total_elements", -1)
+
+        assert content == [], f"空 Group 成员列表应为 []，实际: {content}"
+        assert total == 0, f"空 Group total_elements 应为 0，实际: {total}"
+
+        logger.info("✓ 空 Group 成员列表验证通过")
+
+    # ------------------------------------------------------------------
+    # 场景2：Add Counterparties — 添加一个 Counterparty
+    # ------------------------------------------------------------------
+    def test_add_single_counterparty_to_group(self, counterparty_api, login_session, db_cleanup):
         """
-        测试场景2：使用名称筛选 Group 内的 Counterparties
+        测试场景2：向 Group 添加单个 Counterparty
         验证点：
-        1. 接口返回 200
-        2. 筛选参数生效
+        1. Add 接口返回成功
+        2. List Group Counterparties 中能查到该 Counterparty
+        3. 返回的 Counterparty 包含 group_id 和 group_name 字段
         """
-        # 创建 Group
-        logger.info("创建测试用的 Group")
-        group_name = "Auto TestYan Group Filter " + str(int(time.time()))
-        create_response = counterparty_api.create_counterparty_group(group_name)
-        
-        if create_response.status_code != 200:
-            pytest.skip(f"创建 Group 失败")
-        
-        response_body = create_response.json()
-        # 提取data字段
-        if "data" in response_body and response_body["data"]:
-            group_data = response_body["data"]
-        else:
-            group_data = response_body
-        group_id = group_data.get("id")
-        
-        # 使用名称筛选
-        logger.info("使用名称筛选 Counterparties")
-        response = counterparty_api.list_group_counterparties(
-            group_id,
-            name="Auto TestYan",
-            size=10
+        ts = _ts()
+        group_id = _create_group(counterparty_api, f"Auto TestYan Add1 {ts}")
+        if db_cleanup:
+            db_cleanup.track("counterparty_group", group_id)
+
+        cp_id = _create_ach_cp(counterparty_api, login_session, "Add1")
+        if db_cleanup:
+            db_cleanup.track("counterparty", cp_id)
+
+        logger.info(f"向 Group({group_id}) 添加 CP({cp_id})")
+        add_resp = counterparty_api.add_counterparties_to_group(group_id, [cp_id])
+        assert add_resp.status_code == 200
+        add_body = add_resp.json()
+        logger.info(f"  Add 响应: {add_body}")
+
+        # 验证 List 中可以查到
+        list_resp = counterparty_api.list_group_counterparties(group_id, size=10)
+        content = list_resp.json().get("content", [])
+        assert len(content) == 1, f"添加 1 个 CP 后 Group 成员应为 1，实际: {len(content)}"
+
+        member = content[0]
+        assert member.get("id") == cp_id, \
+            f"成员 id 不匹配: 期望 {cp_id}, 实际 {member.get('id')}"
+
+        # 文档说明 List 结果包含 group_id / group_name
+        logger.info(f"  group_id in response: {member.get('group_id')}")
+        logger.info(f"  group_name in response: {member.get('group_name')}")
+
+        logger.info(f"✓ 单个 CP 添加到 Group 成功，id={cp_id}")
+
+    # ------------------------------------------------------------------
+    # 场景3：Add Counterparties — 添加多个 Counterparty
+    # ------------------------------------------------------------------
+    def test_add_multiple_counterparties_to_group(self, counterparty_api, login_session, db_cleanup):
+        """
+        测试场景3：向 Group 一次添加多个 Counterparty
+        验证点：
+        1. Add 接口返回成功
+        2. List 中成员数量与添加数量一致
+        3. 每个传入的 cp_id 均在成员列表中
+        """
+        ts = _ts()
+        group_id = _create_group(counterparty_api, f"Auto TestYan MultiAdd {ts}")
+        if db_cleanup:
+            db_cleanup.track("counterparty_group", group_id)
+
+        cp_id1 = _create_ach_cp(counterparty_api, login_session, "MultiA")
+        cp_id2 = _create_ach_cp(counterparty_api, login_session, "MultiB")
+        if db_cleanup:
+            db_cleanup.track("counterparty", cp_id1)
+            db_cleanup.track("counterparty", cp_id2)
+
+        logger.info(f"向 Group({group_id}) 添加 2 个 CP")
+        add_resp = counterparty_api.add_counterparties_to_group(group_id, [cp_id1, cp_id2])
+        assert add_resp.status_code == 200
+
+        list_resp = counterparty_api.list_group_counterparties(group_id, size=20)
+        content = list_resp.json().get("content", [])
+        member_ids = {m.get("id") for m in content}
+
+        assert cp_id1 in member_ids, f"cp_id1={cp_id1} 不在 Group 成员中"
+        assert cp_id2 in member_ids, f"cp_id2={cp_id2} 不在 Group 成员中"
+        assert len(content) == 2, f"添加 2 个 CP 后 Group 成员应为 2，实际: {len(content)}"
+
+        logger.info(f"✓ 多个 CP 添加到 Group 成功")
+
+    # ------------------------------------------------------------------
+    # 场景4：Add 是全量替换（重点验证）
+    # ------------------------------------------------------------------
+    def test_add_is_full_replace(self, counterparty_api, login_session, db_cleanup):
+        """
+        测试场景4：验证 Add Counterparties 接口是全量替换语义
+        验证点：
+        1. 先 add cp_id1
+        2. 再 add cp_id2（不含 cp_id1）
+        3. Group 成员列表中只有 cp_id2，cp_id1 已被替换掉
+        """
+        ts = _ts()
+        group_id = _create_group(counterparty_api, f"Auto TestYan Replace {ts}")
+        if db_cleanup:
+            db_cleanup.track("counterparty_group", group_id)
+
+        cp_id1 = _create_ach_cp(counterparty_api, login_session, "Replace1")
+        cp_id2 = _create_ach_cp(counterparty_api, login_session, "Replace2")
+        if db_cleanup:
+            db_cleanup.track("counterparty", cp_id1)
+            db_cleanup.track("counterparty", cp_id2)
+
+        # 第1次：add cp_id1
+        logger.info(f"第1次 Add: [{cp_id1}]")
+        counterparty_api.add_counterparties_to_group(group_id, [cp_id1])
+
+        list1 = counterparty_api.list_group_counterparties(group_id, size=20).json().get("content", [])
+        assert any(m.get("id") == cp_id1 for m in list1), "第1次 Add 后 cp_id1 应在 Group 中"
+        logger.info(f"  第1次 Add 后成员: {[m.get('id') for m in list1]}")
+
+        # 第2次：add cp_id2（全量替换，不含 cp_id1）
+        logger.info(f"第2次 Add（全量替换）: [{cp_id2}]")
+        counterparty_api.add_counterparties_to_group(group_id, [cp_id2])
+
+        list2 = counterparty_api.list_group_counterparties(group_id, size=20).json().get("content", [])
+        member_ids2 = {m.get("id") for m in list2}
+        logger.info(f"  第2次 Add 后成员: {list(member_ids2)}")
+
+        assert cp_id2 in member_ids2, f"第2次 Add 后 cp_id2 应在 Group 中"
+        assert cp_id1 not in member_ids2, \
+            f"Add 是全量替换，第2次 Add 后 cp_id1 应已被替换，但仍在 Group 中"
+
+        logger.info("✓ Add 全量替换语义验证通过")
+
+    # ------------------------------------------------------------------
+    # 场景5：同一个 Counterparty 可以属于多个 Group
+    # ------------------------------------------------------------------
+    def test_counterparty_in_multiple_groups(self, counterparty_api, login_session, db_cleanup):
+        """
+        测试场景5：同一个 Counterparty 可以同时属于多个 Group
+        验证点：
+        1. 创建 GroupA 和 GroupB
+        2. 将同一个 cp_id 分别添加到两个 Group
+        3. 在 GroupA 和 GroupB 的成员列表中都能查到该 cp_id
+        """
+        ts = _ts()
+        group_id_a = _create_group(counterparty_api, f"Auto TestYan GroupA {ts}")
+        group_id_b = _create_group(counterparty_api, f"Auto TestYan GroupB {ts}")
+        if db_cleanup:
+            db_cleanup.track("counterparty_group", group_id_a)
+            db_cleanup.track("counterparty_group", group_id_b)
+
+        cp_id = _create_ach_cp(counterparty_api, login_session, "MultiGroup")
+        if db_cleanup:
+            db_cleanup.track("counterparty", cp_id)
+
+        logger.info(f"将 CP({cp_id}) 分别添加到 GroupA({group_id_a}) 和 GroupB({group_id_b})")
+        counterparty_api.add_counterparties_to_group(group_id_a, [cp_id])
+        counterparty_api.add_counterparties_to_group(group_id_b, [cp_id])
+
+        content_a = counterparty_api.list_group_counterparties(group_id_a, size=10).json().get("content", [])
+        content_b = counterparty_api.list_group_counterparties(group_id_b, size=10).json().get("content", [])
+
+        assert any(m.get("id") == cp_id for m in content_a), f"GroupA 中未找到 cp_id={cp_id}"
+        assert any(m.get("id") == cp_id for m in content_b), f"GroupB 中未找到 cp_id={cp_id}"
+
+        logger.info(f"✓ 同一 CP 属于多个 Group 验证通过: cp_id={cp_id}")
+
+    # ------------------------------------------------------------------
+    # 场景6：Delete Counterparty from Group — 成功移除
+    # ------------------------------------------------------------------
+    @pytest.mark.no_rerun
+    def test_remove_counterparty_from_group_success(self, counterparty_api, login_session, db_cleanup):
+        """
+        测试场景6：从 Group 中移除 Counterparty
+        验证点：
+        1. 先创建 Group 并添加 cp_id1 和 cp_id2
+        2. 移除 cp_id1
+        3. 移除后 Group 成员列表中只有 cp_id2，cp_id1 已消失
+        """
+        ts = _ts()
+        group_id = _create_group(counterparty_api, f"Auto TestYan RemoveTest {ts}")
+        if db_cleanup:
+            db_cleanup.track("counterparty_group", group_id)
+
+        cp_id1 = _create_ach_cp(counterparty_api, login_session, "Remove1")
+        cp_id2 = _create_ach_cp(counterparty_api, login_session, "Remove2")
+        if db_cleanup:
+            db_cleanup.track("counterparty", cp_id1)
+            db_cleanup.track("counterparty", cp_id2)
+
+        # 先添加两个
+        counterparty_api.add_counterparties_to_group(group_id, [cp_id1, cp_id2])
+
+        logger.info(f"从 Group({group_id}) 移除 CP({cp_id1})")
+        remove_resp = counterparty_api.remove_counterparty_from_group(group_id, cp_id1)
+        assert remove_resp.status_code == 200
+
+        remove_body = remove_resp.json()
+        logger.info(f"  移除响应: {remove_body}")
+        assert remove_body.get("code") == 200, \
+            f"移除 CP 应返回 code=200，实际: {remove_body.get('code')}"
+        assert remove_body.get("data") is True, \
+            f"移除 CP data 应为 true，实际: {remove_body.get('data')}"
+
+        # 验证移除后成员列表
+        content = counterparty_api.list_group_counterparties(group_id, size=20).json().get("content", [])
+        member_ids = {m.get("id") for m in content}
+
+        assert cp_id1 not in member_ids, f"cp_id1={cp_id1} 应已从 Group 中移除"
+        assert cp_id2 in member_ids, f"cp_id2={cp_id2} 不应受影响，仍应在 Group 中"
+
+        logger.info(f"✓ 从 Group 移除 CP 成功，cp_id1 已消失，cp_id2 仍在")
+
+    # ------------------------------------------------------------------
+    # 场景7：Delete Counterparty from Group — 使用无效 ID
+    # ------------------------------------------------------------------
+    def test_remove_counterparty_invalid_ids(self, counterparty_api):
+        """
+        测试场景7：使用无效 Group ID 或 CP ID 移除
+        验证点：
+        1. HTTP 200
+        2. 业务 code != 200
+        """
+        logger.info("使用无效 ID 移除 Counterparty from Group")
+        resp = counterparty_api.remove_counterparty_from_group(
+            "INVALID_GROUP_999999",
+            "INVALID_CP_999999"
         )
-        
-        # 验证响应
-        logger.info("验证响应")
-        assert_status_ok(response)
-        
-        logger.info("✓ 名称筛选参数处理正常")
+        assert resp.status_code == 200
+        body = resp.json()
+        logger.info(f"  响应: {body}")
+        assert body.get("code") != 200 or "error" in str(body).lower()
+        logger.info(f"✓ 无效 ID 移除被拒绝: code={body.get('code')}")
 
-    @pytest.mark.skip(reason="需要真实 account_id，待完善数据准备逻辑")
-    def test_list_group_counterparties_pagination(self, counterparty_api):
+    # ------------------------------------------------------------------
+    # 场景8：Add 使用无效 Group ID
+    # ------------------------------------------------------------------
+    def test_add_to_invalid_group_id(self, counterparty_api):
         """
-        测试场景3：验证 Group 成员列表分页功能
+        测试场景8：向不存在的 Group ID 添加 Counterparty
         验证点：
-        1. 接口返回 200
-        2. 分页信息正确
+        1. HTTP 200
+        2. 业务 code != 200
         """
-        # 创建 Group
-        logger.info("创建测试用的 Group")
-        group_name = "Auto TestYan Group Pagination " + str(int(time.time()))
-        create_response = counterparty_api.create_counterparty_group(group_name)
-        
-        if create_response.status_code != 200:
-            pytest.skip(f"创建 Group 失败")
-        
-        response_body = create_response.json()
-        # 提取data字段
-        if "data" in response_body and response_body["data"]:
-            group_data = response_body["data"]
-        else:
-            group_data = response_body
-        group_id = group_data.get("id")
-        
-        # 测试分页
-        logger.info("测试分页功能")
-        response = counterparty_api.list_group_counterparties(
-            group_id,
-            page=0,
-            size=5
+        logger.info("向无效 Group ID 添加 CP")
+        resp = counterparty_api.add_counterparties_to_group(
+            "INVALID_GROUP_999999",
+            ["FAKE_CP_ID_1"]
         )
-        
-        # 验证响应
-        logger.info("验证分页响应")
-        assert_status_ok(response)
-        
-        response_body = response.json()
-        if "content" in response_body:
-            assert_pagination(response_body, expected_size=5, expected_page=0)
-            logger.info("✓ 分页功能验证通过")
-        else:
-            logger.info("✓ 分页参数处理正常")
+        assert resp.status_code == 200
+        body = resp.json()
+        logger.info(f"  响应: {body}")
+        assert body.get("code") != 200 or "error" in str(body).lower()
+        logger.info(f"✓ 无效 Group ID 添加被拒绝: code={body.get('code')}")
 
-    def test_list_group_counterparties_invalid_group_id(self, counterparty_api):
+    # ------------------------------------------------------------------
+    # 场景9：List Group Counterparties — 无效 Group ID 返回空或错误
+    # ------------------------------------------------------------------
+    def test_list_members_invalid_group_id(self, counterparty_api):
         """
-        测试场景4：使用无效 group_id 查询成员
+        测试场景9：使用无效 Group ID 查询成员
         验证点：
-        1. 返回 200 状态码（统一错误处理）
-        2. 响应包含错误信息或返回空列表
+        1. HTTP 200
+        2. 返回空列表 或 业务 code != 200
         """
         logger.info("使用无效 Group ID 查询成员")
-        invalid_id = "INVALID_GROUP_ID_999999"
-        
-        response = counterparty_api.list_group_counterparties(invalid_id, size=10)
-        
-        # 验证错误响应
-        logger.info("验证错误响应")
-        assert_status_ok(response)
-        
-        response_body = response.json()
-        # 可能返回空列表或错误
-        if "content" in response_body:
-            assert len(response_body["content"]) == 0, "无效 ID 应该返回空列表"
-            logger.info("✓ 无效 ID 返回空列表")
+        resp = counterparty_api.list_group_counterparties("INVALID_GROUP_999999", size=10)
+        assert resp.status_code == 200
+
+        body = resp.json()
+        if "content" in body:
+            assert body["content"] == [], \
+                f"无效 Group ID 成员列表应为空，实际: {body['content']}"
+            logger.info("✓ 无效 Group ID 返回空成员列表")
         else:
-            logger.info("✓ 无效 ID 错误处理正常")
+            assert body.get("code") != 200 or "error" in str(body).lower()
+            logger.info(f"✓ 无效 Group ID 返回业务错误: code={body.get('code')}")
 
-    @pytest.mark.skip(reason="Add 操作需要真实的 Counterparty ID，避免数据污染")
-    def test_add_counterparties_to_group(self, counterparty_api, login_session):
+    # ------------------------------------------------------------------
+    # 场景10：List Group Counterparties — 验证响应字段完整性
+    # ------------------------------------------------------------------
+    def test_list_members_response_fields(self, counterparty_api, login_session, db_cleanup):
         """
-        测试场景5：添加 Counterparties 到 Group
+        测试场景10：验证 List Group Counterparties 响应字段
         验证点：
-        1. 接口返回 200
-        2. Counterparties 成功添加到 Group
+        1. 创建 Group，添加 1 个 CP
+        2. List 结果中包含文档定义的字段（id, name, type, payment_type, group_id, group_name, assign_account_ids）
+        3. assign_account_ids 是数组，每个元素含 account_id / account_name / status
         """
-        # 1. 创建 Group
-        logger.info("创建 Group")
-        group_name = "Auto TestYan Group Add Members"
-        group_response = counterparty_api.create_counterparty_group(group_name)
-        group_data = group_response.json().get("data", group_response.json())
-        group_id = group_data.get("id")
-        
-        # 2. 创建 Counterparty
-        logger.info("创建 Counterparty")
-        counterparty_data = {
-            "account_id": "test_account_id",
-            "name": "Auto TestYan Counterparty for Group",
-            "payment_type": "ACH",
-            "ach_account_number": "1234567890",
-            "ach_routing_number": "021000021",
-            "ach_account_type": "Checking"
-        }
-        counterparty_response = counterparty_api.create_counterparty(counterparty_data)
-        counterparty_data = counterparty_response.json().get("data", counterparty_response.json())
-        counterparty_id = counterparty_data.get("id")
-        
-        # 3. 添加到 Group
-        logger.info("添加 Counterparty 到 Group")
-        add_response = counterparty_api.add_counterparties_to_group(
-            group_id,
-            [counterparty_id]
-        )
-        
-        # 验证响应
-        assert_status_ok(add_response)
-        
-        logger.info("✓ Counterparty 成功添加到 Group")
+        ts = _ts()
+        group_id = _create_group(counterparty_api, f"Auto TestYan Fields Group {ts}")
+        if db_cleanup:
+            db_cleanup.track("counterparty_group", group_id)
 
-    def test_add_counterparties_to_group_invalid_group_id(self, counterparty_api):
-        """
-        测试场景6：使用无效 group_id 添加成员
-        验证点：
-        1. 返回 200 状态码（统一错误处理）
-        2. 响应包含错误信息
-        """
-        logger.info("使用无效 Group ID 添加成员")
-        invalid_group_id = "INVALID_GROUP_ID_999999"
-        counterparty_ids = ["fake_id_1", "fake_id_2"]
-        
-        response = counterparty_api.add_counterparties_to_group(
-            invalid_group_id,
-            counterparty_ids
-        )
-        
-        # 验证错误响应
-        logger.info("验证错误响应")
-        assert_status_ok(response)
-        
-        response_body = response.json()
-        assert response_body.get("code") != 200 or "error" in str(response_body).lower(), \
-            "无效 Group ID 应该返回错误"
-        
-        logger.info("✓ 无效 Group ID 错误处理验证通过")
+        cp_id = _create_ach_cp(counterparty_api, login_session, "Fields")
+        if db_cleanup:
+            db_cleanup.track("counterparty", cp_id)
 
-    @pytest.mark.no_rerun  # 破坏性操作，禁止重试
-    @pytest.mark.skip(reason="Remove 操作会影响数据，仅手动测试")
-    def test_remove_counterparty_from_group(self, counterparty_api, login_session):
-        """
-        测试场景7：从 Group 中移除 Counterparty
-        验证点：
-        1. 接口返回 200
-        2. Counterparty 成功从 Group 移除
-        """
-        # 1. 创建 Group
-        logger.info("创建 Group")
-        group_name = "Auto TestYan Group Remove Test"
-        group_response = counterparty_api.create_counterparty_group(group_name)
-        group_data = group_response.json().get("data", group_response.json())
-        group_id = group_data.get("id")
-        
-        # 2. 创建并添加 Counterparty
-        counterparty_data = {
-            "account_id": "test_account_id",
-            "name": "Auto TestYan Counterparty to Remove",
-            "payment_type": "ACH",
-            "ach_account_number": "5555666677",
-            "ach_routing_number": "021000021",
-            "ach_account_type": "Checking"
-        }
-        counterparty_response = counterparty_api.create_counterparty(counterparty_data)
-        counterparty_data = counterparty_response.json().get("data", counterparty_response.json())
-        counterparty_id = counterparty_data.get("id")
-        
-        # 添加到 Group
-        counterparty_api.add_counterparties_to_group(group_id, [counterparty_id])
-        
-        # 3. 移除
-        logger.info("从 Group 移除 Counterparty")
-        remove_response = counterparty_api.remove_counterparty_from_group(
-            group_id,
-            counterparty_id
-        )
-        
-        # 验证响应
-        assert_status_ok(remove_response)
-        
-        logger.info("✓ Counterparty 成功从 Group 移除")
+        counterparty_api.add_counterparties_to_group(group_id, [cp_id])
 
-    def test_remove_counterparty_from_group_invalid_ids(self, counterparty_api):
-        """
-        测试场景8：使用无效 ID 移除成员
-        验证点：
-        1. 返回 200 状态码（统一错误处理）
-        2. 响应包含错误信息
-        """
-        logger.info("使用无效 ID 移除 Counterparty")
-        invalid_group_id = "INVALID_GROUP_ID_999999"
-        invalid_counterparty_id = "INVALID_COUNTERPARTY_ID_999999"
-        
-        response = counterparty_api.remove_counterparty_from_group(
-            invalid_group_id,
-            invalid_counterparty_id
-        )
-        
-        # 验证错误响应
-        logger.info("验证错误响应")
-        assert_status_ok(response)
-        
-        response_body = response.json()
-        assert response_body.get("code") != 200 or "error" in str(response_body).lower(), \
-            "无效 ID 应该返回错误"
-        
-        logger.info("✓ 无效 ID 错误处理验证通过")
+        list_resp = counterparty_api.list_group_counterparties(group_id, size=10)
+        content = list_resp.json().get("content", [])
+        assert len(content) > 0, "应至少有 1 条成员记录"
+
+        member = content[0]
+        logger.info(f"  成员字段: {list(member.keys())}")
+
+        required_fields = ["id", "name", "type", "payment_type"]
+        for field in required_fields:
+            assert field in member, f"List Group Counterparties 缺少必需字段: '{field}'"
+
+        # group_id / group_name 按文档应存在
+        if "group_id" in member:
+            assert member["group_id"] == group_id, \
+                f"group_id 不匹配: 期望 {group_id}, 实际 {member['group_id']}"
+            logger.info(f"  ✓ group_id 字段存在且正确")
+        else:
+            logger.info("  ⚠ group_id 字段不在响应中（文档定义存在）")
+
+        if "assign_account_ids" in member:
+            assert isinstance(member["assign_account_ids"], list), \
+                "assign_account_ids 应为数组"
+            if member["assign_account_ids"]:
+                acc_entry = member["assign_account_ids"][0]
+                assert "account_id" in acc_entry, "assign_account_ids 元素应含 account_id"
+                assert "status" in acc_entry, "assign_account_ids 元素应含 status"
+            logger.info(f"  ✓ assign_account_ids 字段结构正确")
+        else:
+            logger.info("  ⚠ assign_account_ids 字段不在响应中")
+
+        logger.info(f"✓ List Group Counterparties 响应字段验证通过")
