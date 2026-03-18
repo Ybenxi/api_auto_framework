@@ -139,7 +139,7 @@ class TestContactCreate:
             "last_name": "Contact Full",
             "middle_name": "AllFields",
             "birth_date": "1985-05-15",
-            "email": "jane.smith@example.com",
+            "email": f"auto_test_full_{int(time.time())}@example.com",
             "ssn_tin": ENCRYPTED_SSN,
             "phone": "+14155552671",
             "mobile_phone": "+14155552672",
@@ -188,12 +188,12 @@ class TestContactCreate:
         
         # 检查是否是 SSN 重复错误（code 599）
         if response_body.get("code") == 599:
-            logger.info("  ⚠ SSN/TIN 已存在（Code 599），这证明了接口参数被正确识别")
-            logger.info(f"  错误信息: {response_body.get('error_message') or response_body.get('message')}")
-            logger.info("✓ SSN 重复测试通过（接口参数验证正常）")
-            return
+            pytest.skip(
+                f"SSN/TIN 已存在于数据库中（code=599），无法验证全字段创建功能。"
+                f"请先清理测试数据后重新运行。错误信息: {response_body.get('error_message')}"
+            )
         
-        # 检查响应结构
+        # 检查响应结构（场景2）
         if "data" in response_body:
             created_contact = response_body["data"]
         else:
@@ -205,7 +205,6 @@ class TestContactCreate:
         assert created_contact["id"] is not None, "Contact ID 为 null"
         
         # 7. 验证可选字段
-        logger.info("验证可选字段")
         assert created_contact.get("middle_name") == contact_data["middle_name"], \
             f"middle_name 不匹配"
         
@@ -270,10 +269,10 @@ class TestContactCreate:
         
         # 检查是否是 SSN 重复错误（code 599）
         if response_body.get("code") == 599:
-            logger.info("  ⚠ SSN/TIN 已存在（Code 599），这证明了接口参数被正确识别")
-            logger.info(f"  错误信息: {response_body.get('error_message') or response_body.get('message')}")
-            logger.info("✓ SSN 重复测试通过（接口参数验证正常）")
-            return
+            pytest.skip(
+                f"SSN/TIN 已存在于数据库中（code=599），无法验证 SSN 创建功能。"
+                f"请先清理测试数据后重新运行。错误信息: {response_body.get('error_message')}"
+            )
         
         # 检查响应结构
         if "data" in response_body:
