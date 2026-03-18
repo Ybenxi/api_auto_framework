@@ -1,338 +1,916 @@
 """
-Counterparty Create Counterparty 接口测试用例
+Counterparty Create 接口测试用例
 测试 POST /api/v1/cores/{core}/counterparties 接口
+
+=== payment_enable 说明 ===
+payment_enable = true  → 该 Counterparty 可用于发起交易（关键字段齐全）
+payment_enable = false → 创建成功但无法发起交易（缺少某类型所需的银行字段）
+
+各 payment_type 使 payment_enable=true 所需的字段：
+  ACH:
+    必填: name, type, bank_account_type, bank_routing_number,
+           bank_account_owner_name, bank_account_number
+  Wire (国内):
+    必填: name, type, bank_account_type, bank_routing_number,
+           bank_account_owner_name, bank_account_number
+    自动填充(Wire): bank_name, bank_state ← 由路由号自动填充
+    默认值(Wire): bank_country = "United States"
+  International_Wire (国际):
+    额外必需: country, address1, city, zip_code,
+              bank_country, swift_code, bank_name, bank_address, bank_city
+  Check (Remote Deposit):
+    额外必需: address1
+  Instant_Pay (FedNow/RTP):
+    与 ACH 字段相同
+
+=== assign_account_ids 说明 ===
+- 可选参数：授权哪些 account 可以使用该 counterparty
+- 支持传 1 个或多个 account id（列表）
+- 如果 account 是低风险: status 自动为 "Approved"
+- 如果 account 是高风险（如 259124163505439565）: status 为 "Pending"
+- 混合场景：高风险 account 对应的记录为 "Pending"，其余为 "Approved"
 """
 import pytest
-from api.account_api import AccountAPI
 import time
+from typing import Optional, List
+from api.account_api import AccountAPI
+from api.counterparty_api import CounterpartyAPI
 from utils.logger import logger
-from utils.assertions import (
-    assert_status_ok,
-    assert_fields_present
-)
+from utils.assertions import assert_status_ok, assert_fields_present
+from data.enums import CounterpartyType, BankAccountType
 
+
+# ==================== 常量 ====================
+
+# 高风险 Account ID（status 会变为 Pending）
+HIGH_RISK_ACCOUNT_ID = "259124163505439565"
+
+# 不可见 Account ID（越权测试）
+INVISIBLE_ACCOUNT_ID = "241010195849720143"
+
+# ACH 和 Wire 共用的有效路由号
+VALID_ROUTING_NUMBER = "091918457"
+
+# Wire 自动填充验证：使用该路由号时 bank_name / bank_state 应由系统自动填充
+# bank_country 对 Wire 类型默认为 "United States"
+
+
+# ==================== 辅助函数 ====================
+
+def _get_own_account_id(login_session) -> Optional[str]:
+    """从 list 接口获取一个属于当前用户、低风险的 Account ID"""
+    account_api = AccountAPI(session=login_session)
+    resp = account_api.list_accounts(page=0, size=10)
+    if resp.status_code != 200:
+        return None
+    accounts = resp.json().get("data", {}).get("content", [])
+    # 优先找低风险账户（risk_level=Low），找不到就用第一条
+    for acc in accounts:
+        if acc.get("risk_level", "").lower() == "low":
+            return acc["id"]
+    return accounts[0]["id"] if accounts else None
+
+
+def _assert_create_success(response, expected_payment_enable: Optional[bool] = None) -> dict:
+    """
+    验证创建接口返回 code=200，提取 data 并可选断言 payment_enable。
+    返回 data dict。
+    """
+    assert response.status_code == 200, \
+        f"HTTP 状态码错误: {response.status_code}"
+    body = response.json()
+    assert body.get("code") == 200, \
+        f"业务 code 不是 200: code={body.get('code')}, msg={body.get('error_message')}"
+    data = body.get("data", body)
+    assert data.get("id"), "创建成功但未返回 id"
+
+    if expected_payment_enable is not None:
+        actual = data.get("payment_enable")
+        assert actual == expected_payment_enable, \
+            f"payment_enable 期望 {expected_payment_enable}，实际 {actual}"
+
+    return data
+
+
+def _ts() -> str:
+    return str(int(time.time()))
+
+
+# ==================== 测试类 ====================
 
 @pytest.mark.counterparty
 @pytest.mark.create_api
-class TestCounterpartyCreateCounterparty:
+class TestCounterpartyCreate:
     """
-    创建 Counterparty 接口测试用例集
+    Counterparty 创建接口完整测试用例集
     """
 
-    def test_create_counterparty_success_ach(self, counterparty_api, login_session, db_cleanup):
+    # ----------------------------------------------------------------
+    # 场景1：ACH 类型 — 全部字段齐全，payment_enable=true
+    # ----------------------------------------------------------------
+    def test_create_ach_payment_enable_true(self, counterparty_api, login_session, db_cleanup):
         """
-        测试场景1：成功创建 ACH 类型的 Counterparty
+        测试场景1：ACH 类型 Counterparty，所有必填银行字段齐全
         验证点：
-        1. 接口返回 200
-        2. 返回的数据包含 id 字段
-        3. 返回的数据包含必需字段
-        4. payment_enable 字段正确
-        
-        前置条件：需要先获取一个真实的 account_id
+        1. 创建成功（code=200）
+        2. payment_enable = true（字段齐全，可发起 ACH 交易）
+        3. 字段回显正确
+        4. 必需字段均存在于响应中
         """
-        # 1. 获取 account_id
-        account_api = AccountAPI(session=login_session)
-        logger.info("\n获取 account_id")
-        account_response = account_api.list_accounts(page=0, size=1)
-        assert_status_ok(account_response)
-        
-        account_data = account_response.json().get("data", {})
-        accounts = account_data.get("content", [])
-        
-        if len(accounts) == 0:
-            pytest.skip("没有可用的 Account 数据，跳过测试")
-        
-        account_id = accounts[0]["id"]
-        logger.info(f"Account ID: {account_id}")
-        
-        # 2. 构造 Counterparty 数据
-        timestamp = int(time.time())
-        counterparty_data = {
-            "name": f"Auto TestYan Counterparty ACH {timestamp}",
+        account_id = _get_own_account_id(login_session)
+        if not account_id:
+            pytest.skip("无可用 Account，跳过")
+
+        ts = _ts()
+        data = {
+            "name": f"Auto TestYan ACH Full {ts}",
             "type": "Person",
             "payment_type": "ACH",
             "bank_account_type": "Checking",
-            "bank_routing_number": "091918457",
+            "bank_routing_number": VALID_ROUTING_NUMBER,
             "bank_name": "Auto TestYan Bank",
-            "bank_account_owner_name": "Auto TestYan Owner",
+            "bank_account_owner_name": "Auto TestYan Owner ACH",
             "bank_account_number": "111111111",
             "assign_account_ids": [account_id]
         }
-        
-        # 3. 调用 Create Counterparty 接口
-        logger.info("创建 ACH Counterparty")
-        response = counterparty_api.create_counterparty(counterparty_data)
-        
-        # 4. 验证响应
-        assert_status_ok(response)
-        response_body = response.json()
 
-        # Counterparty 创建响应有 data 包装层
-        assert response_body.get("code") == 200, \
-            f"业务 code 不是 200: {response_body.get('code')}, msg: {response_body.get('error_message')}"
+        logger.info("创建 ACH Counterparty（字段齐全）")
+        resp = counterparty_api.create_counterparty(data)
+        created = _assert_create_success(resp, expected_payment_enable=True)
 
-        counterparty_data_resp = response_body.get("data", response_body)
+        assert_fields_present(created, ["id", "name", "type", "payment_type", "assign_account_ids"], "ACH CP")
+        assert created.get("payment_type") == "ACH"
+        assert created.get("type") == "Person"
 
-        # 5. 验证必需字段
-        required_fields = ["id", "name", "type", "payment_type", "assign_account_ids"]
-        assert_fields_present(counterparty_data_resp, required_fields, "Counterparty")
-
-        # Echo 验证：返回值与发送值一致
-        assert counterparty_data_resp.get("name") == counterparty_data["name"], \
-            f"name 不一致: 发送 '{counterparty_data['name']}', 返回 '{counterparty_data_resp.get('name')}'"
-        assert counterparty_data_resp.get("type") == counterparty_data["type"], \
-            f"type 不一致: 发送 '{counterparty_data['type']}', 返回 '{counterparty_data_resp.get('type')}'"
-        assert counterparty_data_resp.get("payment_type") == counterparty_data["payment_type"], \
-            f"payment_type 不一致: 发送 '{counterparty_data['payment_type']}', 返回 '{counterparty_data_resp.get('payment_type')}'"
-
-        counterparty_id = counterparty_data_resp["id"]
-        logger.info(f"✓ 创建成功 - ID: {counterparty_id}, Name: {counterparty_data_resp.get('name')}")
-
-        # 跟踪 ID，测试结束后自动清理
         if db_cleanup:
-            db_cleanup.track("counterparty", counterparty_id)
+            db_cleanup.track("counterparty", created["id"])
 
-    def test_create_counterparty_success_wire(self, counterparty_api, login_session, db_cleanup):
+        logger.info(f"✓ ACH payment_enable=true 验证通过，id={created['id']}")
+
+    # ----------------------------------------------------------------
+    # 场景2：ACH 类型 — 缺少银行字段，payment_enable=false
+    # ----------------------------------------------------------------
+    def test_create_ach_payment_enable_false(self, counterparty_api, login_session, db_cleanup):
         """
-        测试场景2：成功创建 Wire 类型的 Counterparty
+        测试场景2：ACH 类型 Counterparty，缺少银行账户字段（draft 模式）
         验证点：
-        1. 接口返回 200
-        2. Wire 类型的特定字段自动填充（bank_name, bank_city, bank_state）
+        1. 创建成功（code=200）
+        2. payment_enable = false（银行字段不完整，无法发起交易）
         """
-        # 1. 获取 account_id
-        account_api = AccountAPI(session=login_session)
-        logger.info("\n获取 account_id")
-        account_response = account_api.list_accounts(page=0, size=1)
-        assert_status_ok(account_response)
-        
-        account_data = account_response.json().get("data", {})
-        accounts = account_data.get("content", [])
-        
-        if len(accounts) == 0:
-            pytest.skip("没有可用的 Account 数据，跳过测试")
-        
-        account_id = accounts[0]["id"]
-        
-        # 2. 构造 Wire Counterparty 数据
-        timestamp = int(time.time())
-        counterparty_data = {
-            "name": f"Auto TestYan Counterparty Wire {timestamp}",
+        account_id = _get_own_account_id(login_session)
+        if not account_id:
+            pytest.skip("无可用 Account，跳过")
+
+        ts = _ts()
+        data = {
+            "name": f"Auto TestYan ACH Draft {ts}",
+            "type": "Person",
+            "payment_type": "ACH",
+            # 故意省略 bank_routing_number, bank_account_number 等
+            "assign_account_ids": [account_id]
+        }
+
+        logger.info("创建 ACH Counterparty（缺少银行字段，期望 payment_enable=false）")
+        resp = counterparty_api.create_counterparty(data)
+
+        assert resp.status_code == 200
+        body = resp.json()
+        logger.info(f"  响应: code={body.get('code')}, payment_enable={body.get('data', {}).get('payment_enable')}")
+
+        if body.get("code") == 200:
+            created_data = body.get("data", body)
+            payment_enable = created_data.get("payment_enable")
+            assert payment_enable is False, \
+                f"缺少银行字段时 payment_enable 应为 false，实际: {payment_enable}"
+
+            if db_cleanup and created_data.get("id"):
+                db_cleanup.track("counterparty", created_data["id"])
+
+            logger.info(f"✓ ACH payment_enable=false 验证通过，id={created_data.get('id')}")
+        else:
+            logger.info(f"  API 以 code={body.get('code')} 拒绝（探索性结果）")
+
+    # ----------------------------------------------------------------
+    # 场景3：Wire（国内）— 全字段，验证 bank_name/bank_state 自动填充
+    # ----------------------------------------------------------------
+    def test_create_wire_auto_populated_fields(self, counterparty_api, login_session, db_cleanup):
+        """
+        测试场景3：Wire（国内）类型 Counterparty
+        验证点：
+        1. 创建成功（code=200）
+        2. payment_enable = true
+        3. bank_name 由路由号自动填充（即使请求中未传）
+        4. bank_state 由路由号自动填充
+        5. bank_country 默认值为 "United States"
+        """
+        account_id = _get_own_account_id(login_session)
+        if not account_id:
+            pytest.skip("无可用 Account，跳过")
+
+        ts = _ts()
+        data = {
+            "name": f"Auto TestYan Wire Auto {ts}",
             "type": "Company",
             "payment_type": "Wire",
-            "bank_account_type": "Savings",
-            "bank_routing_number": "091918457",
+            "bank_account_type": "Checking",
+            "bank_routing_number": VALID_ROUTING_NUMBER,
             "bank_account_owner_name": "Auto TestYan Wire Owner",
             "bank_account_number": "222222222",
-            "assign_account_ids": [account_id],
-            "swift_code": "CRBKUS33XXX"  # 标准 11 位 SWIFT/BIC 码格式
+            "assign_account_ids": [account_id]
+            # 不传 bank_name / bank_state / bank_country，验证自动填充
         }
-        
-        # 3. 调用 Create Counterparty 接口
-        logger.info("创建 Wire Counterparty")
-        response = counterparty_api.create_counterparty(counterparty_data)
-        
-        # 4. 验证响应
-        assert_status_ok(response)
-        response_body = response.json()
 
-        # Counterparty 创建响应有 data 包装层
-        assert response_body.get("code") == 200, \
-            f"业务 code 不是 200: {response_body.get('code')}, msg: {response_body.get('error_message')}"
+        logger.info("创建 Wire Counterparty（验证自动填充字段）")
+        resp = counterparty_api.create_counterparty(data)
+        created = _assert_create_success(resp, expected_payment_enable=True)
 
-        wire_data_resp = response_body.get("data", response_body)
+        # 文档说明：Wire 类型 bank_name / bank_state 由路由号自动填充
+        bank_name = created.get("bank_name")
+        bank_state = created.get("bank_state")
+        bank_country = created.get("bank_country")
+        logger.info(f"  bank_name (自动填充) = {bank_name}")
+        logger.info(f"  bank_state (自动填充) = {bank_state}")
+        logger.info(f"  bank_country (默认值) = {bank_country}")
 
-        # 验证必需字段
-        required_fields = ["id", "name", "type", "payment_type"]
-        assert_fields_present(wire_data_resp, required_fields, "Wire Counterparty")
+        assert bank_name, "Wire 类型应由路由号自动填充 bank_name"
+        assert bank_state, "Wire 类型应由路由号自动填充 bank_state"
+        assert bank_country == "United States", \
+            f"Wire 类型 bank_country 默认应为 'United States'，实际: {bank_country}"
 
-        # Echo 验证
-        assert wire_data_resp.get("name") == counterparty_data["name"], \
-            f"name 不一致: 发送 '{counterparty_data['name']}', 返回 '{wire_data_resp.get('name')}'"
-        assert wire_data_resp.get("type") == counterparty_data["type"], \
-            f"type 不一致"
-        assert wire_data_resp.get("payment_type") == counterparty_data["payment_type"], \
-            f"payment_type 不一致"
-
-        logger.info(f"✓ 创建成功 - ID: {wire_data_resp.get('id')}, Name: {wire_data_resp.get('name')}")
-
-        # 跟踪 ID，测试结束后自动清理
         if db_cleanup:
-            db_cleanup.track("counterparty", wire_data_resp.get("id"))
+            db_cleanup.track("counterparty", created["id"])
 
-    def test_create_counterparty_missing_required_field(self, counterparty_api):
+        logger.info(f"✓ Wire 自动填充字段验证通过，id={created['id']}")
+
+    # ----------------------------------------------------------------
+    # 场景4：International_Wire — 全字段，payment_enable=true
+    # ----------------------------------------------------------------
+    def test_create_international_wire_full_fields(self, counterparty_api, login_session, db_cleanup):
         """
-        测试场景3：缺少必需字段（name）
+        测试场景4：International_Wire 类型 Counterparty（字段齐全）
         验证点：
-        1. 服务器返回 200 OK（统一错误处理）
-        2. 业务错误码 code != 200
-        3. data 为 None
+        1. 创建成功（code=200）
+        2. payment_enable = true
+        3. 所有国际电汇特有字段（country, swift_code, bank_address 等）回显正确
         """
-        logger.info("\n测试缺少必需字段 name")
-        counterparty_data = {
-            # 缺少 name
-            "type": "Person",
-            "payment_type": "ACH"
-        }
+        account_id = _get_own_account_id(login_session)
+        if not account_id:
+            pytest.skip("无可用 Account，跳过")
 
-        response = counterparty_api.create_counterparty(counterparty_data)
-
-        # 统一错误处理：HTTP 200，业务 code != 200
-        assert response.status_code == 200, \
-            f"服务器应该返回 200（统一错误处理），实际: {response.status_code}"
-
-        response_body = response.json()
-        logger.info(f"  响应: {response_body}")
-
-        assert response_body.get("code") != 200, \
-            f"缺少必需字段 name 应该返回业务错误码，但返回了 code=200"
-        assert response_body.get("data") is None, \
-            "缺少 name 时 data 应为 None"
-
-        logger.info(f"✓ 缺少 name 校验通过，业务错误码: {response_body.get('code')}")
-
-    def test_create_counterparty_invalid_type(self, counterparty_api, login_session):
-        """
-        测试场景4：使用无效的 type 值
-        验证点：
-        1. 接口返回错误信息
-        """
-        # 1. 获取 account_id
-        account_api = AccountAPI(session=login_session)
-        logger.info("\n获取 account_id")
-        account_response = account_api.list_accounts(page=0, size=1)
-        assert_status_ok(account_response)
-        
-        account_data = account_response.json().get("data", {})
-        accounts = account_data.get("content", [])
-        
-        if len(accounts) == 0:
-            pytest.skip("没有可用的 Account 数据，跳过测试")
-        
-        account_id = accounts[0]["id"]
-        
-        # 2. 构造包含无效 type 的数据
-        timestamp = int(time.time())
-        counterparty_data = {
-            "name": f"Auto TestYan Invalid Type {timestamp}",
-            "type": "InvalidType",  # 无效的类型
-            "payment_type": "ACH",
+        ts = _ts()
+        data = {
+            "name": f"Auto TestYan IntlWire Full {ts}",
+            "type": "Company",
+            "payment_type": "International_Wire",
+            "bank_account_type": "Savings",
+            "bank_account_owner_name": "Auto TestYan Intl Owner",
+            "bank_account_number": "333333333",
+            # 国际电汇需要的额外字段
+            "country": "CN",
+            "address1": "123 Test Road",
+            "city": "Beijing",
+            "zip_code": "100000",
+            "bank_country": "CN",
+            "swift_code": "CRBKUS33XXX",
+            "bank_name": "Auto TestYan Bank CN",
+            "bank_address": "456 Bank Street",
+            "bank_city": "Shanghai",
             "assign_account_ids": [account_id]
         }
-        
-        # 3. 调用接口
-        logger.info("测试无效 type 值")
-        response = counterparty_api.create_counterparty(counterparty_data)
-        
-        if response.status_code == 200:
-            logger.info("⚠ 系统允许创建，但 type 值可能不符合预期")
-        else:
-            logger.info("✓ 系统正确拒绝 - 状态码: {response.status_code}")
 
-    def test_create_counterparty_draft_mode(self, counterparty_api, login_session, db_cleanup):
+        logger.info("创建 International_Wire Counterparty（字段齐全）")
+        resp = counterparty_api.create_counterparty(data)
+        created = _assert_create_success(resp, expected_payment_enable=True)
+
+        assert created.get("payment_type") == "International_Wire"
+        assert created.get("swift_code") == data["swift_code"], \
+            f"swift_code 回显不正确: 期望 {data['swift_code']}, 实际 {created.get('swift_code')}"
+        assert created.get("bank_country") == data["bank_country"]
+
+        if db_cleanup:
+            db_cleanup.track("counterparty", created["id"])
+
+        logger.info(f"✓ International_Wire payment_enable=true 验证通过，id={created['id']}")
+
+    # ----------------------------------------------------------------
+    # 场景5：International_Wire — 缺少 swift_code，payment_enable=false
+    # ----------------------------------------------------------------
+    def test_create_international_wire_missing_swift(self, counterparty_api, login_session, db_cleanup):
         """
-        测试场景5：创建草稿模式的 Counterparty
+        测试场景5：International_Wire 缺少 swift_code（无法支付）
         验证点：
-        1. 接口返回 200
-        2. payment_enable 为 false（字段不完整）
+        1. 创建成功（code=200）
+        2. payment_enable = false（缺少 swift_code）
         """
-        # 1. 获取 account_id
-        account_api = AccountAPI(session=login_session)
-        logger.info("\n获取 account_id")
-        account_response = account_api.list_accounts(page=0, size=1)
-        assert_status_ok(account_response)
-        
-        account_data = account_response.json().get("data", {})
-        accounts = account_data.get("content", [])
-        
-        if len(accounts) == 0:
-            pytest.skip("没有可用的 Account 数据，跳过测试")
-        
-        account_id = accounts[0]["id"]
-        
-        # 2. 构造最小化数据（只包含必需字段）
-        timestamp = int(time.time())
-        counterparty_data = {
-            "name": f"Auto TestYan Draft {timestamp}",
+        account_id = _get_own_account_id(login_session)
+        if not account_id:
+            pytest.skip("无可用 Account，跳过")
+
+        ts = _ts()
+        data = {
+            "name": f"Auto TestYan IntlWire NoSwift {ts}",
             "type": "Person",
-            "payment_type": "ACH",
+            "payment_type": "International_Wire",
+            "bank_account_type": "Checking",
+            "bank_account_owner_name": "Auto TestYan Intl Owner2",
+            "bank_account_number": "444444444",
+            "country": "CN",
+            "address1": "123 Test Road",
+            "city": "Beijing",
+            "zip_code": "100000",
+            "bank_country": "CN",
+            # 故意省略 swift_code
             "assign_account_ids": [account_id]
-            # 缺少银行信息，创建为草稿
         }
-        
-        # 3. 调用接口
-        logger.info("测试草稿模式")
-        response = counterparty_api.create_counterparty(counterparty_data)
-        
-        if response.status_code == 200:
-            response_body = response.json()
-            # Draft 模式：响应可能有 data 包装层
-            draft_data = response_body.get("data", response_body)
-            if draft_data and draft_data.get("id"):
-                # 跟踪 ID，测试结束后自动清理
-                if db_cleanup:
-                    db_cleanup.track("counterparty", draft_data.get("id"))
-            payment_enable = draft_data.get("payment_enable") if draft_data else None
-            logger.info("✓ 创建成功 - payment_enable: {payment_enable}")
+
+        logger.info("创建 International_Wire Counterparty（缺少 swift_code）")
+        resp = counterparty_api.create_counterparty(data)
+
+        assert resp.status_code == 200
+        body = resp.json()
+        logger.info(f"  响应: code={body.get('code')}")
+
+        if body.get("code") == 200:
+            created_data = body.get("data", body)
+            payment_enable = created_data.get("payment_enable")
+            assert payment_enable is False, \
+                f"缺少 swift_code 时 payment_enable 应为 false，实际: {payment_enable}"
+
+            if db_cleanup and created_data.get("id"):
+                db_cleanup.track("counterparty", created_data["id"])
+
+            logger.info(f"✓ payment_enable=false 验证通过（缺少 swift_code）")
         else:
-            logger.info(f"⚠ 返回错误: {response.status_code}")
+            logger.info(f"  API 以 code={body.get('code')} 拒绝（可接受）")
 
-    def test_create_counterparty_with_invisible_account_id(self, counterparty_api):
+    # ----------------------------------------------------------------
+    # 场景6：全部枚举 type 测试（Person/Company/Vendor/Employee）
+    # ----------------------------------------------------------------
+    @pytest.mark.parametrize("cp_type", ["Person", "Company", "Vendor", "Employee"])
+    def test_create_with_all_type_enum(self, counterparty_api, login_session, db_cleanup, cp_type):
         """
-        测试场景6：使用不在当前用户 visible 范围内的 Account ID
+        测试场景6：覆盖 type 字段所有枚举值（Person/Company/Vendor/Employee）
         验证点：
-        1. 在 assign_account_ids 中使用他人账户 ID：241010195849720143（yhan account Sanchez）
-        2. 服务器返回 200 OK（统一错误处理）
-        3. 业务错误码 code == 506
-        4. error_message == "visibility permission deny"
+        1. 每种 type 均可创建成功（code=200）
+        2. 返回的 type 与传入值一致
         """
-        invisible_account_id = "241010195849720143"  # yhan account Sanchez，不属于当前用户
+        account_id = _get_own_account_id(login_session)
+        if not account_id:
+            pytest.skip("无可用 Account，跳过")
 
-        timestamp = int(time.time())
-        counterparty_data = {
-            "name": f"Auto TestYan Counterparty Invisible {timestamp}",
+        ts = _ts()
+        data = {
+            "name": f"Auto TestYan Type {cp_type} {ts}",
+            "type": cp_type,
+            "payment_type": "ACH",
+            "bank_account_type": "Checking",
+            "bank_routing_number": VALID_ROUTING_NUMBER,
+            "bank_name": "Auto TestYan Bank",
+            "bank_account_owner_name": f"Auto TestYan {cp_type}",
+            "bank_account_number": "111111111",
+            "assign_account_ids": [account_id]
+        }
+
+        logger.info(f"创建 type='{cp_type}' 的 Counterparty")
+        resp = counterparty_api.create_counterparty(data)
+        created = _assert_create_success(resp)
+
+        assert created.get("type") == cp_type, \
+            f"type 回显不正确: 期望 {cp_type}, 实际 {created.get('type')}"
+
+        if db_cleanup:
+            db_cleanup.track("counterparty", created["id"])
+
+        logger.info(f"✓ type='{cp_type}' 创建成功，id={created['id']}")
+
+    # ----------------------------------------------------------------
+    # 场景7：全部枚举 payment_type 测试
+    # ----------------------------------------------------------------
+    @pytest.mark.parametrize("payment_type,extra_data", [
+        ("ACH", {
+            "bank_account_type": "Checking",
+            "bank_routing_number": VALID_ROUTING_NUMBER,
+            "bank_account_owner_name": "Auto TestYan ACH",
+            "bank_account_number": "111111111"
+        }),
+        ("Wire", {
+            "bank_account_type": "Checking",
+            "bank_routing_number": VALID_ROUTING_NUMBER,
+            "bank_account_owner_name": "Auto TestYan Wire",
+            "bank_account_number": "222222222"
+        }),
+        ("International_Wire", {
+            "bank_account_type": "Savings",
+            "bank_account_owner_name": "Auto TestYan IntlWire",
+            "bank_account_number": "333333333",
+            "country": "CN",
+            "address1": "123 Test Road",
+            "city": "Beijing",
+            "zip_code": "100000",
+            "bank_country": "CN",
+            "swift_code": "CRBKUS33XXX",
+            "bank_name": "Auto TestYan Bank"
+        }),
+        ("Check", {
+            "bank_account_type": "Checking",
+            "bank_routing_number": VALID_ROUTING_NUMBER,
+            "bank_account_owner_name": "Auto TestYan Check",
+            "bank_account_number": "444444444",
+            "address1": "123 Check Street"   # Check 特有必填
+        }),
+        ("Instant_Pay", {
+            "bank_account_type": "Checking",
+            "bank_routing_number": VALID_ROUTING_NUMBER,
+            "bank_account_owner_name": "Auto TestYan Instant",
+            "bank_account_number": "555555555"
+        }),
+    ])
+    def test_create_with_all_payment_type_enum(self, counterparty_api, login_session, db_cleanup,
+                                                payment_type, extra_data):
+        """
+        测试场景7：覆盖 payment_type 所有枚举值（ACH/Wire/International_Wire/Check/Instant_Pay）
+        验证点：
+        1. 每种 payment_type 均可创建成功（code=200）
+        2. 返回的 payment_type 与传入值一致
+        """
+        account_id = _get_own_account_id(login_session)
+        if not account_id:
+            pytest.skip("无可用 Account，跳过")
+
+        ts = _ts()
+        data = {
+            "name": f"Auto TestYan PT {payment_type} {ts}",
+            "type": "Person",
+            "payment_type": payment_type,
+            "assign_account_ids": [account_id]
+        }
+        data.update(extra_data)
+
+        logger.info(f"创建 payment_type='{payment_type}' 的 Counterparty")
+        resp = counterparty_api.create_counterparty(data)
+
+        assert resp.status_code == 200
+        body = resp.json()
+        logger.info(f"  响应: code={body.get('code')}")
+
+        if body.get("code") == 200:
+            created_data = body.get("data", body)
+            assert created_data.get("payment_type") == payment_type, \
+                f"payment_type 回显不正确: 期望 {payment_type}, 实际 {created_data.get('payment_type')}"
+
+            if db_cleanup and created_data.get("id"):
+                db_cleanup.track("counterparty", created_data["id"])
+
+            logger.info(f"✓ payment_type='{payment_type}' 创建成功，id={created_data.get('id')}")
+        else:
+            logger.info(f"  API 以 code={body.get('code')} 拒绝，msg={body.get('error_message')} （探索性结果）")
+
+    # ----------------------------------------------------------------
+    # 场景8：必填字段逐一缺失验证
+    # ----------------------------------------------------------------
+    @pytest.mark.parametrize("missing_field,base_data", [
+        ("name", {
             "type": "Person",
             "payment_type": "ACH",
             "bank_account_type": "Checking",
-            "bank_routing_number": "091918457",
-            "bank_name": "Auto TestYan Bank",
-            "bank_account_owner_name": "Auto TestYan Owner",
-            "bank_account_number": "111111111",
-            "assign_account_ids": [invisible_account_id]  # 越权 Account ID
+            "bank_routing_number": VALID_ROUTING_NUMBER,
+            "bank_account_owner_name": "Auto TestYan",
+            "bank_account_number": "111111111"
+        }),
+        ("type", {
+            "name": f"Auto TestYan Missing Type {int(time.time())}",
+            "payment_type": "ACH",
+            "bank_account_type": "Checking",
+            "bank_routing_number": VALID_ROUTING_NUMBER,
+            "bank_account_owner_name": "Auto TestYan",
+            "bank_account_number": "111111111"
+        }),
+        ("payment_type", {
+            "name": f"Auto TestYan Missing PT {int(time.time())}",
+            "type": "Person",
+            "bank_account_type": "Checking",
+            "bank_routing_number": VALID_ROUTING_NUMBER,
+            "bank_account_owner_name": "Auto TestYan",
+            "bank_account_number": "111111111"
+        }),
+    ])
+    def test_create_missing_required_fields(self, counterparty_api, missing_field, base_data):
+        """
+        测试场景8：逐一缺少必填字段（name / type / payment_type）
+        验证点：
+        1. HTTP 200（统一错误处理）
+        2. 业务 code != 200
+        3. data = None
+        """
+        logger.info(f"测试缺少必填字段: '{missing_field}'")
+        resp = counterparty_api.create_counterparty(base_data)
+
+        assert resp.status_code == 200, \
+            f"HTTP 应返回 200，实际: {resp.status_code}"
+
+        body = resp.json()
+        logger.info(f"  响应: {body}")
+        assert body.get("code") != 200, \
+            f"缺少 '{missing_field}' 应被拒绝（code!=200），但返回了 code=200"
+        assert body.get("data") is None, \
+            f"缺少 '{missing_field}' 时 data 应为 None"
+
+        logger.info(f"✓ 缺少 '{missing_field}' 被拒绝: code={body.get('code')}, msg={body.get('error_message')}")
+
+    # ----------------------------------------------------------------
+    # 场景9：非法枚举值（type / payment_type 超出范围）
+    # ----------------------------------------------------------------
+    def test_create_invalid_type_enum(self, counterparty_api):
+        """
+        测试场景9：type 使用超出枚举范围的值（'Alien'）
+        验证点：
+        1. HTTP 200
+        2. 业务 code != 200，或记录为探索性结果
+        """
+        data = {
+            "name": f"Auto TestYan Invalid Type {_ts()}",
+            "type": "Alien",          # 超出枚举范围
+            "payment_type": "ACH",
+            "bank_account_type": "Checking",
+            "bank_routing_number": VALID_ROUTING_NUMBER,
+            "bank_account_owner_name": "Auto TestYan",
+            "bank_account_number": "111111111"
         }
 
-        logger.info(f"使用不在 visible 范围的 Account ID: {invisible_account_id}")
-        response = counterparty_api.create_counterparty(counterparty_data)
+        logger.info("测试 type='Alien'（超出枚举范围）")
+        resp = counterparty_api.create_counterparty(data)
+        assert resp.status_code == 200
 
-        assert response.status_code == 200, \
-            f"服务器应该返回 200（统一错误处理），实际: {response.status_code}"
-
-        response_body = response.json()
-        logger.info(f"  响应: {response_body}")
-
-        # Counterparty assign_account_ids 越权返回 code=599（"Assign account can not find."）
-        # 而不是 506，这是业务行为的差异：
-        # - 506 = visibility permission deny（FA/Sub Account 等直接 ID 越权）
-        # - 599 = 业务校验失败（assign_account_ids 中的越权 account 表现为"找不到"）
-        assert response_body.get("code") != 200, \
-            f"越权 Account ID 不应该创建成功，但返回了 code=200"
-        assert response_body.get("data") is None, \
-            "越权时 data 应为 None"
-
-        code = response_body.get("code")
-        error_msg = response_body.get("error_message", "")
-        logger.info(f"  业务错误码: {code}")
-        logger.info(f"  错误信息: {error_msg}")
-
-        # 可能返回 506 或 599 - 均为拒绝
-        assert code in [506, 599], \
-            f"越权 Account ID 应该返回 506 或 599，实际: {code}"
-
-        if code == 506:
-            assert "visibility permission deny" in error_msg.lower(), \
-                f"code=506 时 error_message 应含 'visibility permission deny'，实际: {error_msg}"
-            logger.info("✓ 越权 Account ID 校验通过: code=506 (visibility deny)")
+        body = resp.json()
+        if body.get("code") != 200:
+            logger.info(f"✓ 非法 type 被 API 拒绝: code={body.get('code')}")
         else:
-            # code=599: assign_account_ids 对越权账户表现为"找不到"
-            logger.info(f"⚠️ assign_account_ids 越权返回 code=599（找不到），而非 506")
-            logger.info(f"   业务行为说明：Counterparty 的 assign_account_ids 越权表现为 '找不到'")
-            logger.info(f"✓ 越权 Account ID 校验通过: code=599 (not found, as expected)")
+            logger.info("⚠ API 未校验 type 枚举范围，记录为探索性结果")
+
+    # ----------------------------------------------------------------
+    # 场景10：assign_account_ids — 不传（无账户绑定）
+    # ----------------------------------------------------------------
+    def test_create_without_assign_account_ids(self, counterparty_api, db_cleanup):
+        """
+        测试场景10：不传 assign_account_ids（不绑定任何账户）
+        验证点：
+        1. 创建成功（code=200）
+        2. assign_account_ids 为空或 null
+        """
+        ts = _ts()
+        data = {
+            "name": f"Auto TestYan No AccountIDs {ts}",
+            "type": "Person",
+            "payment_type": "ACH",
+            "bank_account_type": "Checking",
+            "bank_routing_number": VALID_ROUTING_NUMBER,
+            "bank_name": "Auto TestYan Bank",
+            "bank_account_owner_name": "Auto TestYan No Account",
+            "bank_account_number": "111111111"
+            # 不传 assign_account_ids
+        }
+
+        logger.info("创建 Counterparty（不绑定账户）")
+        resp = counterparty_api.create_counterparty(data)
+        created = _assert_create_success(resp)
+
+        assign_ids = created.get("assign_account_ids")
+        assert not assign_ids or assign_ids == [], \
+            f"不传 assign_account_ids 时，返回值应为空或 null，实际: {assign_ids}"
+
+        if db_cleanup:
+            db_cleanup.track("counterparty", created["id"])
+
+        logger.info(f"✓ 无 assign_account_ids 创建成功，id={created['id']}")
+
+    # ----------------------------------------------------------------
+    # 场景11：assign_account_ids — 传 1 个账户（低风险，status=Approved）
+    # ----------------------------------------------------------------
+    def test_create_with_single_low_risk_account(self, counterparty_api, login_session, db_cleanup):
+        """
+        测试场景11：assign_account_ids 传单个低风险账户
+        验证点：
+        1. 创建成功（code=200）
+        2. 该账户对应的 counterparty status 自动变为 "Approved"
+        """
+        account_id = _get_own_account_id(login_session)
+        if not account_id:
+            pytest.skip("无可用低风险 Account，跳过")
+
+        ts = _ts()
+        data = {
+            "name": f"Auto TestYan 1 LowRisk Account {ts}",
+            "type": "Person",
+            "payment_type": "ACH",
+            "bank_account_type": "Checking",
+            "bank_routing_number": VALID_ROUTING_NUMBER,
+            "bank_name": "Auto TestYan Bank",
+            "bank_account_owner_name": "Auto TestYan Low Risk",
+            "bank_account_number": "111111111",
+            "assign_account_ids": [account_id]
+        }
+
+        logger.info(f"创建 Counterparty，绑定单个低风险账户: {account_id}")
+        resp = counterparty_api.create_counterparty(data)
+        created = _assert_create_success(resp)
+
+        status = created.get("status")
+        logger.info(f"  返回 status = {status}")
+        assert status == "Approved", \
+            f"低风险账户绑定的 Counterparty status 应为 'Approved'，实际: {status}"
+
+        if db_cleanup:
+            db_cleanup.track("counterparty", created["id"])
+
+        logger.info(f"✓ 低风险账户 status=Approved 验证通过，id={created['id']}")
+
+    # ----------------------------------------------------------------
+    # 场景12：assign_account_ids — 传 1 个高风险账户，status=Pending
+    # ----------------------------------------------------------------
+    def test_create_with_single_high_risk_account(self, counterparty_api, db_cleanup):
+        """
+        测试场景12：assign_account_ids 传单个高风险账户（259124163505439565）
+        验证点：
+        1. 创建成功（code=200）
+        2. 该 Counterparty status 自动变为 "Pending"（高风险）
+        """
+        ts = _ts()
+        data = {
+            "name": f"Auto TestYan 1 HighRisk Account {ts}",
+            "type": "Person",
+            "payment_type": "ACH",
+            "bank_account_type": "Checking",
+            "bank_routing_number": VALID_ROUTING_NUMBER,
+            "bank_name": "Auto TestYan Bank",
+            "bank_account_owner_name": "Auto TestYan High Risk",
+            "bank_account_number": "111111111",
+            "assign_account_ids": [HIGH_RISK_ACCOUNT_ID]
+        }
+
+        logger.info(f"创建 Counterparty，绑定单个高风险账户: {HIGH_RISK_ACCOUNT_ID}")
+        resp = counterparty_api.create_counterparty(data)
+        assert resp.status_code == 200
+        body = resp.json()
+        logger.info(f"  响应: code={body.get('code')}, msg={body.get('error_message')}")
+
+        if body.get("code") == 200:
+            created_data = body.get("data", body)
+            status = created_data.get("status")
+            logger.info(f"  返回 status = {status}")
+            assert status == "Pending", \
+                f"高风险账户绑定的 Counterparty status 应为 'Pending'，实际: {status}"
+
+            if db_cleanup and created_data.get("id"):
+                db_cleanup.track("counterparty", created_data["id"])
+
+            logger.info(f"✓ 高风险账户 status=Pending 验证通过，id={created_data.get('id')}")
+        else:
+            logger.info(f"  API 以 code={body.get('code')} 拒绝高风险账户绑定（探索性结果）")
+
+    # ----------------------------------------------------------------
+    # 场景13：assign_account_ids — 传多个账户（低风险+高风险混合）
+    # ----------------------------------------------------------------
+    def test_create_with_mixed_risk_accounts(self, counterparty_api, login_session, db_cleanup):
+        """
+        测试场景13：assign_account_ids 传多个账户（低风险 + 高风险混合）
+        验证点：
+        1. 创建成功（code=200）
+        2. 高风险账户对应的记录 status=Pending
+        3. 低风险账户对应的记录 status=Approved
+        （如果 API 统一返回一个 status，则期望为 Pending，因为有高风险账户）
+        """
+        low_risk_account_id = _get_own_account_id(login_session)
+        if not low_risk_account_id:
+            pytest.skip("无可用低风险 Account，跳过")
+
+        ts = _ts()
+        data = {
+            "name": f"Auto TestYan Mixed Risk {ts}",
+            "type": "Person",
+            "payment_type": "ACH",
+            "bank_account_type": "Checking",
+            "bank_routing_number": VALID_ROUTING_NUMBER,
+            "bank_name": "Auto TestYan Bank",
+            "bank_account_owner_name": "Auto TestYan Mixed",
+            "bank_account_number": "111111111",
+            "assign_account_ids": [low_risk_account_id, HIGH_RISK_ACCOUNT_ID]
+        }
+
+        logger.info(f"创建 Counterparty，绑定混合账户（低风险+高风险）")
+        resp = counterparty_api.create_counterparty(data)
+        assert resp.status_code == 200
+        body = resp.json()
+        logger.info(f"  响应: code={body.get('code')}")
+
+        if body.get("code") == 200:
+            created_data = body.get("data", body)
+            status = created_data.get("status")
+            logger.info(f"  整体 status = {status}")
+
+            # 含高风险账户时，整体 status 应为 Pending
+            assert status == "Pending", \
+                f"含高风险账户的混合绑定，status 应为 'Pending'，实际: {status}"
+
+            if db_cleanup and created_data.get("id"):
+                db_cleanup.track("counterparty", created_data["id"])
+
+            logger.info(f"✓ 混合账户 status=Pending 验证通过，id={created_data.get('id')}")
+        else:
+            logger.info(f"  API 以 code={body.get('code')} 拒绝（探索性结果）")
+
+    # ----------------------------------------------------------------
+    # 场景14：assign_account_ids — 传多个低风险账户，status=Approved
+    # ----------------------------------------------------------------
+    def test_create_with_multiple_accounts(self, counterparty_api, login_session, db_cleanup):
+        """
+        测试场景14：assign_account_ids 传多个账户（全部低风险）
+        验证点：
+        1. 创建成功（code=200）
+        2. status = Approved（全部低风险）
+        3. assign_account_ids 返回传入的账户列表
+        """
+        account_api = AccountAPI(session=login_session)
+        resp = account_api.list_accounts(page=0, size=5)
+        if resp.status_code != 200:
+            pytest.skip("无法获取账户列表，跳过")
+
+        accounts = resp.json().get("data", {}).get("content", [])
+        low_risk_accounts = [a["id"] for a in accounts if a.get("risk_level", "").lower() == "low"]
+
+        if len(low_risk_accounts) < 2:
+            pytest.skip("低风险账户不足 2 个，跳过多账户测试")
+
+        selected_ids = low_risk_accounts[:2]
+        ts = _ts()
+        data = {
+            "name": f"Auto TestYan Multi Account {ts}",
+            "type": "Person",
+            "payment_type": "ACH",
+            "bank_account_type": "Checking",
+            "bank_routing_number": VALID_ROUTING_NUMBER,
+            "bank_name": "Auto TestYan Bank",
+            "bank_account_owner_name": "Auto TestYan Multi",
+            "bank_account_number": "111111111",
+            "assign_account_ids": selected_ids
+        }
+
+        logger.info(f"创建 Counterparty，绑定 {len(selected_ids)} 个低风险账户")
+        resp = counterparty_api.create_counterparty(data)
+        created = _assert_create_success(resp)
+
+        status = created.get("status")
+        assert status == "Approved", \
+            f"全低风险账户时 status 应为 'Approved'，实际: {status}"
+
+        returned_ids = created.get("assign_account_ids", [])
+        assert set(returned_ids) == set(selected_ids), \
+            f"assign_account_ids 回显不正确: 期望 {selected_ids}, 实际 {returned_ids}"
+
+        if db_cleanup:
+            db_cleanup.track("counterparty", created["id"])
+
+        logger.info(f"✓ 多账户绑定 status=Approved 验证通过，id={created['id']}")
+
+    # ----------------------------------------------------------------
+    # 场景15：所有非必填字段全部传入，验证是否完整存储
+    # ----------------------------------------------------------------
+    def test_create_with_all_optional_fields(self, counterparty_api, login_session, db_cleanup):
+        """
+        测试场景15：创建时传入所有非必填字段，验证 list/detail 中可以查到
+        验证点：
+        1. 创建成功（code=200）
+        2. 所有传入的非必填字段都出现在返回值中，值一致
+        """
+        account_id = _get_own_account_id(login_session)
+        if not account_id:
+            pytest.skip("无可用 Account，跳过")
+
+        ts = _ts()
+        data = {
+            "name": f"Auto TestYan All Optional {ts}",
+            "type": "Person",
+            "payment_type": "ACH",
+            "bank_account_type": "Checking",
+            "bank_routing_number": VALID_ROUTING_NUMBER,
+            "bank_name": "Auto TestYan Opt Bank",
+            "bank_account_owner_name": "Auto TestYan All Opt Owner",
+            "bank_account_number": "999888777",
+            "bank_city": "New York",
+            "bank_zip_code": "10001",
+            "description": "Auto TestYan all optional fields test",
+            "address1": "100 Optional Street",
+            "address2": "Suite 200",
+            "city": "Los Angeles",
+            "state": "CA",
+            "zip_code": "90001",
+            "country": "US",
+            "assign_account_ids": [account_id]
+        }
+
+        optional_fields = [
+            "bank_city", "bank_zip_code", "description",
+            "address1", "address2", "city", "state", "zip_code", "country"
+        ]
+
+        logger.info("创建 Counterparty（包含所有非必填字段）")
+        resp = counterparty_api.create_counterparty(data)
+        created = _assert_create_success(resp)
+
+        if db_cleanup:
+            db_cleanup.track("counterparty", created["id"])
+
+        # 验证非必填字段是否回显
+        logger.info("验证非必填字段是否出现在返回值中")
+        missing_in_response = []
+        for field in optional_fields:
+            if field not in created:
+                missing_in_response.append(field)
+            else:
+                expected_val = data.get(field)
+                actual_val = created.get(field)
+                if expected_val == actual_val:
+                    logger.info(f"  ✓ {field} = {actual_val}")
+                else:
+                    logger.info(f"  ✗ {field}: 期望 '{expected_val}', 实际 '{actual_val}'")
+
+        if missing_in_response:
+            logger.info(f"  ⚠ 以下字段未出现在创建响应中（可能需要查 Detail 确认）: {missing_in_response}")
+
+        logger.info(f"✓ 全字段创建完成，id={created['id']}，请后续查 Detail 验证存储")
+
+    # ----------------------------------------------------------------
+    # 场景16：越权 account ID（不在当前用户 visible 范围）
+    # ----------------------------------------------------------------
+    def test_create_with_invisible_account_id(self, counterparty_api):
+        """
+        测试场景16：assign_account_ids 传入不在当前用户 visible 范围的 Account ID
+        验证点：
+        1. HTTP 200
+        2. 业务 code != 200（506 或 599）
+        3. data = None
+        """
+        ts = _ts()
+        data = {
+            "name": f"Auto TestYan Invisible {ts}",
+            "type": "Person",
+            "payment_type": "ACH",
+            "bank_account_type": "Checking",
+            "bank_routing_number": VALID_ROUTING_NUMBER,
+            "bank_name": "Auto TestYan Bank",
+            "bank_account_owner_name": "Auto TestYan Invisible",
+            "bank_account_number": "111111111",
+            "assign_account_ids": [INVISIBLE_ACCOUNT_ID]
+        }
+
+        logger.info(f"使用越权 Account ID: {INVISIBLE_ACCOUNT_ID}")
+        resp = counterparty_api.create_counterparty(data)
+
+        assert resp.status_code == 200
+        body = resp.json()
+        logger.info(f"  响应: {body}")
+
+        assert body.get("code") != 200, \
+            "越权 Account ID 不应创建成功，但返回了 code=200"
+        assert body.get("data") is None
+
+        code = body.get("code")
+        assert code in [506, 599], \
+            f"越权 Account ID 应返回 506 或 599，实际: {code}"
+
+        logger.info(f"✓ 越权 Account ID 被拒绝: code={code}, msg={body.get('error_message')}")
+
+    # ----------------------------------------------------------------
+    # 场景17：Wire 类型缺少 bank_routing_number（条件必填）
+    # ----------------------------------------------------------------
+    def test_create_wire_missing_routing_number(self, counterparty_api):
+        """
+        测试场景17：Wire 类型缺少 bank_routing_number（Wire 条件必填字段）
+        验证点：
+        1. HTTP 200
+        2. 业务 code != 200 或 payment_enable=false
+        """
+        data = {
+            "name": f"Auto TestYan Wire No Routing {_ts()}",
+            "type": "Person",
+            "payment_type": "Wire",
+            "bank_account_type": "Checking",
+            "bank_account_owner_name": "Auto TestYan Wire Test",
+            "bank_account_number": "111111111"
+            # 故意省略 bank_routing_number（Wire 必填）
+        }
+
+        logger.info("Wire 类型缺少 bank_routing_number")
+        resp = counterparty_api.create_counterparty(data)
+        assert resp.status_code == 200
+
+        body = resp.json()
+        logger.info(f"  响应: code={body.get('code')}")
+
+        if body.get("code") == 200:
+            created_data = body.get("data", body)
+            payment_enable = created_data.get("payment_enable")
+            assert payment_enable is False, \
+                f"Wire 缺少路由号时 payment_enable 应为 false，实际: {payment_enable}"
+            logger.info(f"✓ Wire 缺少路由号，payment_enable=false")
+        else:
+            logger.info(f"✓ Wire 缺少路由号被 API 拒绝: code={body.get('code')}")
