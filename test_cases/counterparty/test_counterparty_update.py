@@ -4,7 +4,8 @@ Counterparty Update 接口测试用例
   PATCH /api/v1/cores/actc/counterparties/:id   Update Counterparty Detail (v1)
 
 关键业务规则：
-  - type 和 payment_type 不可被更新（文档明确说明）
+  - update 请求体中 type 和 payment_type 是必填字段（实测验证）
+  - type 和 payment_type 的值不可被更改（API 校验后忽略或拒绝）
   - 枚举值大小写必须完全匹配（Person/Company/Vendor/Employee, ACH/Wire/…, Checking/Savings）
   - phone_number 必须是 E.164 格式（+14155552671）
   - country 必须符合 ISO 3166
@@ -61,11 +62,27 @@ def _create_own_cp(counterparty_api, login_session,
     return cp_id
 
 
+def _get_cp_required_fields(counterparty_api, cp_id: str) -> dict:
+    """
+    从 Detail 接口获取 type 和 payment_type（update 必填）。
+    返回 {"type": "...", "payment_type": "..."}
+    """
+    resp = counterparty_api.get_counterparty_detail(cp_id)
+    if resp.status_code != 200:
+        return {"type": "Person", "payment_type": "ACH"}
+    detail = resp.json().get("data", resp.json()) or {}
+    return {
+        "type": detail.get("type", "Person"),
+        "payment_type": detail.get("payment_type", "ACH")
+    }
+
+
 @pytest.mark.counterparty
 class TestCounterpartyUpdate:
     """
     Counterparty Update 接口测试
     所有场景均用自己创建的 CP，不依赖外部数据
+    注意：update 请求体必须包含 type 和 payment_type（实测必填）
     """
 
     # ------------------------------------------------------------------
@@ -84,9 +101,14 @@ class TestCounterpartyUpdate:
         if db_cleanup:
             db_cleanup.track("counterparty", cp_id)
 
+        required = _get_cp_required_fields(counterparty_api, cp_id)
         new_name = f"Auto TestYan CP Renamed {_ts()}"
         logger.info(f"更新 CP({cp_id}) name -> '{new_name}'")
-        update_resp = counterparty_api.update_counterparty(cp_id, {"name": new_name})
+
+        update_resp = counterparty_api.update_counterparty(cp_id, {
+            "name": new_name,
+            **required  # 补充必填的 type + payment_type
+        })
 
         assert update_resp.status_code == 200
         update_body = update_resp.json()
@@ -123,13 +145,15 @@ class TestCounterpartyUpdate:
         if db_cleanup:
             db_cleanup.track("counterparty", cp_id)
 
+        required = _get_cp_required_fields(counterparty_api, cp_id)
         ts = _ts()
         update_data = {
             "name": f"Auto TestYan CP Multi Updated {ts}",
             "bank_account_owner_name": "Auto TestYan Updated Owner",
             "address1": "999 Updated Ave",
             "city": "Updated City",
-            "zip_code": "90210"
+            "zip_code": "90210",
+            **required
         }
 
         logger.info(f"更新 CP({cp_id}) 多个字段")
@@ -140,10 +164,12 @@ class TestCounterpartyUpdate:
             f"更新失败: code={update_body.get('code')}, msg={update_body.get('error_message')}"
 
         updated = update_body.get("data", update_body)
-        for field, expected in update_data.items():
+        check_fields = ["name", "bank_account_owner_name", "address1", "city", "zip_code"]
+        for field in check_fields:
             actual = updated.get(field)
             if actual is not None:
-                assert actual == expected, f"字段 '{field}' 更新失败: 期望 '{expected}', 实际 '{actual}'"
+                assert actual == update_data[field], \
+                    f"字段 '{field}' 更新失败: 期望 '{update_data[field]}', 实际 '{actual}'"
                 logger.info(f"  ✓ {field} = '{actual}'")
             else:
                 logger.info(f"  ⚠ 响应中未包含字段 {field}，通过 Detail 验证")
@@ -171,9 +197,14 @@ class TestCounterpartyUpdate:
 
         original_detail = counterparty_api.get_counterparty_detail(cp_id).json().get("data", {})
         original_type = original_detail.get("type", "Person")
+        original_pt = original_detail.get("payment_type", "ACH")
 
         logger.info(f"尝试更新 CP({cp_id}) type: '{original_type}' -> 'Company'")
-        update_resp = counterparty_api.update_counterparty(cp_id, {"type": "Company", "name": f"Auto TestYan CP TypeTest {_ts()}"})
+        update_resp = counterparty_api.update_counterparty(cp_id, {
+            "type": "Company",
+            "payment_type": original_pt,
+            "name": f"Auto TestYan CP TypeTest {_ts()}"
+        })
         assert update_resp.status_code == 200
 
         body = update_resp.json()
@@ -205,10 +236,12 @@ class TestCounterpartyUpdate:
 
         original_detail = counterparty_api.get_counterparty_detail(cp_id).json().get("data", {})
         original_pt = original_detail.get("payment_type", "ACH")
+        original_type = original_detail.get("type", "Person")
 
         logger.info(f"尝试更新 CP({cp_id}) payment_type: '{original_pt}' -> 'Wire'")
         update_resp = counterparty_api.update_counterparty(cp_id, {
             "payment_type": "Wire",
+            "type": original_type,
             "name": f"Auto TestYan CP PTTest {_ts()}"
         })
         assert update_resp.status_code == 200
@@ -239,12 +272,14 @@ class TestCounterpartyUpdate:
         if db_cleanup:
             db_cleanup.track("counterparty", cp_id)
 
+        required = _get_cp_required_fields(counterparty_api, cp_id)
         invalid_phones = ["13812345678", "1-415-555-2671", "415-555-2671"]
         for phone in invalid_phones:
             logger.info(f"更新 phone_number='{phone}'（非 E.164）")
             resp = counterparty_api.update_counterparty(cp_id, {
                 "phone_number": phone,
-                "name": f"Auto TestYan CP Phone {_ts()}"
+                "name": f"Auto TestYan CP Phone {_ts()}",
+                **required
             })
             assert resp.status_code == 200
             body = resp.json()
@@ -271,11 +306,13 @@ class TestCounterpartyUpdate:
         if db_cleanup:
             db_cleanup.track("counterparty", cp_id)
 
+        required = _get_cp_required_fields(counterparty_api, cp_id)
         valid_phone = "+14155552671"
         logger.info(f"更新 phone_number='{valid_phone}'（E.164 格式）")
         resp = counterparty_api.update_counterparty(cp_id, {
             "phone_number": valid_phone,
-            "name": f"Auto TestYan CP PhoneValid {_ts()}"
+            "name": f"Auto TestYan CP PhoneValid {_ts()}",
+            **required
         })
         assert resp.status_code == 200
         body = resp.json()
@@ -300,12 +337,14 @@ class TestCounterpartyUpdate:
         if db_cleanup:
             db_cleanup.track("counterparty", cp_id)
 
+        required = _get_cp_required_fields(counterparty_api, cp_id)
         invalid_countries = ["CHINA", "USA", "United_States"]
         for country in invalid_countries:
             logger.info(f"更新 country='{country}'（非 ISO 3166）")
             resp = counterparty_api.update_counterparty(cp_id, {
                 "country": country,
-                "name": f"Auto TestYan CP Country {_ts()}"
+                "name": f"Auto TestYan CP Country {_ts()}",
+                **required
             })
             assert resp.status_code == 200
             body = resp.json()
@@ -343,10 +382,12 @@ class TestCounterpartyUpdate:
         if db_cleanup:
             db_cleanup.track("counterparty", cp_id)
 
+        required = _get_cp_required_fields(counterparty_api, cp_id)
         logger.info(f"更新 bank_account_type='{bank_account_type}'")
         resp = counterparty_api.update_counterparty(cp_id, {
             "bank_account_type": bank_account_type,
-            "name": f"Auto TestYan CP BAT {bank_account_type} {_ts()}"
+            "name": f"Auto TestYan CP BAT {bank_account_type} {_ts()}",
+            **required
         })
         assert resp.status_code == 200
         body = resp.json()
@@ -376,7 +417,7 @@ class TestCounterpartyUpdate:
         logger.info("使用无效 ID 更新 Counterparty")
         resp = counterparty_api.update_counterparty(
             "INVALID_CP_999999",
-            {"name": "Auto TestYan InvalidUpdate"}
+            {"name": "Auto TestYan InvalidUpdate", "type": "Person", "payment_type": "ACH"}
         )
         assert resp.status_code == 200
         body = resp.json()
@@ -398,7 +439,7 @@ class TestCounterpartyUpdate:
         logger.info(f"使用越权 CP ID 更新: {invisible_cp_id}")
         resp = counterparty_api.update_counterparty(
             invisible_cp_id,
-            {"name": "Auto TestYan InvisibleUpdate"}
+            {"name": "Auto TestYan InvisibleUpdate", "type": "Person", "payment_type": "ACH"}
         )
         assert resp.status_code == 200
         body = resp.json()

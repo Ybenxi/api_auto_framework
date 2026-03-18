@@ -34,7 +34,7 @@ class TestCounterpartyListCounterparties:
         # 2. 验证响应
         assert_status_ok(response)
         response_body = response.json()
-        content = response_body.get("content", [])
+        content = response_body.get("data", {}).get("content", [])
         assert isinstance(content, list), "content 字段应该是数组"
         
         logger.info(f"获取到 {len(content)} 个 Counterparties")
@@ -61,7 +61,7 @@ class TestCounterpartyListCounterparties:
         all_response = counterparty_api.list_counterparties(page=0, size=10)
         assert_status_ok(all_response)
         
-        all_content = all_response.json().get("content", [])
+        all_content = all_response.json().get("data", {}).get("content", [])
         
         if len(all_content) == 0:
             pytest.skip("没有可用的 Counterparty 数据，跳过测试")
@@ -75,7 +75,7 @@ class TestCounterpartyListCounterparties:
         filtered_response = counterparty_api.list_counterparties(name=counterparty_name)
         assert_status_ok(filtered_response)
 
-        filtered_content = filtered_response.json().get("content", [])
+        filtered_content = filtered_response.json().get("data", {}).get("content", [])
         logger.info(f"  筛选返回 {len(filtered_content)} 个结果")
 
         # 验证返回的每条数据 name 包含筛选关键词（模糊匹配）
@@ -98,7 +98,7 @@ class TestCounterpartyListCounterparties:
         response = counterparty_api.list_counterparties(status=status, page=0, size=10)
         assert_status_ok(response)
 
-        content = response.json().get("content", [])
+        content = response.json().get("data", {}).get("content", [])
         logger.info(f"  返回 {len(content)} 个结果")
 
         if not content:
@@ -123,7 +123,7 @@ class TestCounterpartyListCounterparties:
             response = counterparty_api.list_counterparties(payment_type=payment_type, page=0, size=10)
             assert_status_ok(response)
             
-            content = response.json().get("content", [])
+            content = response.json().get("data", {}).get("content", [])
             logger.info(f"  {payment_type}: {len(content)} 个结果")
             
             # 如果有结果，验证 payment_type 字段
@@ -195,7 +195,7 @@ class TestCounterpartyListCounterparties:
         assert_status_ok(response)
 
         # 验证返回的 counterparties 中不包含属于越权 account 的数据
-        content = response.json().get("content", [])
+        content = response.json().get("data", {}).get("content", [])
         for cp in content:
             assign_ids = cp.get("assign_account_ids", [])
             assert invisible_account_id not in assign_ids, \
@@ -215,7 +215,7 @@ class TestCounterpartyListCounterparties:
         """
         list_response = counterparty_api.list_counterparties(page=0, size=1)
         assert_status_ok(list_response)
-        content = list_response.json().get("content", [])
+        content = list_response.json().get("data", {}).get("content", [])
         if not content:
             pytest.skip("无 Counterparty 数据，跳过 Detail 验证")
 

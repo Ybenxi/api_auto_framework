@@ -71,7 +71,9 @@ def _get_cp_assign_accounts(counterparty_api, cp_id: str) -> list:
     if resp.status_code != 200:
         return []
     body = resp.json()
-    detail = body.get("data", body)
+    if body.get("code") != 200:
+        return []
+    detail = body.get("data") or {}
     return detail.get("assign_account_ids", [])
 
 
@@ -107,7 +109,7 @@ class TestCounterpartyTerminate:
             db_cleanup.track("counterparty", cp_id)
 
         logger.info(f"Terminate account_id={account_id_a} in CP({cp_id})")
-        term_resp = counterparty_api.terminate_counterparty(cp_id, {"account_ids": [account_id_a]})
+        term_resp = counterparty_api.terminate_counterparty(cp_id, [account_id_a])
         assert term_resp.status_code == 200
 
         term_body = term_resp.json()
@@ -160,7 +162,7 @@ class TestCounterpartyTerminate:
             db_cleanup.track("counterparty", cp_id)
 
         logger.info(f"Terminate 部分 assign_account: CP={cp_id}, terminate account_A={account_id_a}")
-        term_resp = counterparty_api.terminate_counterparty(cp_id, {"account_ids": [account_id_a]})
+        term_resp = counterparty_api.terminate_counterparty(cp_id, [account_id_a])
         assert term_resp.status_code == 200
 
         term_body = term_resp.json()
@@ -208,7 +210,7 @@ class TestCounterpartyTerminate:
         logger.info("使用无效 counterparty_id 调用 terminate")
         resp = counterparty_api.terminate_counterparty(
             "INVALID_CP_ID_999999",
-            {"account_ids": account_ids}
+            account_ids
         )
         assert resp.status_code == 200
         body = resp.json()
@@ -242,7 +244,7 @@ class TestCounterpartyTerminate:
             db_cleanup.track("counterparty", cp_id)
 
         logger.info(f"Terminate 未绑定的 account_id_B={account_id_b}（CP 只绑定了 A）")
-        term_resp = counterparty_api.terminate_counterparty(cp_id, {"account_ids": [account_id_b]})
+        term_resp = counterparty_api.terminate_counterparty(cp_id, [account_id_b])
         assert term_resp.status_code == 200
 
         term_body = term_resp.json()
@@ -285,7 +287,7 @@ class TestCounterpartyTerminate:
         logger.info(f"Terminate 时传入越权 account_id={INVISIBLE_ACCOUNT_ID}")
         term_resp = counterparty_api.terminate_counterparty(
             cp_id,
-            {"account_ids": [INVISIBLE_ACCOUNT_ID]}
+            [INVISIBLE_ACCOUNT_ID]
         )
         assert term_resp.status_code == 200
         term_body = term_resp.json()
@@ -319,7 +321,7 @@ class TestCounterpartyTerminate:
         if db_cleanup:
             db_cleanup.track("counterparty", cp_id)
 
-        term_resp = counterparty_api.terminate_counterparty(cp_id, {"account_ids": [account_id_a]})
+        term_resp = counterparty_api.terminate_counterparty(cp_id, [account_id_a])
         assert term_resp.json().get("code") == 200, "Terminate 失败"
 
         # 在 List 中查找该 CP 并验证 assign_account status

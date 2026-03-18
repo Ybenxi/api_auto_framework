@@ -35,7 +35,9 @@ def _find_cp_with_transactions(counterparty_api, page_size: int = 50) -> Tuple[O
     if list_resp.status_code != 200:
         return None, None
 
-    counterparties = list_resp.json().get("content", [])
+    # 响应结构：{"code": 200, "data": {"content": [...]}}
+    list_body = list_resp.json()
+    counterparties = list_body.get("data", {}).get("content", [])
     for cp in counterparties:
         cp_id = cp.get("id")
         if not cp_id:
@@ -44,8 +46,10 @@ def _find_cp_with_transactions(counterparty_api, page_size: int = 50) -> Tuple[O
         if txn_resp.status_code != 200:
             continue
         txn_body = txn_resp.json()
-        content = txn_body.get("content", [])
-        total = txn_body.get("total_elements", 0)
+        # transactions 响应结构也是 data.content
+        txn_data = txn_body.get("data", txn_body)
+        content = txn_data.get("content", []) if isinstance(txn_data, dict) else txn_body.get("data", {}).get("content", [])
+        total = txn_data.get("total_elements", 0) if isinstance(txn_data, dict) else txn_body.get("data", {}).get("total_elements", 0)
         if total > 0 and content:
             return cp_id, content[0]
 
@@ -79,8 +83,8 @@ class TestCounterpartyTransactions:
         assert resp.status_code == 200
 
         body = resp.json()
-        content = body.get("content", [])
-        total = body.get("total_elements", 0)
+        content = body.get("data", {}).get("content", [])
+        total = body.get("data", {}).get("total_elements", 0)
 
         assert total > 0, f"有交易的 CP({cp_id}) total_elements 应 > 0，实际: {total}"
         assert len(content) > 0, "content 不应为空"
@@ -119,7 +123,7 @@ class TestCounterpartyTransactions:
         )
         assert resp.status_code == 200
 
-        content = resp.json().get("content", [])
+        content = resp.json().get("data", {}).get("content", [])
         logger.info(f"  返回 {len(content)} 条")
 
         for txn in content:
@@ -149,7 +153,7 @@ class TestCounterpartyTransactions:
         )
         assert resp.status_code == 200
 
-        content = resp.json().get("content", [])
+        content = resp.json().get("data", {}).get("content", [])
         logger.info(f"  返回 {len(content)} 条")
 
         for txn in content:
@@ -184,7 +188,7 @@ class TestCounterpartyTransactions:
         )
         assert resp.status_code == 200
 
-        content = resp.json().get("content", [])
+        content = resp.json().get("data", {}).get("content", [])
         assert len(content) > 0, "日期范围应至少包含一条已知交易"
 
         logger.info(f"  返回 {len(content)} 条")
@@ -211,7 +215,7 @@ class TestCounterpartyTransactions:
         if not cp_id:
             # 没有有数据的 CP 也能测这个场景（会返回空）
             list_resp = counterparty_api.list_counterparties(page=0, size=1)
-            cps = list_resp.json().get("content", [])
+            cps = list_resp.json().get("data", {}).get("content", [])
             if not cps:
                 pytest.skip("无 Counterparty 数据")
             cp_id = cps[0]["id"]
@@ -226,7 +230,7 @@ class TestCounterpartyTransactions:
         assert resp.status_code == 200
 
         body = resp.json()
-        content = body.get("content", [])
+        content = body.get("data", {}).get("content", [])
         logger.info(f"  code={body.get('code')}, 返回 {len(content)} 条")
 
         if body.get("code") != 200 and body.get("code") is not None:
@@ -260,7 +264,7 @@ class TestCounterpartyTransactions:
         )
         assert resp.status_code == 200
 
-        content = resp.json().get("content", [])
+        content = resp.json().get("data", {}).get("content", [])
         logger.info(f"  返回 {len(content)} 条")
 
         for txn in content:
@@ -293,7 +297,7 @@ class TestCounterpartyTransactions:
         )
         assert resp.status_code == 200
 
-        content = resp.json().get("content", [])
+        content = resp.json().get("data", {}).get("content", [])
         logger.info(f"  返回 {len(content)} 条")
 
         for txn in content:
@@ -318,7 +322,7 @@ class TestCounterpartyTransactions:
 
         # 总记录数
         total_resp = counterparty_api.list_counterparty_transactions(cp_id, page=0, size=1)
-        total = total_resp.json().get("total_elements", 0)
+        total = total_resp.json().get("data", {}).get("total_elements", 0)
         if total < 2:
             pytest.skip("交易数量不足 2 条，无法测试翻页")
 
@@ -327,8 +331,8 @@ class TestCounterpartyTransactions:
         page0_resp = counterparty_api.list_counterparty_transactions(cp_id, page=0, size=1)
         page1_resp = counterparty_api.list_counterparty_transactions(cp_id, page=1, size=1)
 
-        page0_content = page0_resp.json().get("content", [])
-        page1_content = page1_resp.json().get("content", [])
+        page0_content = page0_resp.json().get("data", {}).get("content", [])
+        page1_content = page1_resp.json().get("data", {}).get("content", [])
 
         assert len(page0_content) == 1, "page=0, size=1 应返回 1 条"
         assert len(page1_content) == 1, "page=1, size=1 应返回 1 条"
@@ -353,7 +357,7 @@ class TestCounterpartyTransactions:
         assert resp.status_code == 200
 
         body = resp.json()
-        content = body.get("content", [])
+        content = body.get("data", {}).get("content", [])
         logger.info(f"  code={body.get('code')}, 返回 {len(content)} 条")
 
         if body.get("code") is not None and body.get("code") != 200:
@@ -379,7 +383,7 @@ class TestCounterpartyTransactions:
         assert resp.status_code == 200
 
         body = resp.json()
-        content = body.get("content", [])
+        content = body.get("data", {}).get("content", [])
         logger.info(f"  code={body.get('code')}, 返回 {len(content)} 条")
 
         code = body.get("code")

@@ -7,11 +7,15 @@ Counterparty MFA 接口测试用例（V2 接口）
   POST /api/v2/cores/actc/counterparties               Create A New Counterparty with MFA
   PATCH /api/v2/cores/actc/counterparties/:id          Update Counterparty Detail with MFA
 
+重要说明：
+  MFA 接口中的 :id 是 Contact（Record Owner）的 ID，不是 Counterparty 的 ID。
+  需要先通过 Contact List 接口搜索 "TestYan" 找到一个 contact id 来使用。
+
 限制说明（自动化无法完成的场景）：
   - 无法收到真实验证码（Email/SMS），因此 verify 无法正常通过
   - 无法获得有效 access_token，因此 Create/Update with MFA 无法走完完整业务流程
   测试策略：
-  - Get/Send MFA：用自建 CP，验证接口可达、响应结构正确
+  - Get/Send MFA：用 contact id，验证接口可达、响应结构正确
   - Verify：用假验证码，验证接口不崩溃（返回 HTTP 200，业务错误 code != 200 是预期的）
   - Create/Update with MFA：传假 access_token，验证接口不崩溃（code != 200 是预期的）
 """
@@ -19,6 +23,7 @@ import pytest
 import time
 from typing import Optional
 from api.account_api import AccountAPI
+from api.contact_api import ContactAPI
 from utils.logger import logger
 
 
@@ -27,6 +32,23 @@ VALID_ROUTING_NUMBER = "091918457"
 
 def _ts() -> str:
     return str(int(time.time()))
+
+
+def _get_contact_id(login_session) -> Optional[str]:
+    """
+    通过 Contact List 接口搜索 name='TestYan' 找到一个 contact id，
+    作为 MFA 接口的 owner id（:id 参数）。
+    """
+    contact_api = ContactAPI(session=login_session)
+    resp = contact_api.list_contacts(name="TestYan", size=5)
+    if resp.status_code != 200:
+        return None
+    body = resp.json()
+    inner = body.get("data", body)
+    contacts = inner.get("content", []) if isinstance(inner, dict) else []
+    if contacts:
+        return contacts[0].get("id")
+    return None
 
 
 def _create_own_cp(counterparty_api, login_session) -> Optional[str]:
@@ -63,22 +85,23 @@ class TestCounterpartyMFA:
     """
 
     # ------------------------------------------------------------------
-    # 场景1：Get MFA Info — 用自建 CP 获取 MFA 信息
+    # 场景1：Get MFA Info — 用 contact id 获取 MFA 信息
     # ------------------------------------------------------------------
     def test_get_mfa_info_success(self, counterparty_api, login_session, db_cleanup):
         """
-        测试场景1：获取自建 Counterparty 的 Record Owner MFA 信息
+        测试场景1：通过 Contact ID（Record Owner）获取 MFA 信息
+        说明：MFA 接口的 :id 是 Contact ID（Record Owner），不是 Counterparty ID
         验证点：
         1. HTTP 200
         2. 业务 code=200
         3. 响应包含 data，data 含 email 字段（phone_number 可为 null）
         """
-        cp_id = _create_own_cp(counterparty_api, login_session)
-        if db_cleanup:
-            db_cleanup.track("counterparty", cp_id)
+        owner_id = _get_contact_id(login_session)
+        if not owner_id:
+            pytest.skip("未找到 TestYan Contact，跳过 MFA 测试")
 
-        logger.info(f"获取 CP({cp_id}) 的 MFA 信息")
-        resp = counterparty_api.get_counterparty_mfa(cp_id)
+        logger.info(f"使用 contact_id={owner_id} 获取 MFA 信息")
+        resp = counterparty_api.get_counterparty_mfa(owner_id)
         assert resp.status_code == 200
 
         body = resp.json()
@@ -112,22 +135,23 @@ class TestCounterpartyMFA:
         logger.info(f"✓ 无效 ID 被拒绝: code={body.get('code')}")
 
     # ------------------------------------------------------------------
-    # 场景3：Send MFA — 用自建 CP 发送 Email 验证码
+    # 场景3：Send MFA — 用 contact id 发送 Email 验证码
     # ------------------------------------------------------------------
     def test_send_mfa_email_success(self, counterparty_api, login_session, db_cleanup):
         """
-        测试场景3：向自建 CP 的 record owner 发送 Email MFA 验证码
+        测试场景3：向 Contact（Record Owner）发送 Email MFA 验证码
+        说明：MFA 接口的 :id 是 Contact ID（Record Owner），不是 Counterparty ID
         验证点：
         1. HTTP 200
         2. 业务 code=200，data="" 或 data 为空字符串
         注意：接口只保证触发发送，不保证 email 实际送达（自动化无法收取验证码）
         """
-        cp_id = _create_own_cp(counterparty_api, login_session)
-        if db_cleanup:
-            db_cleanup.track("counterparty", cp_id)
+        owner_id = _get_contact_id(login_session)
+        if not owner_id:
+            pytest.skip("未找到 TestYan Contact，跳过 Send MFA 测试")
 
-        logger.info(f"向 CP({cp_id}) 发送 Email MFA")
-        resp = counterparty_api.send_counterparty_mfa(cp_id, "Email")
+        logger.info(f"向 contact_id={owner_id} 发送 Email MFA")
+        resp = counterparty_api.send_counterparty_mfa(owner_id, "Email")
         assert resp.status_code == 200
 
         body = resp.json()
@@ -142,24 +166,24 @@ class TestCounterpartyMFA:
     # ------------------------------------------------------------------
     def test_send_mfa_phone(self, counterparty_api, login_session, db_cleanup):
         """
-        测试场景4：向自建 CP 发送 Phone MFA 验证码（该 CP 可能没有手机号）
+        测试场景4：向 Contact（Record Owner）发送 Phone MFA 验证码（可能没有手机号）
         验证点：
         1. HTTP 200
         2. code=200 表示发送成功（需要有关联手机号），否则记录业务错误码
         """
-        cp_id = _create_own_cp(counterparty_api, login_session)
-        if db_cleanup:
-            db_cleanup.track("counterparty", cp_id)
+        owner_id = _get_contact_id(login_session)
+        if not owner_id:
+            pytest.skip("未找到 TestYan Contact，跳过 Phone MFA 测试")
 
-        logger.info(f"向 CP({cp_id}) 发送 Phone MFA")
-        resp = counterparty_api.send_counterparty_mfa(cp_id, "Phone")
+        logger.info(f"向 contact_id={owner_id} 发送 Phone MFA")
+        resp = counterparty_api.send_counterparty_mfa(owner_id, "Phone")
         assert resp.status_code == 200
 
         body = resp.json()
         logger.info(f"  响应: code={body.get('code')}, msg={body.get('error_message')}")
 
         if body.get("code") == 200:
-            logger.info("✓ Phone MFA 发送成功（CP record owner 有手机号）")
+            logger.info("✓ Phone MFA 发送成功（Contact record owner 有手机号）")
         else:
             logger.info(f"  ⚠ Phone MFA 失败（可能 record owner 无手机号）: code={body.get('code')}")
 
@@ -173,12 +197,12 @@ class TestCounterpartyMFA:
         1. HTTP 200
         2. 业务 code != 200
         """
-        cp_id = _create_own_cp(counterparty_api, login_session)
-        if db_cleanup:
-            db_cleanup.track("counterparty", cp_id)
+        owner_id = _get_contact_id(login_session)
+        if not owner_id:
+            pytest.skip("未找到 TestYan Contact，跳过测试")
 
-        logger.info(f"Send MFA 使用无效 method='SMS'")
-        resp = counterparty_api.send_counterparty_mfa(cp_id, "SMS")
+        logger.info(f"Send MFA 使用无效 method='SMS', contact_id={owner_id}")
+        resp = counterparty_api.send_counterparty_mfa(owner_id, "SMS")
         assert resp.status_code == 200
         body = resp.json()
         logger.info(f"  code={body.get('code')}, msg={body.get('error_message')}")
@@ -208,23 +232,24 @@ class TestCounterpartyMFA:
     def test_verify_mfa_with_fake_code(self, counterparty_api, login_session, db_cleanup):
         """
         测试场景7：使用假验证码验证 MFA（自动化无法收取真实验证码）
+        说明：MFA 接口的 :id 是 Contact ID（Record Owner），不是 Counterparty ID
         验证点：
-        1. 先发送 MFA（code=200）
+        1. 先向 contact_id 发送 MFA（code=200）
         2. 用假验证码 verify，HTTP 200（接口不崩溃）
         3. 业务 code != 200（假码预期失败，这是合理的预期结果）
         """
-        cp_id = _create_own_cp(counterparty_api, login_session)
-        if db_cleanup:
-            db_cleanup.track("counterparty", cp_id)
+        owner_id = _get_contact_id(login_session)
+        if not owner_id:
+            pytest.skip("未找到 TestYan Contact，跳过 Verify 测试")
 
         # 先发送 MFA
-        send_resp = counterparty_api.send_counterparty_mfa(cp_id, "Email")
+        send_resp = counterparty_api.send_counterparty_mfa(owner_id, "Email")
         if send_resp.json().get("code") != 200:
             pytest.skip("发送 MFA 失败，跳过验证测试")
 
         # 用假验证码验证
-        logger.info(f"用假验证码 '000000' 验证 MFA")
-        verify_resp = counterparty_api.verify_counterparty_mfa(cp_id, "000000", "Email")
+        logger.info(f"用假验证码 '000000' 验证 MFA，contact_id={owner_id}")
+        verify_resp = counterparty_api.verify_counterparty_mfa(owner_id, "000000", "Email")
         assert verify_resp.status_code == 200, \
             f"verify 接口应返回 HTTP 200，实际: {verify_resp.status_code}"
 

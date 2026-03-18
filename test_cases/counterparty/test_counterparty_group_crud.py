@@ -161,7 +161,10 @@ class TestCounterpartyGroupCRUD:
         assert list_resp.status_code == 200
 
         body = list_resp.json()
-        content = body.get("content", [])
+        assert body.get("code") == 200, \
+            f"list_counterparty_groups 返回错误: code={body.get('code')}, msg={body.get('error_message')}"
+        # 响应结构：{"code":200, "data":{"content":[...]}}
+        content = body.get("data", {}).get("content", [])
         found = next((g for g in content if g.get("id") == group_id), None)
         assert found is not None, f"在 List 中未找到刚创建的 Group（id={group_id}）"
         assert found.get("name") == group_name
@@ -203,7 +206,7 @@ class TestCounterpartyGroupCRUD:
 
         # 在 List 中用新 name 验证
         list_resp = counterparty_api.list_counterparty_groups(name=new_name, size=5)
-        content = list_resp.json().get("content", [])
+        content = list_resp.json().get("data", {}).get("content", [])
         found = next((g for g in content if g.get("id") == group_id), None)
         assert found is not None, f"重命名后在 List 中未找到 Group（新 name='{new_name}'）"
 
@@ -260,7 +263,7 @@ class TestCounterpartyGroupCRUD:
 
         # 验证删除后 List 中查不到
         list_resp = counterparty_api.list_counterparty_groups(name=group_name, size=5)
-        content = list_resp.json().get("content", [])
+        content = list_resp.json().get("data", {}).get("content", [])
         still_exists = any(g.get("id") == group_id for g in content)
         assert not still_exists, f"Group 删除后仍在 List 中可查到: id={group_id}"
 
@@ -310,7 +313,7 @@ class TestCounterpartyGroupCRUD:
         list_resp = counterparty_api.list_counterparty_groups(name=keyword, size=10)
         assert list_resp.status_code == 200
 
-        content = list_resp.json().get("content", [])
+        content = list_resp.json().get("data", {}).get("content", [])
         assert len(content) > 0, f"筛选应至少返回刚创建的 Group"
 
         for g in content:
@@ -321,7 +324,7 @@ class TestCounterpartyGroupCRUD:
         non_exist_resp = counterparty_api.list_counterparty_groups(
             name="AutoTestYanNonExistGroup999999", size=5
         )
-        non_exist_content = non_exist_resp.json().get("content", [])
+        non_exist_content = non_exist_resp.json().get("data", {}).get("content", [])
         assert len(non_exist_content) == 0, "不存在的 name 应返回空列表"
 
         logger.info(f"✓ Group name 筛选验证通过")
@@ -420,10 +423,10 @@ class TestCounterpartyGroupCRUD:
         if db_cleanup:
             db_cleanup.track("counterparty", cp_id)
 
-        # 在 group 成员列表中验证
+        # 在 group 成员列表中验证（响应结构：{"code":200, "data":{"content":[...]}}）
         members_resp = counterparty_api.list_group_counterparties(group_id, size=20)
         assert members_resp.status_code == 200
-        members_content = members_resp.json().get("content", [])
+        members_content = members_resp.json().get("data", {}).get("content", [])
         found = any(m.get("id") == cp_id for m in members_content)
         assert found, f"创建时指定 group_id 后，Counterparty({cp_id}) 未出现在 Group 成员列表中"
 

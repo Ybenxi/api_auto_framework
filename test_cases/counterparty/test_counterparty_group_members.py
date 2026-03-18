@@ -90,8 +90,10 @@ class TestCounterpartyGroupMembers:
         assert resp.status_code == 200
 
         body = resp.json()
-        content = body.get("content", [])
-        total = body.get("total_elements", -1)
+        assert body.get("code") == 200, f"list_group_counterparties 返回错误: {body.get('error_message')}"
+        data_inner = body.get("data", {}) or {}
+        content = data_inner.get("content", [])
+        total = data_inner.get("total_elements", -1)
 
         assert content == [], f"空 Group 成员列表应为 []，实际: {content}"
         assert total == 0, f"空 Group total_elements 应为 0，实际: {total}"
@@ -126,7 +128,7 @@ class TestCounterpartyGroupMembers:
 
         # 验证 List 中可以查到
         list_resp = counterparty_api.list_group_counterparties(group_id, size=10)
-        content = list_resp.json().get("content", [])
+        content = list_resp.json().get("data", {}).get("content", [])
         assert len(content) == 1, f"添加 1 个 CP 后 Group 成员应为 1，实际: {len(content)}"
 
         member = content[0]
@@ -166,7 +168,7 @@ class TestCounterpartyGroupMembers:
         assert add_resp.status_code == 200
 
         list_resp = counterparty_api.list_group_counterparties(group_id, size=20)
-        content = list_resp.json().get("content", [])
+        content = list_resp.json().get("data", {}).get("content", [])
         member_ids = {m.get("id") for m in content}
 
         assert cp_id1 in member_ids, f"cp_id1={cp_id1} 不在 Group 成员中"
@@ -201,7 +203,7 @@ class TestCounterpartyGroupMembers:
         logger.info(f"第1次 Add: [{cp_id1}]")
         counterparty_api.add_counterparties_to_group(group_id, [cp_id1])
 
-        list1 = counterparty_api.list_group_counterparties(group_id, size=20).json().get("content", [])
+        list1 = counterparty_api.list_group_counterparties(group_id, size=20).json().get("data", {}).get("content", [])
         assert any(m.get("id") == cp_id1 for m in list1), "第1次 Add 后 cp_id1 应在 Group 中"
         logger.info(f"  第1次 Add 后成员: {[m.get('id') for m in list1]}")
 
@@ -209,7 +211,7 @@ class TestCounterpartyGroupMembers:
         logger.info(f"第2次 Add（全量替换）: [{cp_id2}]")
         counterparty_api.add_counterparties_to_group(group_id, [cp_id2])
 
-        list2 = counterparty_api.list_group_counterparties(group_id, size=20).json().get("content", [])
+        list2 = counterparty_api.list_group_counterparties(group_id, size=20).json().get("data", {}).get("content", [])
         member_ids2 = {m.get("id") for m in list2}
         logger.info(f"  第2次 Add 后成员: {list(member_ids2)}")
 
@@ -245,8 +247,8 @@ class TestCounterpartyGroupMembers:
         counterparty_api.add_counterparties_to_group(group_id_a, [cp_id])
         counterparty_api.add_counterparties_to_group(group_id_b, [cp_id])
 
-        content_a = counterparty_api.list_group_counterparties(group_id_a, size=10).json().get("content", [])
-        content_b = counterparty_api.list_group_counterparties(group_id_b, size=10).json().get("content", [])
+        content_a = counterparty_api.list_group_counterparties(group_id_a, size=10).json().get("data", {}).get("content", [])
+        content_b = counterparty_api.list_group_counterparties(group_id_b, size=10).json().get("data", {}).get("content", [])
 
         assert any(m.get("id") == cp_id for m in content_a), f"GroupA 中未找到 cp_id={cp_id}"
         assert any(m.get("id") == cp_id for m in content_b), f"GroupB 中未找到 cp_id={cp_id}"
@@ -291,7 +293,7 @@ class TestCounterpartyGroupMembers:
             f"移除 CP data 应为 true，实际: {remove_body.get('data')}"
 
         # 验证移除后成员列表
-        content = counterparty_api.list_group_counterparties(group_id, size=20).json().get("content", [])
+        content = counterparty_api.list_group_counterparties(group_id, size=20).json().get("data", {}).get("content", [])
         member_ids = {m.get("id") for m in content}
 
         assert cp_id1 not in member_ids, f"cp_id1={cp_id1} 应已从 Group 中移除"
@@ -356,9 +358,10 @@ class TestCounterpartyGroupMembers:
         assert resp.status_code == 200
 
         body = resp.json()
-        if "content" in body:
-            assert body["content"] == [], \
-                f"无效 Group ID 成员列表应为空，实际: {body['content']}"
+        data_inner = body.get("data", {}) or {}
+        if "content" in data_inner:
+            assert data_inner["content"] == [], \
+                f"无效 Group ID 成员列表应为空，实际: {data_inner['content']}"
             logger.info("✓ 无效 Group ID 返回空成员列表")
         else:
             assert body.get("code") != 200 or "error" in str(body).lower()
@@ -387,7 +390,7 @@ class TestCounterpartyGroupMembers:
         counterparty_api.add_counterparties_to_group(group_id, [cp_id])
 
         list_resp = counterparty_api.list_group_counterparties(group_id, size=10)
-        content = list_resp.json().get("content", [])
+        content = list_resp.json().get("data", {}).get("content", [])
         assert len(content) > 0, "应至少有 1 条成员记录"
 
         member = content[0]
