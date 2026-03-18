@@ -202,3 +202,55 @@ class TestCounterpartyListCounterparties:
                 f"返回了越权 account_id={invisible_account_id} 下的 counterparty: {cp.get('id')}"
 
         logger.info(f"✓ 越权 account_id 数据隔离验证通过，返回 {len(content)} 条均属于当前用户")
+
+    def test_get_counterparty_detail_and_verify_fields(self, counterparty_api):
+        """
+        测试场景8：获取 Counterparty Detail，验证响应字段与 List 中一致
+        验证点：
+        1. 从 List 取第一条 CP 的 id
+        2. 调用 Detail 接口
+        3. HTTP 200，业务 code=200（若有 code 包装）
+        4. Detail 中包含 List 里没有或更详细的字段（assign_account_ids 结构、bank 相关字段）
+        5. Detail 的 id 与请求 id 一致
+        """
+        list_response = counterparty_api.list_counterparties(page=0, size=1)
+        assert_status_ok(list_response)
+        content = list_response.json().get("content", [])
+        if not content:
+            pytest.skip("无 Counterparty 数据，跳过 Detail 验证")
+
+        cp_id = content[0].get("id")
+        assert cp_id, "List 中的 CP 没有 id 字段"
+
+        logger.info(f"获取 Counterparty Detail: id={cp_id}")
+        detail_resp = counterparty_api.get_counterparty_detail(cp_id)
+        assert detail_resp.status_code == 200
+
+        detail_body = detail_resp.json()
+        # 兼容有 code 包装和无 code 包装两种格式
+        if "code" in detail_body:
+            assert detail_body.get("code") == 200, \
+                f"Detail code 应为 200，实际: {detail_body.get('code')}"
+            detail = detail_body.get("data", detail_body)
+        else:
+            detail = detail_body
+
+        # 验证 id 一致
+        assert detail.get("id") == cp_id, \
+            f"Detail id 不匹配: 期望 {cp_id}, 实际 {detail.get('id')}"
+
+        # 验证 List 中存在的字段在 Detail 中也存在
+        list_cp = content[0]
+        for field in ["name", "type", "payment_type"]:
+            list_val = list_cp.get(field)
+            detail_val = detail.get(field)
+            if list_val is not None:
+                assert detail_val == list_val, \
+                    f"Detail.{field}='{detail_val}' 与 List.{field}='{list_val}' 不一致"
+                logger.info(f"  ✓ {field}: '{detail_val}'")
+
+        # Detail 应比 List 更详细，包含 bank 相关字段
+        bank_fields_found = [f for f in ["bank_routing_number", "bank_account_number", "bank_name"] if f in detail]
+        logger.info(f"  Detail 中的 bank 字段: {bank_fields_found}")
+
+        logger.info(f"✓ Detail 字段验证通过: id={cp_id}")

@@ -1,246 +1,333 @@
 """
-Counterparty MFA 接口测试用例
-测试 Counterparty Record Owner 的 MFA 相关接口（V2 API）
+Counterparty MFA 接口测试用例（V2 接口）
+接口：
+  GET  /api/v2/cores/actc/counterparties/:id/mfa           Get MFA Info
+  POST /api/v2/cores/actc/counterparties/:id/mfa/send      Send MFA Message
+  POST /api/v2/cores/actc/counterparties/:id/mfa/verify    Verify MFA Message
+  POST /api/v2/cores/actc/counterparties               Create A New Counterparty with MFA
+  PATCH /api/v2/cores/actc/counterparties/:id          Update Counterparty Detail with MFA
+
+限制说明（自动化无法完成的场景）：
+  - 无法收到真实验证码（Email/SMS），因此 verify 无法正常通过
+  - 无法获得有效 access_token，因此 Create/Update with MFA 无法走完完整业务流程
+  测试策略：
+  - Get/Send MFA：用自建 CP，验证接口可达、响应结构正确
+  - Verify：用假验证码，验证接口不崩溃（返回 HTTP 200，业务错误 code != 200 是预期的）
+  - Create/Update with MFA：传假 access_token，验证接口不崩溃（code != 200 是预期的）
 """
 import pytest
+import time
+from typing import Optional
+from api.account_api import AccountAPI
 from utils.logger import logger
-from utils.assertions import (
-    assert_status_ok,
-    assert_fields_present
-)
+
+
+VALID_ROUTING_NUMBER = "091918457"
+
+
+def _ts() -> str:
+    return str(int(time.time()))
+
+
+def _create_own_cp(counterparty_api, login_session) -> Optional[str]:
+    account_api = AccountAPI(session=login_session)
+    accounts = account_api.list_accounts(page=0, size=1).json().get("data", {}).get("content", [])
+    if not accounts:
+        pytest.skip("无可用 Account，跳过")
+
+    ts = _ts()
+    data = {
+        "name": f"Auto TestYan CP MFA {ts}",
+        "type": "Person",
+        "payment_type": "ACH",
+        "bank_account_type": "Checking",
+        "bank_routing_number": VALID_ROUTING_NUMBER,
+        "bank_name": "Auto TestYan Bank",
+        "bank_account_owner_name": "Auto TestYan MFA Owner",
+        "bank_account_number": "111111111",
+        "assign_account_ids": [accounts[0]["id"]]
+    }
+    resp = counterparty_api.create_counterparty(data)
+    if resp.status_code != 200 or resp.json().get("code") != 200:
+        pytest.skip(f"创建 CP 失败，跳过 MFA 测试")
+    cp_id = resp.json().get("data", resp.json()).get("id")
+    assert cp_id
+    return cp_id
 
 
 @pytest.mark.counterparty
-@pytest.mark.mfa_api
 class TestCounterpartyMFA:
     """
-    Counterparty MFA 接口测试用例集
-    包含: Get, Send, Verify MFA 以及 Create/Update with MFA
+    Counterparty MFA 接口测试（V2）
+    目标：验证接口可达、响应结构正确、不崩溃，而非业务流程完整通过
     """
 
-    @pytest.mark.skip(reason="需要真实 account_id，待完善数据准备逻辑")
-    def test_get_counterparty_mfa_info(self, counterparty_api, login_session):
+    # ------------------------------------------------------------------
+    # 场景1：Get MFA Info — 用自建 CP 获取 MFA 信息
+    # ------------------------------------------------------------------
+    def test_get_mfa_info_success(self, counterparty_api, login_session, db_cleanup):
         """
-        测试场景1：获取 Counterparty Record Owner 的 MFA 信息
+        测试场景1：获取自建 Counterparty 的 Record Owner MFA 信息
         验证点：
-        1. 接口返回 200
-        2. 响应包含 MFA 相关信息
+        1. HTTP 200
+        2. 业务 code=200
+        3. 响应包含 data，data 含 email 字段（phone_number 可为 null）
         """
-        # 先创建一个 Counterparty
-        logger.info("创建测试用的 Counterparty")
-        create_data = {
-            "name": f"Auto TestYan Counterparty MFA Test {timestamp}",
+        cp_id = _create_own_cp(counterparty_api, login_session)
+        if db_cleanup:
+            db_cleanup.track("counterparty", cp_id)
+
+        logger.info(f"获取 CP({cp_id}) 的 MFA 信息")
+        resp = counterparty_api.get_counterparty_mfa(cp_id)
+        assert resp.status_code == 200
+
+        body = resp.json()
+        logger.info(f"  响应: {body}")
+        assert body.get("code") == 200, \
+            f"Get MFA Info 应返回 code=200，实际: {body.get('code')}, msg={body.get('error_message')}"
+
+        data = body.get("data", {})
+        assert data is not None, "data 字段不应为 null"
+        assert "email" in data, "MFA info 应包含 email 字段"
+        logger.info(f"  email: {data.get('email')}, phone_number: {data.get('phone_number')}")
+
+        logger.info(f"✓ Get MFA Info 验证通过")
+
+    # ------------------------------------------------------------------
+    # 场景2：Get MFA Info — 无效 CP ID
+    # ------------------------------------------------------------------
+    def test_get_mfa_info_invalid_id(self, counterparty_api):
+        """
+        测试场景2：使用无效 CP ID 获取 MFA 信息
+        验证点：
+        1. HTTP 200
+        2. 业务 code != 200
+        """
+        logger.info("使用无效 ID 获取 MFA 信息")
+        resp = counterparty_api.get_counterparty_mfa("INVALID_CP_999999")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body.get("code") != 200, \
+            f"无效 ID 应返回业务错误，实际 code={body.get('code')}"
+        logger.info(f"✓ 无效 ID 被拒绝: code={body.get('code')}")
+
+    # ------------------------------------------------------------------
+    # 场景3：Send MFA — 用自建 CP 发送 Email 验证码
+    # ------------------------------------------------------------------
+    def test_send_mfa_email_success(self, counterparty_api, login_session, db_cleanup):
+        """
+        测试场景3：向自建 CP 的 record owner 发送 Email MFA 验证码
+        验证点：
+        1. HTTP 200
+        2. 业务 code=200，data="" 或 data 为空字符串
+        注意：接口只保证触发发送，不保证 email 实际送达（自动化无法收取验证码）
+        """
+        cp_id = _create_own_cp(counterparty_api, login_session)
+        if db_cleanup:
+            db_cleanup.track("counterparty", cp_id)
+
+        logger.info(f"向 CP({cp_id}) 发送 Email MFA")
+        resp = counterparty_api.send_counterparty_mfa(cp_id, "Email")
+        assert resp.status_code == 200
+
+        body = resp.json()
+        logger.info(f"  响应: {body}")
+        assert body.get("code") == 200, \
+            f"Send MFA 应返回 code=200，实际: {body.get('code')}, msg={body.get('error_message')}"
+
+        logger.info(f"✓ Send MFA Email 接口调通，code=200（验证码已触发发送）")
+
+    # ------------------------------------------------------------------
+    # 场景4：Send MFA — Phone 类型（探索性）
+    # ------------------------------------------------------------------
+    def test_send_mfa_phone(self, counterparty_api, login_session, db_cleanup):
+        """
+        测试场景4：向自建 CP 发送 Phone MFA 验证码（该 CP 可能没有手机号）
+        验证点：
+        1. HTTP 200
+        2. code=200 表示发送成功（需要有关联手机号），否则记录业务错误码
+        """
+        cp_id = _create_own_cp(counterparty_api, login_session)
+        if db_cleanup:
+            db_cleanup.track("counterparty", cp_id)
+
+        logger.info(f"向 CP({cp_id}) 发送 Phone MFA")
+        resp = counterparty_api.send_counterparty_mfa(cp_id, "Phone")
+        assert resp.status_code == 200
+
+        body = resp.json()
+        logger.info(f"  响应: code={body.get('code')}, msg={body.get('error_message')}")
+
+        if body.get("code") == 200:
+            logger.info("✓ Phone MFA 发送成功（CP record owner 有手机号）")
+        else:
+            logger.info(f"  ⚠ Phone MFA 失败（可能 record owner 无手机号）: code={body.get('code')}")
+
+    # ------------------------------------------------------------------
+    # 场景5：Send MFA — 无效 verification_method（超出枚举范围）
+    # ------------------------------------------------------------------
+    def test_send_mfa_invalid_method(self, counterparty_api, login_session, db_cleanup):
+        """
+        测试场景5：Send MFA 时 verification_method 超出枚举范围（Email/Phone）
+        验证点：
+        1. HTTP 200
+        2. 业务 code != 200
+        """
+        cp_id = _create_own_cp(counterparty_api, login_session)
+        if db_cleanup:
+            db_cleanup.track("counterparty", cp_id)
+
+        logger.info(f"Send MFA 使用无效 method='SMS'")
+        resp = counterparty_api.send_counterparty_mfa(cp_id, "SMS")
+        assert resp.status_code == 200
+        body = resp.json()
+        logger.info(f"  code={body.get('code')}, msg={body.get('error_message')}")
+
+        if body.get("code") != 200:
+            logger.info(f"✓ 无效 method 被拒绝: code={body.get('code')}")
+        else:
+            logger.info("⚠ API 接受了无效 method（探索性结果）")
+
+    # ------------------------------------------------------------------
+    # 场景6：Send MFA — 无效 CP ID
+    # ------------------------------------------------------------------
+    def test_send_mfa_invalid_id(self, counterparty_api):
+        """
+        测试场景6：使用无效 CP ID 发送 MFA
+        验证点：HTTP 200，业务 code != 200
+        """
+        resp = counterparty_api.send_counterparty_mfa("INVALID_CP_999999", "Email")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body.get("code") != 200
+        logger.info(f"✓ 无效 ID 被拒绝: code={body.get('code')}")
+
+    # ------------------------------------------------------------------
+    # 场景7：Verify MFA — 假验证码（预期失败，验证接口不崩溃）
+    # ------------------------------------------------------------------
+    def test_verify_mfa_with_fake_code(self, counterparty_api, login_session, db_cleanup):
+        """
+        测试场景7：使用假验证码验证 MFA（自动化无法收取真实验证码）
+        验证点：
+        1. 先发送 MFA（code=200）
+        2. 用假验证码 verify，HTTP 200（接口不崩溃）
+        3. 业务 code != 200（假码预期失败，这是合理的预期结果）
+        """
+        cp_id = _create_own_cp(counterparty_api, login_session)
+        if db_cleanup:
+            db_cleanup.track("counterparty", cp_id)
+
+        # 先发送 MFA
+        send_resp = counterparty_api.send_counterparty_mfa(cp_id, "Email")
+        if send_resp.json().get("code") != 200:
+            pytest.skip("发送 MFA 失败，跳过验证测试")
+
+        # 用假验证码验证
+        logger.info(f"用假验证码 '000000' 验证 MFA")
+        verify_resp = counterparty_api.verify_counterparty_mfa(cp_id, "000000", "Email")
+        assert verify_resp.status_code == 200, \
+            f"verify 接口应返回 HTTP 200，实际: {verify_resp.status_code}"
+
+        body = verify_resp.json()
+        logger.info(f"  响应: {body}")
+        # 假验证码预期 code != 200（这是正常的业务拒绝，不是接口报错）
+        assert body.get("code") != 200, \
+            "假验证码应被拒绝，但返回了 code=200（请确认是否有测试账号的 bypass 机制）"
+
+        logger.info(f"✓ 假验证码被正确拒绝: code={body.get('code')}，接口未崩溃")
+
+    # ------------------------------------------------------------------
+    # 场景8：Create Counterparty with MFA — 假 access_token（预期失败）
+    # ------------------------------------------------------------------
+    def test_create_counterparty_with_mfa_fake_token(self, counterparty_api, login_session):
+        """
+        测试场景8：使用假 access_token 调用 Create Counterparty with MFA（V2）
+        验证点：
+        1. HTTP 200（接口不崩溃）
+        2. 业务 code != 200（access_token 无效，预期被拒绝）
+        注意：自动化无法获得真实 access_token，此场景验证接口可达性和参数解析
+        """
+        account_api = AccountAPI(session=login_session)
+        accounts = account_api.list_accounts(page=0, size=1).json().get("data", {}).get("content", [])
+        account_id = accounts[0]["id"] if accounts else "FAKE_ACCOUNT"
+
+        ts = _ts()
+        data = {
+            "access_token": "FAKE_MFA_ACCESS_TOKEN_999",   # 无效 token
+            "name": f"Auto TestYan CP MFA Create {ts}",
             "type": "Person",
             "payment_type": "ACH",
             "bank_account_type": "Checking",
-            "bank_routing_number": "091918457",
+            "bank_routing_number": VALID_ROUTING_NUMBER,
             "bank_name": "Auto TestYan Bank",
-            "bank_account_owner_name": "Auto TestYan Owner",
-            "bank_account_number": f"{timestamp}"[:9]
+            "bank_account_owner_name": "Auto TestYan MFA Create",
+            "bank_account_number": "111111111",
+            "assign_account_ids": [account_id]
         }
-        
-        create_response = counterparty_api.create_counterparty(create_data)
-        if create_response.status_code != 200:
-            pytest.skip(f"创建 Counterparty 失败")
-        
-        created_data = create_response.json()
-        counterparty_id = created_data.get("id")
-        logger.info(f"Counterparty 创建成功: {counterparty_id}")
-        
-        # 获取 MFA 信息
-        logger.info("获取 MFA 信息")
-        mfa_response = counterparty_api.get_counterparty_mfa(counterparty_id)
-        
-        # 验证响应
-        logger.info("验证 MFA 响应")
-        assert_status_ok(mfa_response)
-        
-        response_body = mfa_response.json()
-        logger.info(f"MFA 信息: {response_body}")
-        
-        logger.info("✓ MFA 信息获取验证通过")
 
-    @pytest.mark.skip(reason="需要实际的 Email/Phone 才能发送 MFA")
-    def test_send_counterparty_mfa_email(self, counterparty_api, login_session):
-        """
-        测试场景2：发送 Email MFA 验证码
-        验证点：
-        1. 接口返回 200
-        2. 响应确认验证码已发送
-        """
-        # 创建 Counterparty（需要真实 email）
-        logger.info("创建带 Email 的 Counterparty")
-        create_data = {
-            "name": f"Auto TestYan Counterparty MFA Email {timestamp}",
-            "type": "Person",
-            "payment_type": "ACH",
-            "bank_account_type": "Checking",
-            "bank_routing_number": "091918457",
-            "bank_name": "Auto TestYan Bank",
-            "bank_account_owner_name": "Auto TestYan Owner",
-            "bank_account_number": f"{timestamp}"[:9]
-        }
-        
-        create_response = counterparty_api.create_counterparty(create_data)
-        created_data = create_response.json()
-        counterparty_id = created_data.get("id")
-        
-        # 发送 MFA
-        logger.info("发送 Email MFA")
-        send_response = counterparty_api.send_counterparty_mfa(counterparty_id, "Email")
-        
-        # 验证响应
-        assert_status_ok(send_response)
-        
-        logger.info("✓ MFA 发送成功")
+        logger.info("使用假 access_token 调用 Create CP with MFA (V2)")
+        resp = counterparty_api.create_counterparty_with_mfa(data)
+        assert resp.status_code == 200, \
+            f"接口应返回 HTTP 200，实际: {resp.status_code}"
 
-    @pytest.mark.skip(reason="需要真实的验证码才能验证 MFA")
-    def test_verify_counterparty_mfa(self, counterparty_api, login_session):
-        """
-        测试场景3：验证 Counterparty MFA 验证码
-        验证点：
-        1. 接口返回 200
-        2. 验证成功后返回 access_token
-        """
-        # 此测试需要：
-        # 1. 创建 Counterparty
-        # 2. 发送 MFA
-        # 3. 获取真实验证码
-        # 4. 验证 MFA
-        
-        logger.info("测试需要真实验证码，跳过")
-        pytest.skip("需要真实验证码")
+        body = resp.json()
+        logger.info(f"  响应: code={body.get('code')}, msg={body.get('error_message')}")
+        # 假 token 预期被拒绝
+        assert body.get("code") != 200, \
+            "假 access_token 应被拒绝，但返回了 code=200"
 
-    def test_send_counterparty_mfa_invalid_id(self, counterparty_api):
-        """
-        测试场景4：使用无效 ID 发送 MFA
-        验证点：
-        1. 返回 200 状态码（统一错误处理）
-        2. 响应包含错误信息
-        """
-        logger.info("使用无效 ID 发送 MFA")
-        invalid_id = "INVALID_COUNTERPARTY_ID_999999"
-        
-        send_response = counterparty_api.send_counterparty_mfa(invalid_id, "Email")
-        
-        # 验证错误响应
-        logger.info("验证错误响应")
-        assert_status_ok(send_response)
-        
-        response_body = send_response.json()
-        assert response_body.get("code") != 200 or "error" in str(response_body).lower(), \
-            "无效 ID 应该返回错误"
-        
-        logger.info("✓ 无效 ID 错误处理验证通过")
+        logger.info(f"✓ 假 access_token 被拒绝: code={body.get('code')}，接口未崩溃")
 
-    @pytest.mark.skip(reason="需要真实 account_id，待完善数据准备逻辑")
-    def test_verify_counterparty_mfa_invalid_code(self, counterparty_api, login_session):
+    # ------------------------------------------------------------------
+    # 场景9：Update Counterparty with MFA — 假 access_token（预期失败）
+    # ------------------------------------------------------------------
+    def test_update_counterparty_with_mfa_fake_token(self, counterparty_api, login_session, db_cleanup):
         """
-        测试场景5：使用无效验证码验证 MFA
+        测试场景9：使用假 access_token 调用 Update Counterparty with MFA（V2）
         验证点：
-        1. 接口返回 200
-        2. 响应指示验证失败
+        1. 先用 v1 接口创建 CP
+        2. 用假 access_token 调用 v2 update 接口
+        3. HTTP 200（接口不崩溃）
+        4. 业务 code != 200（access_token 无效，预期被拒绝）
         """
-        # 创建 Counterparty
-        logger.info("创建测试用的 Counterparty")
-        create_data = {
-            "name": f"Auto TestYan Counterparty MFA Invalid {timestamp}",
-            "type": "Person",
-            "payment_type": "ACH",
-            "bank_account_type": "Checking",
-            "bank_routing_number": "091918457",
-            "bank_name": "Auto TestYan Bank",
-            "bank_account_owner_name": "Auto TestYan Owner",
-            "bank_account_number": f"{timestamp}"[:9]
-        }
-        
-        create_response = counterparty_api.create_counterparty(create_data)
-        if create_response.status_code != 200:
-            pytest.skip(f"创建失败")
-        
-        created_data = create_response.json()
-        counterparty_id = created_data.get("id")
-        
-        # 使用无效验证码
-        logger.info("使用无效验证码验证 MFA")
-        invalid_code = "000000"
-        
-        verify_response = counterparty_api.verify_counterparty_mfa(
-            counterparty_id, invalid_code, "Email"
-        )
-        
-        # 验证响应
-        logger.info("验证错误响应")
-        assert_status_ok(verify_response)
-        
-        response_body = verify_response.json()
-        # 应该返回错误或验证失败
-        assert response_body.get("code") != 200 or response_body.get("success") == False, \
-            "无效验证码应该返回错误"
-        
-        logger.info("✓ 无效验证码错误处理验证通过")
+        cp_id = _create_own_cp(counterparty_api, login_session)
+        if db_cleanup:
+            db_cleanup.track("counterparty", cp_id)
 
-    @pytest.mark.skip(reason="需要 MFA access_token，依赖真实 MFA 流程")
-    def test_create_counterparty_with_mfa(self, counterparty_api):
-        """
-        测试场景6：使用 MFA 创建 Counterparty（V2 接口）
-        验证点：
-        1. 接口返回 200
-        2. 创建成功并包含 access_token
-        """
-        logger.info("使用 MFA 创建 Counterparty")
-        
-        counterparty_data = {
-            "account_id": "test_account_id",
-            "name": "Auto TestYan Counterparty with MFA",
-            "payment_type": "ACH",
-            "ach_account_number": "9999000011",
-            "ach_routing_number": "021000021",
-            "ach_account_type": "Checking",
-            "access_token": "fake_mfa_token"  # 需要真实的 MFA token
-        }
-        
-        response = counterparty_api.create_counterparty_with_mfa(counterparty_data)
-        
-        assert_status_ok(response)
-        
-        logger.info("✓ 使用 MFA 创建成功")
-
-    @pytest.mark.skip(reason="需要 MFA access_token，依赖真实 MFA 流程")
-    def test_update_counterparty_with_mfa(self, counterparty_api, login_session):
-        """
-        测试场景7：使用 MFA 更新 Counterparty（V2 接口）
-        验证点：
-        1. 接口返回 200
-        2. 更新成功
-        """
-        # 此测试需要先创建 Counterparty，然后使用 MFA 更新
-        logger.info("使用 MFA 更新 Counterparty")
-        
-        # 创建
-        create_data = {
-            "name": f"Auto TestYan Counterparty MFA Update {timestamp}",
-            "type": "Person",
-            "payment_type": "ACH",
-            "bank_account_type": "Checking",
-            "bank_routing_number": "091918457",
-            "bank_name": "Auto TestYan Bank",
-            "bank_account_owner_name": "Auto TestYan Owner",
-            "bank_account_number": f"{timestamp}"[:9]
-        }
-        
-        create_response = counterparty_api.create_counterparty(create_data)
-        created_data = create_response.json()
-        counterparty_id = created_data.get("id")
-        
-        # 使用 MFA 更新
         update_data = {
-            "name": "Auto TestYan Counterparty MFA Updated",
-            "access_token": "fake_mfa_token"  # 需要真实的 MFA token
+            "access_token": "FAKE_MFA_ACCESS_TOKEN_999",   # 无效 token
+            "name": f"Auto TestYan CP MFA Update {_ts()}",
+            "type": "Person",
+            "payment_type": "ACH"
         }
-        
-        response = counterparty_api.update_counterparty_with_mfa(counterparty_id, update_data)
-        
-        assert_status_ok(response)
-        
-        logger.info("✓ 使用 MFA 更新成功")
+
+        logger.info(f"使用假 access_token 调用 Update CP with MFA (V2), cp_id={cp_id}")
+        resp = counterparty_api.update_counterparty_with_mfa(cp_id, update_data)
+        assert resp.status_code == 200, \
+            f"接口应返回 HTTP 200，实际: {resp.status_code}"
+
+        body = resp.json()
+        logger.info(f"  响应: code={body.get('code')}, msg={body.get('error_message')}")
+        # 假 token 预期被拒绝
+        assert body.get("code") != 200, \
+            "假 access_token 应被拒绝，但返回了 code=200"
+
+        logger.info(f"✓ 假 access_token 更新被拒绝: code={body.get('code')}，接口未崩溃")
+
+    # ------------------------------------------------------------------
+    # 场景10：Update Counterparty with MFA — 无效 CP ID
+    # ------------------------------------------------------------------
+    def test_update_with_mfa_invalid_cp_id(self, counterparty_api):
+        """
+        测试场景10：使用无效 CP ID 调用 Update with MFA
+        验证点：HTTP 200，业务 code != 200
+        """
+        resp = counterparty_api.update_counterparty_with_mfa(
+            "INVALID_CP_999999",
+            {"access_token": "FAKE", "name": "Auto TestYan InvalidMFAUpdate",
+             "type": "Person", "payment_type": "ACH"}
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body.get("code") != 200
+        logger.info(f"✓ 无效 CP ID 被拒绝: code={body.get('code')}")

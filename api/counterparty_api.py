@@ -87,6 +87,20 @@ class CounterpartyAPI:
         response = self.session.post(url, json=counterparty_data)
         return response
 
+    def get_counterparty_detail(self, counterparty_id: str) -> requests.Response:
+        """
+        获取 Counterparty 详情
+
+        Args:
+            counterparty_id: Counterparty ID
+
+        Returns:
+            requests.Response: 响应对象
+        """
+        url = self.config.get_full_url(f"/counterparties/{counterparty_id}")
+        response = self.session.get(url)
+        return response
+
     def update_counterparty(self, counterparty_id: str, update_data: dict) -> requests.Response:
         """
         更新 Counterparty 信息
