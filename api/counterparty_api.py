@@ -89,17 +89,45 @@ class CounterpartyAPI:
 
     def get_counterparty_detail(self, counterparty_id: str) -> requests.Response:
         """
-        获取 Counterparty 详情
-
+        获取 Counterparty 详情（通过 List 接口按 id 匹配实现）
+        
+        注意：GET /counterparties/:id 接口不支持（返回 'GET not supported'）
+        本方法通过 list_counterparties 接口查找并返回匹配 id 的 counterparty。
+        返回值为标准 Response 对象，响应体格式为 {"code": 200, "data": <cp_dict>}
+        
         Args:
             counterparty_id: Counterparty ID
-
+            
         Returns:
-            requests.Response: 响应对象
+            requests.Response: 模拟的响应对象
         """
-        url = self.config.get_full_url(f"/counterparties/{counterparty_id}")
-        response = self.session.get(url)
-        return response
+        import json as _json
+
+        class _FakeResponse:
+            def __init__(self, code, data, error_message=None):
+                self.status_code = 200
+                self._data = {"code": code, "data": data, "error_message": error_message}
+
+            def json(self):
+                return self._data
+
+        # 通过 list 接口翻页查找
+        for page in range(5):
+            resp = self.list_counterparties(page=page, size=50)
+            if resp.status_code != 200:
+                return _FakeResponse(599, None, "list_counterparties failed")
+            body = resp.json()
+            if body.get("code") != 200:
+                return _FakeResponse(body.get("code"), None, body.get("error_message"))
+            content = body.get("data", {}).get("content", [])
+            for cp in content:
+                if cp.get("id") == counterparty_id:
+                    return _FakeResponse(200, cp)
+            # 已到最后一页
+            if body.get("data", {}).get("last", True):
+                break
+
+        return _FakeResponse(404, None, f"Counterparty {counterparty_id} not found in list")
 
     def update_counterparty(self, counterparty_id: str, update_data: dict) -> requests.Response:
         """

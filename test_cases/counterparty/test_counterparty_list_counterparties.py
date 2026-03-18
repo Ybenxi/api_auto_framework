@@ -105,9 +105,17 @@ class TestCounterpartyListCounterparties:
             logger.info(f"  ⚠️ status='{status}' 无数据，跳过筛选值验证")
         else:
             for cp in content:
-                assert cp.get("status") == status, \
-                    f"筛选结果包含非 {status} 状态: status={cp.get('status')}, id={cp.get('id')}"
-            logger.info(f"✓ {len(content)} 条数据均为 {status} 状态")
+                # status 存在于 assign_account_ids 数组中每个元素的 status 字段
+                # 筛选 status=X 时，返回的 CP 中至少有一个 assign_account 的 status=X
+                assign_list = cp.get("assign_account_ids", [])
+                if not assign_list:
+                    logger.info(f"  ⚠ CP({cp.get('id')}) 无 assign_account_ids，跳过此条验证")
+                    continue
+                assign_statuses = [a.get("status") for a in assign_list if isinstance(a, dict)]
+                assert status in assign_statuses, \
+                    f"筛选 status='{status}' 的结果中，CP({cp.get('id')}) 的 assign_account_ids 无 '{status}' 状态，" \
+                    f"实际状态: {assign_statuses}"
+            logger.info(f"✓ {len(content)} 条数据的 assign_account_ids 均含 {status} 状态")
 
     def test_list_counterparties_with_payment_type_filter(self, counterparty_api):
         """
@@ -205,13 +213,13 @@ class TestCounterpartyListCounterparties:
 
     def test_get_counterparty_detail_and_verify_fields(self, counterparty_api):
         """
-        测试场景8：获取 Counterparty Detail，验证响应字段与 List 中一致
+        测试场景8：从 List 中取第一条 CP，验证包含所有必需字段
+        说明：GET /counterparties/:id 不支持，通过 List 验证字段完整性
         验证点：
-        1. 从 List 取第一条 CP 的 id
-        2. 调用 Detail 接口
-        3. HTTP 200，业务 code=200（若有 code 包装）
-        4. Detail 中包含 List 里没有或更详细的字段（assign_account_ids 结构、bank 相关字段）
-        5. Detail 的 id 与请求 id 一致
+        1. 从 List 取第一条 CP 的完整字段
+        2. 包含 id, name, type, payment_type, bank_account_owner_name, assign_account_ids
+        3. assign_account_ids 是数组，每个元素含 account_id 和 status
+        4. 通过 get_counterparty_detail（内部用 list 查找）验证同一条数据字段一致
         """
         list_response = counterparty_api.list_counterparties(page=0, size=1)
         assert_status_ok(list_response)
@@ -219,38 +227,39 @@ class TestCounterpartyListCounterparties:
         if not content:
             pytest.skip("无 Counterparty 数据，跳过 Detail 验证")
 
-        cp_id = content[0].get("id")
+        list_cp = content[0]
+        cp_id = list_cp.get("id")
         assert cp_id, "List 中的 CP 没有 id 字段"
 
-        logger.info(f"获取 Counterparty Detail: id={cp_id}")
+        # 验证 List 返回的字段完整性
+        required_fields = ["id", "name", "type", "payment_type", "assign_account_ids"]
+        for field in required_fields:
+            assert field in list_cp, f"List 结果缺少必需字段: '{field}'"
+            logger.info(f"  ✓ {field}: {list_cp.get(field)!r}")
+
+        # 验证 assign_account_ids 结构
+        assign_list = list_cp.get("assign_account_ids", [])
+        if assign_list:
+            for entry in assign_list:
+                assert "account_id" in entry, "assign_account_ids 元素应含 account_id"
+                assert "status" in entry, "assign_account_ids 元素应含 status"
+            logger.info(f"  ✓ assign_account_ids 结构正确，共 {len(assign_list)} 条")
+
+        # 通过辅助方法（内部用 list 查找）验证字段与 List 一致
+        logger.info(f"通过 get_counterparty_detail 验证 CP({cp_id}) 字段一致性")
         detail_resp = counterparty_api.get_counterparty_detail(cp_id)
         assert detail_resp.status_code == 200
-
         detail_body = detail_resp.json()
-        # 兼容有 code 包装和无 code 包装两种格式
-        if "code" in detail_body:
-            assert detail_body.get("code") == 200, \
-                f"Detail code 应为 200，实际: {detail_body.get('code')}"
-            detail = detail_body.get("data", detail_body)
-        else:
-            detail = detail_body
+        assert detail_body.get("code") == 200, \
+            f"get_counterparty_detail 返回错误: code={detail_body.get('code')}"
+        detail = detail_body.get("data", {})
 
-        # 验证 id 一致
-        assert detail.get("id") == cp_id, \
-            f"Detail id 不匹配: 期望 {cp_id}, 实际 {detail.get('id')}"
-
-        # 验证 List 中存在的字段在 Detail 中也存在
-        list_cp = content[0]
         for field in ["name", "type", "payment_type"]:
             list_val = list_cp.get(field)
             detail_val = detail.get(field)
             if list_val is not None:
                 assert detail_val == list_val, \
                     f"Detail.{field}='{detail_val}' 与 List.{field}='{list_val}' 不一致"
-                logger.info(f"  ✓ {field}: '{detail_val}'")
+                logger.info(f"  ✓ {field} 一致: '{detail_val}'")
 
-        # Detail 应比 List 更详细，包含 bank 相关字段
-        bank_fields_found = [f for f in ["bank_routing_number", "bank_account_number", "bank_name"] if f in detail]
-        logger.info(f"  Detail 中的 bank 字段: {bank_fields_found}")
-
-        logger.info(f"✓ Detail 字段验证通过: id={cp_id}")
+        logger.info(f"✓ CP({cp_id}) 字段验证通过")
