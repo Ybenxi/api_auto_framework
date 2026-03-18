@@ -675,6 +675,88 @@ def get_tracked_ids(module: str) -> list:
     return test_created_ids.get(module, [])
 
 
+def _analyze_failure(longrepr: str, extra_data: dict) -> str:
+    """
+    根据 pytest 的 longrepr（失败信息）和接口流量数据，自动分析失败原因，
+    返回简明扼要的中文分析结论。
+    """
+    text = longrepr or ""
+    lines = text.splitlines()
+
+    # ── 提取 AssertionError 信息 ──────────────────────────────────
+    assert_lines = [l.strip() for l in lines if l.strip().startswith("AssertionError")]
+    assert_msg = assert_lines[0] if assert_lines else ""
+
+    # ── 提取最后一条 assert 语句（E  assert ... 行）────────────────
+    e_lines = [l.strip() for l in lines if l.strip().startswith("E ") or l.strip().startswith("E\t")]
+    e_msg = " | ".join(e_lines[:5]) if e_lines else ""
+
+    # ── 提取接口响应信息 ──────────────────────────────────────────
+    resp = {}
+    if extra_data and extra_data.get("response"):
+        resp = extra_data["response"].get("body", {}) or {}
+    resp_code = resp.get("code") if isinstance(resp, dict) else None
+    resp_err  = resp.get("error_message") if isinstance(resp, dict) else None
+    http_code = extra_data.get("response", {}).get("status_code") if extra_data else None
+
+    # ── 规则匹配，输出简明结论 ─────────────────────────────────────
+
+    # 1. pytest.skip 被触发
+    if "Skipped" in text or "skip" in text.lower() and "pytest.skip" in text:
+        return "测试被 pytest.skip 跳过，不计入失败"
+
+    # 2. HTTP 连接 / 超时
+    if any(k in text for k in ["ConnectionError", "ConnectTimeout", "ReadTimeout", "MaxRetryError"]):
+        return "网络连接失败或请求超时，可能是环境不可达或网络不稳定"
+
+    # 3. 接口返回非预期业务 code
+    if resp_code is not None and resp_code != 200:
+        err_hint = f"，错误信息：「{resp_err}」" if resp_err else ""
+        return f"API 业务层返回错误 code={resp_code}{err_hint}"
+
+    # 4. HTTP 状态码非 200
+    if http_code and http_code != 200:
+        return f"HTTP 请求失败，状态码 {http_code}（期望 200）"
+
+    # 5. 字段缺失断言
+    if "缺少必需字段" in text or "missing" in text.lower() or "not in" in e_msg.lower():
+        field_match = re.search(r"['\"]([a-z_]+)['\"]", e_msg or text)
+        field_hint = f"（字段：{field_match.group(1)}）" if field_match else ""
+        return f"响应中缺少预期字段{field_hint}"
+
+    # 6. 值不匹配（期望 vs 实际）
+    if "期望" in text and "实际" in text:
+        # 优先匹配「期望 XXX，实际 YYY」或「期望「XXX」，实际「YYY」」两种常见格式
+        m = re.search(r"期望\s*「([^」]{1,80})」[，,]?\s*实际\s*「([^」]{1,80})」", text)
+        if not m:
+            m = re.search(r"期望\s+'([^']{1,80})'\s*[，,]?\s*实际\s+'([^']{1,80})'", text)
+        if not m:
+            # 无引号：期望后取到逗号/换行，实际后取到逗号/换行/句末
+            m = re.search(r"期望\s+([^\n，,。]{1,60})[，,]\s*实际\s+([^\n，,。]{1,60})", text)
+        if m:
+            return f"字段值不匹配：期望「{m.group(1).strip()}」，实际「{m.group(2).strip()}」"
+        return "字段值与预期不一致"
+
+    # 7. assert False / assert x == y
+    if e_msg:
+        # 截取关键部分，避免太长
+        short = e_msg[:200].replace("\n", " ").strip()
+        return f"断言失败：{short}"
+
+    # 8. AssertionError 兜底
+    if assert_msg:
+        return assert_msg[:200]
+
+    # 9. 异常类型兜底
+    exc_match = re.search(r"([\w.]+Error|[\w.]+Exception)[:\s]+(.*)", text)
+    if exc_match:
+        return f"{exc_match.group(1)}：{exc_match.group(2)[:150].strip()}"
+
+    # 10. 完全兜底
+    last_lines = [l.strip() for l in lines if l.strip()]
+    return last_lines[-1][:200] if last_lines else "未知失败原因，请查看失败详情"
+
+
 # --- 流量捕获逻辑（增强版 - 防止重复记录）---
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
 def pytest_runtest_makereport(item, call):
@@ -713,7 +795,14 @@ def pytest_runtest_makereport(item, call):
         
         # 提取场景编号（用于排序）
         scenario_number = extract_scenario_number(docstring_summary_zh)
-        
+
+        # 提取失败原因和智能分析（仅失败用例）
+        failure_reason = None
+        failure_analysis = None
+        if report.outcome == "failed" and report.longrepr:
+            failure_reason = str(report.longrepr)
+            failure_analysis = _analyze_failure(failure_reason, extra_data)
+
         # 构建测试结果数据
         test_data = {
             "nodeid": item.nodeid,
@@ -729,6 +818,8 @@ def pytest_runtest_makereport(item, call):
             "docstring_summary": docstring_summary_zh,  # 保持向后兼容
             "scenario_number": scenario_number,  # 用于排序
             "api_path": api_path,
+            "failure_reason": failure_reason,
+            "failure_analysis": failure_analysis,
             "extra": extra_data
         }
         
