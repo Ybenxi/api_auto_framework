@@ -195,73 +195,97 @@ st.markdown("---")
 st.subheader("🗑️ 测试脏数据清理")
 st.caption("清理所有名称以 **Auto TestYan** 开头的测试数据（counterparty、contact、sub_account、fbo_account 等），操作前先备份。")
 
-def _get_cleanup_stats():
-    """扫描并返回 (stats_dict, total_count, error_msg)"""
-    try:
-        import sys
-        sys.path.insert(0, str(project_root))
-        from dao.db_manager import DBManager
-        from utils.data_cleanup import DataCleanup
-        from config.config import config as _cfg
+# 使用独立 Python 脚本通过 subprocess 执行，避免 Streamlit 进程路径污染
+_VENV_PYTHON = str(project_root / ".venv" / "bin" / "python3")
+import os as _os
+if not _os.path.exists(_VENV_PYTHON):
+    _VENV_PYTHON = "python3"
 
-        db_config = _cfg.db_config
-        if db_config.get("host") == "localhost":
-            return None, 0, "数据库未配置（使用默认 localhost），请在 .env 配置数据库连接信息"
+def _run_cleanup_script(dry_run: bool):
+    """
+    通过 subprocess 调用独立清理脚本，返回 (stats_json_str, error_msg)
+    dry_run=True：只统计不删除；dry_run=False：执行实际清理
+    """
+    script = f"""
+import sys, json
+sys.path.insert(0, {repr(str(project_root))})
+from dao.db_manager import DBManager
+from utils.data_cleanup import DataCleanup
+from config.config import config
 
-        db = DBManager(db_config)
-        cleaner = DataCleanup(db)
-        # 添加 counterparty_group 规则（默认未内置）
-        cleaner.CLEANUP_RULES['counterparty_group'] = {
-            'main_table': 'actc.t_share_recipient_group',
-            'id_field': 'id',
-            'related_tables': [{'table': 'actc.t_share_recipient_group_relation', 'foreign_key': 'recipient_group_id'}],
-            'name_field': 'name'
-        }
+db_config = config.db_config
+if db_config.get("host") == "localhost":
+    print(json.dumps({{"error": "数据库未配置（localhost），请在 .env 配置数据库连接信息"}}))
+    sys.exit(0)
 
-        stats = cleaner.cleanup_all_test_data(dry_run=True)
-        total = sum(sum(s.values()) for s in stats.values())
-        return stats, total, None
-    except Exception as e:
-        return None, 0, str(e)
-
-def _do_cleanup():
-    """执行实际清理，返回 (actual_total, backup_tag, error_msg)"""
-    try:
-        import sys
-        from datetime import datetime as _dt
-        sys.path.insert(0, str(project_root))
-        from dao.db_manager import DBManager
-        from utils.data_cleanup import DataCleanup
-        from config.config import config as _cfg
-
-        db_config = _cfg.db_config
-        db = DBManager(db_config)
-        cleaner = DataCleanup(db)
-        cleaner.CLEANUP_RULES['counterparty_group'] = {
-            'main_table': 'actc.t_share_recipient_group',
-            'id_field': 'id',
-            'related_tables': [{'table': 'actc.t_share_recipient_group_relation', 'foreign_key': 'recipient_group_id'}],
-            'name_field': 'name'
-        }
-
-        # 备份
-        date_str = _dt.now().strftime("%m%d_%H%M")
-        backup_sql = f"""
+db = DBManager(db_config)
+cleaner = DataCleanup(db)
+cleaner.CLEANUP_RULES['counterparty_group'] = {{
+    'main_table': 'actc.t_share_recipient_group',
+    'id_field': 'id',
+    'related_tables': [{{'table': 'actc.t_share_recipient_group_relation', 'foreign_key': 'recipient_group_id'}}],
+    'name_field': 'name'
+}}
+dry_run = {str(dry_run)}
+if not dry_run:
+    from datetime import datetime
+    date_str = datetime.now().strftime("%m%d_%H%M")
+    backup_sql = f\"\"\"
 SELECT public.backup_tables_daily(
     ARRAY['t_share_recipient', 't_share_recipient_group',
           'contact', 't_share_sub_account', 't_share_fbo_account'],
-    '{date_str}',
+    '{{date_str}}',
     ARRAY['actc']
 );
-"""
+\"\"\"
+    try:
         db.execute_query(backup_sql)
+        backup_tag = date_str
+    except Exception as be:
+        print(json.dumps({{"error": f"备份失败: {{be}}"}}))
+        sys.exit(0)
+else:
+    backup_tag = None
 
-        # 执行清理
-        actual_stats = cleaner.cleanup_all_test_data(dry_run=False)
-        actual_total = sum(sum(s.values()) for s in actual_stats.values())
-        return actual_total, date_str, None
-    except Exception as e:
-        return 0, None, str(e)
+stats = cleaner.cleanup_all_test_data(dry_run=dry_run)
+total = sum(sum(s.values()) for s in stats.values())
+print(json.dumps({{"stats": stats, "total": total, "backup_tag": backup_tag}}))
+"""
+    result = subprocess.run(
+        [_VENV_PYTHON, "-c", script],
+        capture_output=True, text=True, cwd=str(project_root), timeout=60
+    )
+    if result.returncode != 0:
+        err = result.stderr.strip() or result.stdout.strip() or "未知错误"
+        return None, err
+    output = result.stdout.strip()
+    if not output:
+        return None, "脚本无输出"
+    try:
+        import json as _json
+        return _json.loads(output), None
+    except Exception:
+        return None, f"输出解析失败: {output[:200]}"
+
+
+def _get_cleanup_stats():
+    """扫描并返回 (stats_dict, total_count, error_msg)"""
+    data, err = _run_cleanup_script(dry_run=True)
+    if err:
+        return None, 0, err
+    if "error" in data:
+        return None, 0, data["error"]
+    return data.get("stats", {}), data.get("total", 0), None
+
+
+def _do_cleanup():
+    """执行实际清理，返回 (actual_total, backup_tag, error_msg)"""
+    data, err = _run_cleanup_script(dry_run=False)
+    if err:
+        return 0, None, err
+    if "error" in data:
+        return 0, None, data["error"]
+    return data.get("total", 0), data.get("backup_tag"), None
 
 
 # Session state 管理弹窗状态
