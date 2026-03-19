@@ -165,8 +165,8 @@
                 <div class="duration-stats">
                     <div class="stat-row">
                         <div class="stat-label">
-                            <span data-lang="zh">总耗时</span>
-                            <span data-lang="en" style="display:none;">Total Duration</span>
+                            <span data-lang="zh">实际总耗时</span>
+                            <span data-lang="en" style="display:none;">Wall Time</span>
                         </div>
                         <div class="stat-value" id="total-duration">0.00s</div>
                     </div>
@@ -176,6 +176,34 @@
                             <span data-lang="en" style="display:none;">Avg Duration</span>
                         </div>
                         <div class="stat-value" id="avg-duration" style="color: #52c41a;">0.00s</div>
+                    </div>
+                    <div class="stat-row" style="border-left-color: #faad14;">
+                        <div class="stat-label">
+                            <span data-lang="zh">最短耗时</span>
+                            <span data-lang="en" style="display:none;">Min Duration</span>
+                        </div>
+                        <div class="stat-value" id="min-duration" style="color: #faad14;">0.00s</div>
+                    </div>
+                    <div class="stat-row" style="border-left-color: #f5222d;">
+                        <div class="stat-label">
+                            <span data-lang="zh">最长耗时</span>
+                            <span data-lang="en" style="display:none;">Max Duration</span>
+                        </div>
+                        <div class="stat-value" id="max-duration" style="color: #f5222d;">0.00s</div>
+                    </div>
+                    <div class="stat-row" style="border-left-color: #722ed1;">
+                        <div class="stat-label">
+                            <span data-lang="zh">P95 耗时</span>
+                            <span data-lang="en" style="display:none;">P95 Duration</span>
+                        </div>
+                        <div class="stat-value" id="p95-duration" style="color: #722ed1;">0.00s</div>
+                    </div>
+                    <div class="stat-row" style="border-left-color: #13c2c2;">
+                        <div class="stat-label">
+                            <span data-lang="zh">TPS（用例/秒）</span>
+                            <span data-lang="en" style="display:none;">TPS (cases/s)</span>
+                        </div>
+                        <div class="stat-value" id="tps-value" style="color: #13c2c2;">0.00</div>
                     </div>
                 </div>
             </div>
@@ -455,8 +483,48 @@
             document.getElementById('pct-failed').innerText = `(${total ? Math.round((stats.failed/total)*100) : 0}%)`;
             document.getElementById('pct-skipped').innerText = `(${total ? Math.round((stats.skipped/total)*100) : 0}%)`;
             
-            document.getElementById('total-duration').innerText = stats.totalDuration.toFixed(2) + 's';
-            document.getElementById('avg-duration').innerText = total ? (stats.totalDuration / total).toFixed(2) + 's' : '0.00s';
+            // ── 性能指标计算 ──────────────────────────────────────────
+            // 1. 实际总耗时（wall time）：用 start_time 最大最小差 + 最后一条用例的 duration
+            const allDurations = testData.map(d => d.duration).filter(d => typeof d === 'number');
+            const startTimes = testData
+                .map(d => d.start_time ? new Date(d.start_time).getTime() : null)
+                .filter(t => t !== null && !isNaN(t));
+
+            let wallTime = 0;
+            if (startTimes.length > 0) {
+                const minStart = Math.min(...startTimes);
+                const maxStart = Math.max(...startTimes);
+                // wall time = 最后一个测试的开始时间 - 最早开始时间 + 最后一个测试的 duration
+                const lastDuration = testData.find(d => d.start_time && new Date(d.start_time).getTime() === maxStart)?.duration || 0;
+                wallTime = (maxStart - minStart) / 1000 + lastDuration;
+            }
+            if (wallTime <= 0) wallTime = stats.totalDuration; // 兜底
+
+            // 2. 平均耗时
+            const avgDuration = total ? stats.totalDuration / total : 0;
+
+            // 3. 最短/最长耗时
+            const minDuration = allDurations.length ? Math.min(...allDurations) : 0;
+            const maxDuration = allDurations.length ? Math.max(...allDurations) : 0;
+
+            // 4. P95 耗时（排序后取第95百分位）
+            let p95Duration = 0;
+            if (allDurations.length > 0) {
+                const sorted = [...allDurations].sort((a, b) => a - b);
+                const idx = Math.ceil(sorted.length * 0.95) - 1;
+                p95Duration = sorted[Math.max(0, idx)];
+            }
+
+            // 5. TPS（每秒完成的测试用例数）
+            const tps = wallTime > 0 ? total / wallTime : 0;
+
+            // 更新 DOM
+            document.getElementById('total-duration').innerText = wallTime.toFixed(2) + 's';
+            document.getElementById('avg-duration').innerText = avgDuration.toFixed(2) + 's';
+            document.getElementById('min-duration').innerText = minDuration.toFixed(2) + 's';
+            document.getElementById('max-duration').innerText = maxDuration.toFixed(2) + 's';
+            document.getElementById('p95-duration').innerText = p95Duration.toFixed(2) + 's';
+            document.getElementById('tps-value').innerText   = tps.toFixed(2);
             
             document.getElementById('tab-all-count').innerText = total;
             document.getElementById('tab-passed-count').innerText = stats.passed;
