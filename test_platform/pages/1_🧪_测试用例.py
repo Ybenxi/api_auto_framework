@@ -21,15 +21,46 @@ st.title("📋 测试用例浏览")
 project_root = Path(__file__).parent.parent.parent
 test_cases_dir = project_root / "test_cases"
 
+# 文件夹名 → 显示名映射（测试平台 UI 用，与报告 MODULE_NAME_MAPPING 保持一致）
+MODULE_DISPLAY_NAMES = {
+    "investment":             "Report & Analytics (Investment)",
+    "account_summary":        "Report & Analytics (Account Summary)",
+    "card_report":            "Report & Analytics (Card Report)",
+    "profile_account":        "Profile Account",
+    "financial_account":      "Financial Account",
+    "sub_account":            "Sub Account",
+    "fbo_account":            "FBO Account",
+    "contact":                "Contact",
+    "counterparty":           "Counterparty Management",
+    "identity_security":      "Identity Security",
+    "statement":              "Statement",
+    "tenant":                 "Tenant",
+    "open_banking":           "Open Banking",
+    "trading_order":          "Trading Order",
+    "client_list":            "Client List",
+    "card":                   "Card",
+    "card_opening":           "Card Opening",
+    "payment_deposit":        "Payment & Deposit",
+    "user_sign_up":           "User Sign Up",
+    "account_opening":        "Account Opening",
+}
+
+def _display_name(folder_name: str) -> str:
+    return MODULE_DISPLAY_NAMES.get(folder_name, folder_name.replace("_", " ").title())
+
 # 模块选择 - 只显示有测试文件的模块
 all_modules = [d for d in test_cases_dir.iterdir() if d.is_dir() and not d.name.startswith('__')]
 modules_with_tests = []
 for module_dir in all_modules:
-    test_files = list(module_dir.glob("test_*.py"))
-    if len(test_files) > 0:
+    test_files_check = list(module_dir.glob("test_*.py"))
+    if len(test_files_check) > 0:
         modules_with_tests.append(module_dir.name)
 
-modules = sorted(modules_with_tests)
+# 按显示名排序
+modules = sorted(modules_with_tests, key=lambda x: _display_name(x))
+# 下拉框选项：显示名 → 文件夹名 反向映射
+display_to_folder = {_display_name(m): m for m in modules}
+display_names = list(display_to_folder.keys())
 
 if not modules:
     st.error("❌ 未找到包含测试文件的模块")
@@ -39,7 +70,8 @@ if not modules:
 sel_col1, sel_col2 = st.columns(2)
 
 with sel_col1:
-    selected_module = st.selectbox("📁 选择模块", modules, index=0)
+    selected_display = st.selectbox("📁 选择模块", display_names, index=0)
+    selected_module = display_to_folder[selected_display]
 
 module_path = test_cases_dir / selected_module
 test_files = sorted(module_path.glob("test_*.py"))

@@ -224,19 +224,49 @@ with col1:
     for module_dir in all_modules:
         if list(module_dir.glob("test_*.py")):
             modules_with_tests.append(module_dir.name)
-    modules = sorted(modules_with_tests)
+
+    # 与测试用例页保持一致的映射
+    _MODULE_DISPLAY = {
+        "investment":        "Report & Analytics (Investment)",
+        "account_summary":   "Report & Analytics (Account Summary)",
+        "card_report":       "Report & Analytics (Card Report)",
+        "profile_account":   "Profile Account",
+        "financial_account": "Financial Account",
+        "sub_account":       "Sub Account",
+        "fbo_account":       "FBO Account",
+        "contact":           "Contact",
+        "counterparty":      "Counterparty Management",
+        "identity_security": "Identity Security",
+        "statement":         "Statement",
+        "tenant":            "Tenant",
+        "open_banking":      "Open Banking",
+        "trading_order":     "Trading Order",
+        "client_list":       "Client List",
+        "card":              "Card",
+        "card_opening":      "Card Opening",
+        "payment_deposit":   "Payment & Deposit",
+        "user_sign_up":      "User Sign Up",
+        "account_opening":   "Account Opening",
+    }
+    def _dn(f): return _MODULE_DISPLAY.get(f, f.replace("_", " ").title())
+
+    modules = sorted(modules_with_tests, key=lambda x: _dn(x))
+    display_to_folder_run = {_dn(m): m for m in modules}
+    display_names_run = list(display_to_folder_run.keys())
 
     if run_mode == "按模块运行":
         if not modules:
             st.error("❌ 未找到包含测试文件的模块")
             st.stop()
-        selected_module = st.selectbox("📁 选择模块", modules)
+        sel_disp = st.selectbox("📁 选择模块", display_names_run)
+        selected_module = display_to_folder_run[sel_disp]
         test_path = f"test_cases/{selected_module}/"
     elif run_mode == "按文件运行":
         if not modules:
             st.error("❌ 未找到包含测试文件的模块")
             st.stop()
-        selected_module = st.selectbox("📁 选择模块", modules)
+        sel_disp = st.selectbox("📁 选择模块", display_names_run)
+        selected_module = display_to_folder_run[sel_disp]
         module_path = test_cases_dir / selected_module
         test_files = sorted([f.name for f in module_path.glob("test_*.py")])
         if test_files:
