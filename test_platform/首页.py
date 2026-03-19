@@ -58,6 +58,12 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# 语言切换（侧边栏底部）
+import sys
+sys.path.insert(0, str(Path(__file__).parent))
+from utils.lang import add_lang_switch
+add_lang_switch()
+
 # 主页面
 st.markdown('<div class="main-header">🧪 API自动化测试管理平台</div>', unsafe_allow_html=True)
 

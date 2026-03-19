@@ -16,6 +16,12 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# 语言切换（侧边栏底部）
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).parent.parent))
+from utils.lang import add_lang_switch
+add_lang_switch()
+
 st.title("📋 测试用例浏览")
 
 project_root = Path(__file__).parent.parent.parent

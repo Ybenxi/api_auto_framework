@@ -290,8 +290,9 @@ class FinancialAccountAPI:
                 "error": False,
                 "content": content_data.get("content", []),
                 "pageable": content_data.get("pageable", {}),
-                "total_elements": content_data.get("total_elements", 0),
-                "total_pages": content_data.get("total_pages", 0),
+                # 兼容下划线（total_elements）和驼峰（totalElements）两种命名
+                "total_elements": content_data.get("total_elements") or content_data.get("totalElements", 0),
+                "total_pages": content_data.get("total_pages") or content_data.get("totalPages", 0),
                 "size": content_data.get("size", 0),
                 "number": content_data.get("number", 0),
                 "first": content_data.get("first", False),

@@ -17,6 +17,12 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# 语言切换（侧边栏底部）
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).parent.parent))
+from utils.lang import add_lang_switch
+add_lang_switch()
+
 col_title, col_refresh = st.columns([8, 1])
 with col_title:
     st.title("📊 历史报告")
