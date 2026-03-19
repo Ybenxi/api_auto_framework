@@ -1,6 +1,7 @@
 import pytest
 import requests
 import os
+import sys
 import json
 import re
 import inspect
@@ -1002,12 +1003,30 @@ def pytest_sessionfinish(session, exitstatus):
         
         # 报告永久保留，不再自动清理（可在测试平台手动删除）
 
-        # 自动生成 Excel 测试用例清单（与 HTML 数据一致，从 test_results 直接生成）
+        # 自动生成 Excel 测试用例清单（带时间戳，与 HTML 报告命名一致）
+        excel_filename = f"test_cases_{timestamp}.xlsx"
+        excel_path = os.path.join(os.path.dirname(__file__), "..", "reports", excel_filename)
         try:
-            _generate_excel_from_results(sorted_results, os.path.join(os.path.dirname(__file__), "..", "reports", "test_cases.xlsx"))
-            logger.info("Excel 测试用例清单已更新: reports/test_cases.xlsx")
+            _generate_excel_from_results(sorted_results, excel_path)
+            logger.info(f"Excel 测试用例清单已生成: reports/{excel_filename}")
         except Exception as e:
             logger.warning(f"Excel 测试用例清单生成失败（不影响报告）: {e}")
+
+        # 自动生成 PDF 摘要报告（管理层用）
+        pdf_filename = f"summary_report_{timestamp}.pdf"
+        pdf_path = os.path.join(os.path.dirname(__file__), "..", "reports", pdf_filename)
+        try:
+            sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+            from utils.generate_pdf_report import generate_pdf_summary
+            env_name = os.getenv("ENV", "DEV")
+            generate_pdf_summary(sorted_results, pdf_path, env=env_name, core=config.core)
+            logger.info(f"PDF 摘要报告已生成: reports/{pdf_filename}")
+            # 同时生成一个固定名称（供平台直接引用）
+            pdf_latest = os.path.join(os.path.dirname(__file__), "..", "reports", "final_summary.pdf")
+            import shutil
+            shutil.copy2(pdf_path, pdf_latest)
+        except Exception as e:
+            logger.warning(f"PDF 摘要报告生成失败（不影响测试）: {e}")
 
 
 # --- 自动拦截 Requests 流量的辅助工具（修复版）---

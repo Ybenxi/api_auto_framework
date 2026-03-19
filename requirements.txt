@@ -27,3 +27,4 @@ xlrd>=2.0.0
 
 # Test Management Platform
 streamlit>=1.31.0  # 测试管理平台Web框架
+fpdf2>=2.8.0
