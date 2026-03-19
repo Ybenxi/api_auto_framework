@@ -91,16 +91,14 @@ class TestCounterpartyMFA:
         """
         测试场景1：通过 Contact ID（Record Owner）获取 MFA 信息
         说明：MFA 接口的 :id 是 Contact ID（Record Owner），不是 Counterparty ID
+        使用固定的 Contact ID: 241010195849941330（当前用户的 contact）
         验证点：
         1. HTTP 200
         2. 业务 code=200
         3. 响应包含 data，data 含 email 字段（phone_number 可为 null）
         """
-        owner_id = _get_contact_id(login_session)
-        if not owner_id:
-            pytest.skip("未找到 TestYan Contact，跳过 MFA 测试")
-
-        logger.info(f"使用 contact_id={owner_id} 获取 MFA 信息")
+        owner_id = "241010195849941330"   # 固定使用当前用户的 Contact ID
+        logger.info(f"使用固定 contact_id={owner_id} 获取 MFA 信息")
         resp = counterparty_api.get_counterparty_mfa(owner_id)
         assert resp.status_code == 200
 

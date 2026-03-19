@@ -178,23 +178,27 @@ class TestCounterpartyGroupMembers:
         logger.info(f"✓ 多个 CP 添加到 Group 成功")
 
     # ------------------------------------------------------------------
-    # 场景4：Add 是全量替换（重点验证）
+    # 场景4：Add 是追加模式，同一 Group 可以添加多个不同的 CP
     # ------------------------------------------------------------------
-    def test_add_is_full_replace(self, counterparty_api, login_session, db_cleanup):
+    def test_add_is_append(self, counterparty_api, login_session, db_cleanup):
         """
-        测试场景4：验证 Add Counterparties 接口是全量替换语义
+        测试场景4：验证 Add Counterparties 接口是追加语义（不是全量替换）
+        实测行为：
+          - 先 add cp_id1，Group 中有 cp_id1
+          - 再 add cp_id2，Group 中同时有 cp_id1 和 cp_id2
+          - Add 不会清除已有成员，只追加新成员
         验证点：
         1. 先 add cp_id1
-        2. 再 add cp_id2（不含 cp_id1）
-        3. Group 成员列表中只有 cp_id2，cp_id1 已被替换掉
+        2. 再 add cp_id2（只传 cp_id2）
+        3. Group 成员列表中 cp_id1 和 cp_id2 都存在（追加语义）
         """
         ts = _ts()
-        group_id = _create_group(counterparty_api, f"Auto TestYan Replace {ts}")
+        group_id = _create_group(counterparty_api, f"Auto TestYan Append {ts}")
         if db_cleanup:
             db_cleanup.track("counterparty_group", group_id)
 
-        cp_id1 = _create_ach_cp(counterparty_api, login_session, "Replace1")
-        cp_id2 = _create_ach_cp(counterparty_api, login_session, "Replace2")
+        cp_id1 = _create_ach_cp(counterparty_api, login_session, "Append1")
+        cp_id2 = _create_ach_cp(counterparty_api, login_session, "Append2")
         if db_cleanup:
             db_cleanup.track("counterparty", cp_id1)
             db_cleanup.track("counterparty", cp_id2)
@@ -207,8 +211,8 @@ class TestCounterpartyGroupMembers:
         assert any(m.get("id") == cp_id1 for m in list1), "第1次 Add 后 cp_id1 应在 Group 中"
         logger.info(f"  第1次 Add 后成员: {[m.get('id') for m in list1]}")
 
-        # 第2次：add cp_id2（全量替换，不含 cp_id1）
-        logger.info(f"第2次 Add（全量替换）: [{cp_id2}]")
+        # 第2次：add cp_id2（只传 cp_id2，验证 cp_id1 是否仍然保留）
+        logger.info(f"第2次 Add（只传 cp_id2）: [{cp_id2}]")
         counterparty_api.add_counterparties_to_group(group_id, [cp_id2])
 
         list2 = counterparty_api.list_group_counterparties(group_id, size=20).json().get("data", {}).get("content", [])
@@ -216,21 +220,24 @@ class TestCounterpartyGroupMembers:
         logger.info(f"  第2次 Add 后成员: {list(member_ids2)}")
 
         assert cp_id2 in member_ids2, f"第2次 Add 后 cp_id2 应在 Group 中"
-        assert cp_id1 not in member_ids2, \
-            f"Add 是全量替换，第2次 Add 后 cp_id1 应已被替换，但仍在 Group 中"
+        assert cp_id1 in member_ids2, \
+            f"Add 是追加模式，第2次 Add 后 cp_id1 应仍然在 Group 中（实际行为）"
 
-        logger.info("✓ Add 全量替换语义验证通过")
+        logger.info("✓ Add 追加语义验证通过：两次 Add 后两个 CP 均在 Group 中")
 
     # ------------------------------------------------------------------
-    # 场景5：同一个 Counterparty 可以属于多个 Group
+    # 场景5：一个 CP 只能属于一个 Group（加入新 Group 自动从原 Group 移除）
     # ------------------------------------------------------------------
-    def test_counterparty_in_multiple_groups(self, counterparty_api, login_session, db_cleanup):
+    def test_counterparty_belongs_to_one_group(self, counterparty_api, login_session, db_cleanup):
         """
-        测试场景5：同一个 Counterparty 可以同时属于多个 Group
+        测试场景5：验证一个 Counterparty 只能属于一个 Group
+        实测行为：将 CP 加入 GroupB 后，GroupA 中的该 CP 自动消失
         验证点：
         1. 创建 GroupA 和 GroupB
-        2. 将同一个 cp_id 分别添加到两个 Group
-        3. 在 GroupA 和 GroupB 的成员列表中都能查到该 cp_id
+        2. 将同一个 cp_id 先加入 GroupA
+        3. 再将同一个 cp_id 加入 GroupB
+        4. GroupB 中可以查到 cp_id
+        5. GroupA 中 cp_id 已自动消失（一个 CP 只能属于一个 Group）
         """
         ts = _ts()
         group_id_a = _create_group(counterparty_api, f"Auto TestYan GroupA {ts}")
@@ -239,21 +246,36 @@ class TestCounterpartyGroupMembers:
             db_cleanup.track("counterparty_group", group_id_a)
             db_cleanup.track("counterparty_group", group_id_b)
 
-        cp_id = _create_ach_cp(counterparty_api, login_session, "MultiGroup")
+        cp_id = _create_ach_cp(counterparty_api, login_session, "OneGroup")
         if db_cleanup:
             db_cleanup.track("counterparty", cp_id)
 
-        logger.info(f"将 CP({cp_id}) 分别添加到 GroupA({group_id_a}) 和 GroupB({group_id_b})")
+        # 先加入 GroupA
+        logger.info(f"将 CP({cp_id}) 加入 GroupA({group_id_a})")
         counterparty_api.add_counterparties_to_group(group_id_a, [cp_id])
+
+        content_a1 = counterparty_api.list_group_counterparties(group_id_a, size=10).json().get("data", {}).get("content", [])
+        assert any(m.get("id") == cp_id for m in content_a1), f"GroupA 加入后应找到 cp_id={cp_id}"
+        logger.info(f"  GroupA 当前成员: {[m.get('id') for m in content_a1]}")
+
+        # 再加入 GroupB
+        logger.info(f"将 CP({cp_id}) 加入 GroupB({group_id_b})")
         counterparty_api.add_counterparties_to_group(group_id_b, [cp_id])
 
-        content_a = counterparty_api.list_group_counterparties(group_id_a, size=10).json().get("data", {}).get("content", [])
+        content_a2 = counterparty_api.list_group_counterparties(group_id_a, size=10).json().get("data", {}).get("content", [])
         content_b = counterparty_api.list_group_counterparties(group_id_b, size=10).json().get("data", {}).get("content", [])
 
-        assert any(m.get("id") == cp_id for m in content_a), f"GroupA 中未找到 cp_id={cp_id}"
-        assert any(m.get("id") == cp_id for m in content_b), f"GroupB 中未找到 cp_id={cp_id}"
+        logger.info(f"  GroupA 成员（加入GroupB后）: {[m.get('id') for m in content_a2]}")
+        logger.info(f"  GroupB 当前成员: {[m.get('id') for m in content_b]}")
 
-        logger.info(f"✓ 同一 CP 属于多个 Group 验证通过: cp_id={cp_id}")
+        # 验证 GroupB 中有 cp_id
+        assert any(m.get("id") == cp_id for m in content_b), f"GroupB 中应能找到 cp_id={cp_id}"
+
+        # 验证 GroupA 中 cp_id 已消失（一个 CP 只能属于一个 Group，自动从原 Group 移除）
+        assert not any(m.get("id") == cp_id for m in content_a2), \
+            f"CP 加入 GroupB 后，GroupA 中的该 CP 应自动消失（一个 CP 只能属于一个 Group）"
+
+        logger.info(f"✓ 验证通过：CP 只能属于一个 Group，加入 GroupB 后自动从 GroupA 移除")
 
     # ------------------------------------------------------------------
     # 场景6：Delete Counterparty from Group — 成功移除
