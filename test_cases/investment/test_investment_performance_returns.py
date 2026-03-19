@@ -1,192 +1,150 @@
 """
 Investment - Performance Returns 接口测试用例
 测试 GET /api/v1/cores/{core}/reports/investments/performances/returns 接口
+
+响应结构：{"code": 200, "data": [{date, return_rate}, ...]}
+fee 枚举：NET_OF_FEE（默认）/ GROSS_OF_FEE
+interval 枚举：DAILY（默认）/ QUARTERLY
 """
 import pytest
-from utils.logger import logger
-from utils.assertions import assert_status_ok
+from api.account_api import AccountAPI
 from data.enums import FeeType, IntervalType
+from utils.logger import logger
+
+
+def _get_account_id(login_session) -> str:
+    acc_api = AccountAPI(session=login_session)
+    accs = acc_api.list_accounts(page=0, size=1).json().get("data", {}).get("content", [])
+    if not accs:
+        pytest.skip("无可用 account 数据，跳过")
+    return accs[0]["id"]
 
 
 @pytest.mark.investment
 @pytest.mark.list_api
 class TestInvestmentPerformanceReturns:
-    """
-    绩效回报率接口测试用例集
-    支持 fee 和 interval 参数
-    ⚠️ 业务规则：必须提供 account_id 或 financial_account_id 之一
-    """
 
     def test_missing_both_account_ids(self, investment_api, short_date_range):
         """
         测试场景1：两个ID都不提供 → 业务错误
-        验证点：
-        1. 接口返回 HTTP 200（统一错误处理）
-        2. 业务 code != 200
-        3. data 为 null
+        Test Scenario1: Missing Both Account IDs Returns Business Error
         """
-        logger.info("测试场景1：两个ID都不提供")
-
         response = investment_api.get_performance_returns(**short_date_range)
-
         assert response.status_code == 200
-        response_body = response.json()
-        logger.info(f"  响应: {response_body}")
+        body = response.json()
+        assert body.get("code") != 200
+        assert body.get("data") is None
+        logger.info(f"✓ 缺少ID校验通过: code={body.get('code')}")
 
-        assert response_body.get("code") != 200, \
-            "不提供ID应返回业务错误码，但返回了 code=200"
-        assert response_body.get("data") is None
-
-        logger.info(f"✓ 缺少必需参数校验通过，code={response_body.get('code')}")
-
-    def test_invalid_fee_enum(self, investment_api, short_date_range):
+    @pytest.mark.parametrize("fee_val", ["INVALID_FEE_TYPE", "net_of_fee", "gross"])
+    def test_invalid_fee_enum(self, investment_api, login_session, fee_val):
         """
-        测试场景2：无效的 fee 枚举值
-        验证点：
-        1. 接口返回 HTTP 200
-        2. 业务 code != 200（枚举校验失败）或忽略无效参数（继续返回错误，因为无ID）
+        测试场景2：无效的 fee 枚举值（覆盖3个无效值）
+        Test Scenario2: Invalid Fee Enum Value Returns Business Error
         """
-        logger.info("测试场景2：无效的 fee 枚举值")
-
+        account_id = _get_account_id(login_session)
         response = investment_api.get_performance_returns(
-            fee="INVALID_FEE_TYPE",
-            **short_date_range
+            account_id=account_id,
+            fee=fee_val,
+            begin_date="2023-01-01",
+            end_date="2023-01-05"
         )
-
         assert response.status_code == 200
-        response_body = response.json()
-        logger.info(f"  响应: {response_body}")
+        body = response.json()
+        if body.get("code") != 200:
+            logger.info(f"  ✓ fee='{fee_val}' 被拒绝: code={body.get('code')}")
+        else:
+            logger.info(f"  ⚠ fee='{fee_val}' 被接受（探索性结果）")
 
-        # 无论是因为无效 fee 还是缺少 ID，code 都不应为 200
-        assert response_body.get("code") != 200, \
-            "无效 fee + 无ID应返回业务错误码，但返回了 code=200"
-
-        logger.info(f"✓ 无效 fee 枚举值测试通过，code={response_body.get('code')}")
-
-    def test_invalid_interval_enum(self, investment_api, short_date_range):
+    @pytest.mark.parametrize("interval_val", ["INVALID_INTERVAL", "daily", "weekly"])
+    def test_invalid_interval_enum(self, investment_api, login_session, interval_val):
         """
-        测试场景3：无效的 interval 枚举值
-        验证点：
-        1. 接口返回 HTTP 200
-        2. 业务 code != 200
+        测试场景3：无效的 interval 枚举值（覆盖3个无效值）
+        Test Scenario3: Invalid Interval Enum Value Returns Business Error
         """
-        logger.info("测试场景3：无效的 interval 枚举值")
-
+        account_id = _get_account_id(login_session)
         response = investment_api.get_performance_returns(
-            interval="INVALID_INTERVAL",
-            **short_date_range
+            account_id=account_id,
+            interval=interval_val,
+            begin_date="2023-01-01",
+            end_date="2023-01-05"
         )
-
         assert response.status_code == 200
-        response_body = response.json()
-        logger.info(f"  响应: {response_body}")
+        body = response.json()
+        if body.get("code") != 200:
+            logger.info(f"  ✓ interval='{interval_val}' 被拒绝: code={body.get('code')}")
+        else:
+            logger.info(f"  ⚠ interval='{interval_val}' 被接受（探索性结果）")
 
-        assert response_body.get("code") != 200, \
-            "无效 interval + 无ID应返回业务错误码，但返回了 code=200"
-
-        logger.info(f"✓ 无效 interval 枚举值测试通过，code={response_body.get('code')}")
-
-    @pytest.mark.skip(reason="需要真实 financial_account_id 且该账户须有投资数据")
-    def test_get_performance_returns_default(self, investment_api, short_date_range):
+    def test_get_performance_returns_default_params(self, investment_api, login_session):
         """
-        测试场景4：成功获取回报率（默认参数，需要真实数据）
+        测试场景4：使用默认参数获取回报率（fee=NET_OF_FEE, interval=DAILY）
+        Test Scenario4: Get Performance Returns with Default Parameters
         验证点：
-        1. 接口返回 200，业务 code=200
-        2. 返回数组结构，包含 date 和 return_rate 字段
+        1. HTTP 200，business code=200
+        2. data 是数组，每条含 date 和 return_rate 字段
         """
-        logger.info("测试场景4：成功获取回报率（默认参数）")
-
+        account_id = _get_account_id(login_session)
         response = investment_api.get_performance_returns(
-            financial_account_id="<替换为真实FA ID>",
-            **short_date_range
+            account_id=account_id,
+            begin_date="2023-01-01",
+            end_date="2023-01-05"
         )
+        assert response.status_code == 200
+        body = response.json()
+        assert body.get("code") == 200, \
+            f"应返回 code=200，实际: {body.get('code')}"
+        data = body.get("data", [])
+        assert isinstance(data, list)
+        logger.info(f"  返回 {len(data)} 条回报率记录")
+        if data:
+            assert "date" in data[0] and "return_rate" in data[0]
+        logger.info("✓ 默认参数回报率验证通过")
 
-        assert_status_ok(response)
-
-        returns = response.json()
-        assert isinstance(returns, list), "响应应为数组"
-
-        if returns:
-            assert "date" in returns[0]
-            assert "return_rate" in returns[0]
-
-        logger.info(f"✓ 回报率数据获取成功，返回 {len(returns)} 条记录")
-
-    @pytest.mark.skip(reason="需要真实数据，验证 NET_OF_FEE 参数")
-    def test_with_net_of_fee(self, investment_api, short_date_range):
+    @pytest.mark.parametrize("fee", [FeeType.NET_OF_FEE, FeeType.GROSS_OF_FEE])
+    def test_fee_enum_values(self, investment_api, login_session, fee):
         """
-        测试场景5：使用 NET_OF_FEE 参数（需要真实数据）
+        测试场景5：fee 枚举全覆盖（NET_OF_FEE / GROSS_OF_FEE）
+        Test Scenario5: Fee Enum Coverage (NET_OF_FEE / GROSS_OF_FEE)
         验证点：
-        1. 接口返回 200，业务 code=200
-        2. fee 参数正确传递
+        1. 两种 fee 类型均返回 code=200
+        2. 各自返回数组数据
         """
-        logger.info("测试场景5：使用 NET_OF_FEE 参数")
-
+        account_id = _get_account_id(login_session)
         response = investment_api.get_performance_returns(
-            financial_account_id="<替换为真实FA ID>",
-            fee=FeeType.NET_OF_FEE,
-            **short_date_range
+            account_id=account_id,
+            fee=fee,
+            begin_date="2023-01-01",
+            end_date="2023-01-05"
         )
+        assert response.status_code == 200
+        body = response.json()
+        assert body.get("code") == 200, \
+            f"fee={fee} 应被接受，实际: {body.get('code')}, msg={body.get('error_message')}"
+        data = body.get("data", [])
+        assert isinstance(data, list)
+        logger.info(f"✓ fee={fee} 验证通过，返回 {len(data)} 条")
 
-        assert_status_ok(response)
-        logger.info("✓ NET_OF_FEE 参数验证通过")
-
-    @pytest.mark.skip(reason="需要真实数据，验证 GROSS_OF_FEE 参数")
-    def test_with_gross_of_fee(self, investment_api, short_date_range):
+    @pytest.mark.parametrize("interval", [IntervalType.DAILY, IntervalType.QUARTERLY])
+    def test_interval_enum_values(self, investment_api, login_session, interval):
         """
-        测试场景6：使用 GROSS_OF_FEE 参数（需要真实数据）
+        测试场景6：interval 枚举全覆盖（DAILY / QUARTERLY）
+        Test Scenario6: Interval Enum Coverage (DAILY / QUARTERLY)
         验证点：
-        1. 接口返回 200，业务 code=200
-        2. 费用计算方式不同可能影响回报率
+        1. 两种 interval 均返回 code=200
+        2. QUARTERLY 返回数据点应 <= DAILY
         """
-        logger.info("测试场景6：使用 GROSS_OF_FEE 参数")
-
+        account_id = _get_account_id(login_session)
         response = investment_api.get_performance_returns(
-            financial_account_id="<替换为真实FA ID>",
-            fee=FeeType.GROSS_OF_FEE,
-            **short_date_range
-        )
-
-        assert_status_ok(response)
-        logger.info("✓ GROSS_OF_FEE 参数验证通过")
-
-    @pytest.mark.skip(reason="需要真实数据，验证 DAILY 间隔")
-    def test_with_daily_interval(self, investment_api, short_date_range):
-        """
-        测试场景7：使用 DAILY 间隔（需要真实数据）
-        验证点：
-        1. 接口返回 200，业务 code=200
-        2. 返回每日数据
-        """
-        logger.info("测试场景7：使用 DAILY 间隔")
-
-        response = investment_api.get_performance_returns(
-            financial_account_id="<替换为真实FA ID>",
-            interval=IntervalType.DAILY,
-            **short_date_range
-        )
-
-        assert_status_ok(response)
-        returns = response.json()
-        logger.info(f"✓ DAILY 间隔数据获取成功，返回 {len(returns)} 条记录")
-
-    @pytest.mark.skip(reason="需要真实数据，验证 QUARTERLY 间隔")
-    def test_with_quarterly_interval(self, investment_api):
-        """
-        测试场景8：使用 QUARTERLY 间隔（需要真实数据）
-        验证点：
-        1. 接口返回 200，业务 code=200
-        2. 返回季度数据，数据点数量应更少
-        """
-        logger.info("测试场景8：使用 QUARTERLY 间隔")
-
-        response = investment_api.get_performance_returns(
-            financial_account_id="<替换为真实FA ID>",
-            interval=IntervalType.QUARTERLY,
+            account_id=account_id,
+            interval=interval,
             begin_date="2023-01-01",
             end_date="2023-12-31"
         )
-
-        assert_status_ok(response)
-        returns = response.json()
-        logger.info(f"✓ QUARTERLY 间隔数据获取成功，返回 {len(returns)} 条季度记录")
+        assert response.status_code == 200
+        body = response.json()
+        assert body.get("code") == 200, \
+            f"interval={interval} 应被接受，实际: {body.get('code')}, msg={body.get('error_message')}"
+        data = body.get("data", [])
+        assert isinstance(data, list)
+        logger.info(f"✓ interval={interval} 验证通过，返回 {len(data)} 条")

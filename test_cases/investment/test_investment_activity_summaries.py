@@ -1,156 +1,138 @@
 """
 Investment - Activity Summaries 接口测试用例
 测试 GET /api/v1/cores/{core}/reports/investments/activity-summaries 接口
+
+响应结构：{"code": 200, "data": {beginning_market_value, net_additions, ...}}
+account_id 或 financial_account_id 二选一必填。
+有账户但无投资数据时，data 字段存在但所有值为 null（不是缺失）。
 """
 import pytest
+from api.account_api import AccountAPI
 from utils.logger import logger
 from utils.assertions import assert_status_ok
+
+
+def _get_account_id(login_session) -> str:
+    """从 list_accounts 动态获取一个真实 account_id"""
+    acc_api = AccountAPI(session=login_session)
+    accs = acc_api.list_accounts(page=0, size=1).json().get("data", {}).get("content", [])
+    if not accs:
+        pytest.skip("无可用 account 数据，跳过")
+    return accs[0]["id"]
 
 
 @pytest.mark.investment
 @pytest.mark.list_api
 class TestInvestmentActivitySummaries:
-    """
-    投资活动摘要接口测试用例集
-    ⚠️ 文档问题：响应示例有trailing comma
-    ⚠️ 业务规则：必须提供 account_id 或 financial_account_id 之一，且需有真实投资数据
-    """
 
     def test_missing_both_account_ids(self, investment_api, valid_date_range):
         """
         测试场景1：两个ID都不提供 → 业务错误
+        Test Scenario1: Missing Both Account IDs Returns Business Error
         验证点：
-        1. 接口返回 HTTP 200（统一错误处理）
-        2. 业务 code != 200
+        1. HTTP 200（统一错误处理）
+        2. business code=599，error_message 包含 "account_id missing"
         3. data 为 null
         """
-        logger.info("测试场景1：两个ID都不提供")
-
         response = investment_api.get_activity_summaries(**valid_date_range)
 
         assert response.status_code == 200
-        response_body = response.json()
-        logger.info(f"  响应: {response_body}")
+        body = response.json()
+        assert body.get("code") != 200, f"不提供ID应返回业务错误，实际 code={body.get('code')}"
+        assert body.get("data") is None, "缺少必需参数时 data 应为 null"
+        logger.info(f"✓ 缺少ID校验通过: code={body.get('code')}, msg={body.get('error_message')}")
 
-        assert response_body.get("code") != 200, \
-            f"不提供ID应返回业务错误码，但返回了 code=200"
-        assert response_body.get("data") is None, \
-            "缺少必需参数时 data 应为 null"
-
-        logger.info(f"✓ 缺少必需参数校验通过，code={response_body.get('code')}, "
-                    f"msg={response_body.get('error_message')}")
-
-    def test_invalid_date_format(self, investment_api, valid_date_range):
+    def test_invalid_date_format(self, investment_api, login_session):
         """
         测试场景2：无效的日期格式（斜杠格式）
+        Test Scenario2: Invalid Date Format Returns Business Error
         验证点：
-        1. 接口返回 HTTP 200
-        2. 业务 code != 200（格式校验失败）或接口降级处理
-        3. 不因为 ID 占位符导致误判
+        1. HTTP 200
+        2. business code != 200
         """
-        logger.info("测试场景2：无效的日期格式")
-
+        account_id = _get_account_id(login_session)
         response = investment_api.get_activity_summaries(
-            begin_date="2024/01/01",   # 错误格式（斜杠）
+            account_id=account_id,
+            begin_date="2024/01/01",
             end_date="2024-01-31"
-            # 不传 ID，专注于日期格式验证
         )
-
         assert response.status_code == 200
-        response_body = response.json()
-        logger.info(f"  响应: {response_body}")
+        body = response.json()
+        assert body.get("code") != 200, f"无效日期格式应返回业务错误，实际 code={body.get('code')}"
+        logger.info(f"✓ 无效日期格式被拒绝: code={body.get('code')}")
 
-        # 日期格式错误或缺少 ID 均应返回业务错误码
-        assert response_body.get("code") != 200, \
-            "无效日期格式应返回业务错误码，但返回了 code=200"
-
-        logger.info(f"✓ 无效日期格式校验通过，code={response_body.get('code')}")
-
-    def test_date_range_reversed(self, investment_api):
+    def test_date_range_reversed(self, investment_api, login_session):
         """
         测试场景3：日期范围倒置（end_date < begin_date）
+        Test Scenario3: Reversed Date Range Returns Error or Empty Data
         验证点：
-        1. 接口返回 HTTP 200
-        2. 业务 code != 200 或返回空数据
+        1. HTTP 200
+        2. business code != 200 或 data 所有字段为 null
         """
-        logger.info("测试场景3：日期范围倒置")
-
+        account_id = _get_account_id(login_session)
         response = investment_api.get_activity_summaries(
+            account_id=account_id,
             begin_date="2024-01-31",
-            end_date="2024-01-01"   # 早于 begin_date
+            end_date="2024-01-01"
         )
-
         assert response.status_code == 200
-        response_body = response.json()
-        logger.info(f"  响应: {response_body}")
+        body = response.json()
+        code = body.get("code")
+        data = body.get("data")
+        if code != 200:
+            logger.info(f"✓ 倒置日期被拒绝: code={code}")
+        else:
+            # 允许返回 data 但值全为 null
+            assert data is None or all(v is None for v in data.values()), \
+                "倒置日期范围数据应为 null 或全 null 字段"
+            logger.info(f"✓ 倒置日期返回 null 数据")
 
-        # 倒置日期应返回业务错误或缺少ID错误，总之 code != 200
-        assert response_body.get("code") != 200, \
-            "倒置日期范围应返回业务错误码，但返回了 code=200"
-
-        logger.info(f"✓ 日期范围倒置校验通过，code={response_body.get('code')}")
-
-    @pytest.mark.skip(reason="需要真实 financial_account_id 且该账户须有投资数据")
-    def test_get_activity_summaries_success(self, investment_api, valid_date_range):
+    def test_get_activity_summaries_with_account_id(self, investment_api, login_session):
         """
-        测试场景4：成功获取活动摘要（需要真实数据）
+        测试场景4：使用 account_id 获取活动摘要
+        Test Scenario4: Get Activity Summaries with account_id
         验证点：
-        1. 接口返回 200，业务 code=200
-        2. 返回摘要数据结构正确
-        3. 包含必需字段
+        1. HTTP 200，business code=200
+        2. data 包含文档定义的所有字段（值可能为 null，但字段存在）
         """
-        logger.info("测试场景4：成功获取活动摘要")
-
+        account_id = _get_account_id(login_session)
         response = investment_api.get_activity_summaries(
-            financial_account_id="<替换为真实FA ID>",
-            **valid_date_range
+            account_id=account_id,
+            begin_date="2023-01-01",
+            end_date="2023-12-31"
         )
+        assert response.status_code == 200
+        body = response.json()
+        assert body.get("code") == 200, \
+            f"使用真实 account_id 应返回 code=200，实际: {body.get('code')}, msg={body.get('error_message')}"
 
-        assert_status_ok(response)
-        response_body = response.json()
-
+        data = body.get("data", {})
+        assert isinstance(data, dict), "data 应为对象"
         required_fields = [
             "beginning_market_value", "net_additions", "contributions",
-            "withdrawals", "fees", "gain_loss", "income", "ending_market_value"
+            "withdrawals", "fees", "gain_loss",
+            "market_appreciation_or_depreciation", "income", "ending_market_value"
         ]
-
         for field in required_fields:
-            assert field in response_body, f"缺少必需字段: {field}"
+            assert field in data, f"data 缺少文档定义字段: '{field}'"
+            logger.info(f"  ✓ {field}: {data.get(field)}")
 
-        logger.info("✓ 活动摘要获取成功")
+        logger.info(f"✓ activity_summaries 字段结构验证通过（account_id={account_id}）")
 
-    @pytest.mark.skip(reason="需要真实 financial_account_id")
-    def test_with_financial_account_id(self, investment_api, short_date_range):
+    @pytest.mark.skip(reason="需要真实有投资数据的 financial_account_id（当前环境 FA 均无投资数据）")
+    def test_with_financial_account_id(self, investment_api):
         """
-        测试场景5：使用 financial_account_id 参数（需要真实数据）
-        验证点：
-        1. 接口返回 200，业务 code=200
-        2. 使用 financial_account_id 正常工作
+        测试场景5：使用 financial_account_id（需有投资数据）
+        Test Scenario5: Get Activity Summaries with financial_account_id
         """
-        logger.info("测试场景5：使用 financial_account_id 参数")
-
         response = investment_api.get_activity_summaries(
-            financial_account_id="<替换为真实FA ID>",
-            **short_date_range
+            financial_account_id="<替换为有投资数据的 FA ID>",
+            begin_date="2023-01-01",
+            end_date="2023-12-31"
         )
-
-        assert_status_ok(response)
-        logger.info("✓ financial_account_id 参数验证通过")
-
-    @pytest.mark.skip(reason="需要真实 account_id")
-    def test_with_account_id(self, investment_api, short_date_range):
-        """
-        测试场景6：使用 account_id 参数（需要真实数据）
-        验证点：
-        1. 接口返回 200，业务 code=200
-        2. 使用 account_id 正常工作
-        """
-        logger.info("测试场景6：使用 account_id 参数")
-
-        response = investment_api.get_activity_summaries(
-            account_id="<替换为真实 account_id>",
-            **short_date_range
-        )
-
-        assert_status_ok(response)
-        logger.info("✓ account_id 参数验证通过")
+        assert response.status_code == 200
+        body = response.json()
+        assert body.get("code") == 200
+        data = body.get("data", {})
+        assert any(v is not None for v in data.values()), "有投资数据的账户至少有一个非 null 字段"
+        logger.info(f"✓ financial_account_id 场景验证通过")

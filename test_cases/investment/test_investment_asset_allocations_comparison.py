@@ -1,171 +1,167 @@
 """
 Investment - Asset Allocations Comparison 接口测试用例
 测试 GET /api/v1/cores/{core}/reports/investments/asset-allocations/comparison 接口
+
+响应结构：{"code": 200, "data": {strategy_name, allocations: [...], dailyItems: [...]}}
+需要账户已配置投资策略才有完整数据。
+
+文档问题（已知）：
+1. JSON 示例格式错误（分号替代逗号）
+2. dailyItems.allocations 字段命名不一致（actual_percent vs percent）
 """
 import pytest
+from api.account_api import AccountAPI
 from utils.logger import logger
-from utils.assertions import assert_status_ok
+
+
+def _get_account_id(login_session) -> str:
+    acc_api = AccountAPI(session=login_session)
+    accs = acc_api.list_accounts(page=0, size=1).json().get("data", {}).get("content", [])
+    if not accs:
+        pytest.skip("无可用 account 数据，跳过")
+    return accs[0]["id"]
 
 
 @pytest.mark.investment
 @pytest.mark.detail_api
 class TestInvestmentAssetAllocationsComparison:
-    """
-    资产配置对比接口测试用例集
-    返回实际配置 vs 目标配置的对比数据
-    ⚠️ 文档问题：
-    1. JSON 格式错误（分号替代逗号）
-    2. 字段命名不一致（actual_percent vs percent）
-    ⚠️ 业务规则：必须提供 account_id 或 financial_account_id，且账户需已配置策略
-    """
 
     def test_missing_both_account_ids(self, investment_api, short_date_range):
         """
         测试场景1：两个ID都不提供 → 业务错误
-        验证点：
-        1. 接口返回 HTTP 200（统一错误处理）
-        2. 业务 code != 200
-        3. data 为 null
+        Test Scenario1: Missing Both Account IDs Returns Business Error
         """
-        logger.info("测试场景1：两个ID都不提供")
-
         response = investment_api.get_asset_allocations_comparison(**short_date_range)
-
         assert response.status_code == 200
-        response_body = response.json()
-        logger.info(f"  响应: {response_body}")
+        body = response.json()
+        assert body.get("code") != 200
+        assert body.get("data") is None
+        logger.info(f"✓ 缺少ID校验通过: code={body.get('code')}")
 
-        assert response_body.get("code") != 200, \
-            "不提供ID应返回业务错误码，但返回了 code=200"
-        assert response_body.get("data") is None
-
-        logger.info(f"✓ 缺少必需参数校验通过，code={response_body.get('code')}")
-
-    @pytest.mark.skip(reason="需要真实 financial_account_id 且账户已配置投资策略")
-    def test_get_allocations_comparison_success(self, investment_api, short_date_range):
+    def test_get_comparison_structure(self, investment_api, login_session):
         """
-        测试场景2：成功获取配置对比（需要真实数据和已配置策略）
+        测试场景2：获取配置对比，验证响应结构
+        Test Scenario2: Get Comparison and Verify Response Structure
         验证点：
-        1. 接口返回 200，业务 code=200
-        2. 包含 strategy_name、allocations、dailyItems 字段
+        1. HTTP 200，business code=200
+        2. data 包含 strategy_name, allocations, dailyItems
+        3. allocations 每条含 name, actual_start_percent, target_start_percent 等
+        4. dailyItems 每条含 date 和 allocations
         """
-        logger.info("测试场景2：成功获取配置对比")
-
+        account_id = _get_account_id(login_session)
         response = investment_api.get_asset_allocations_comparison(
-            financial_account_id="<替换为真实FA ID>",
-            **short_date_range
+            account_id=account_id,
+            begin_date="2023-01-01",
+            end_date="2023-01-05"
         )
+        assert response.status_code == 200
+        body = response.json()
+        assert body.get("code") == 200, \
+            f"应返回 code=200，实际: {body.get('code')}"
 
-        assert_status_ok(response)
+        data = body.get("data")
+        assert isinstance(data, dict), "data 应为对象"
 
-        comparison = response.json()
-        assert "strategy_name" in comparison, "应包含 strategy_name 字段"
-        assert "allocations" in comparison, "应包含 allocations 字段"
-        assert "dailyItems" in comparison, "应包含 dailyItems 字段"
+        # 顶层字段（注意：实际 API 返回 daily_items，文档写 dailyItems，兼容两种）
+        for field in ["strategy_name", "allocations"]:
+            assert field in data, f"data 缺少字段: '{field}'"
+            logger.info(f"  ✓ {field}: {str(data.get(field))[:60]}")
+        # dailyItems / daily_items 兼容
+        daily_key = "dailyItems" if "dailyItems" in data else "daily_items"
+        assert daily_key in data, f"data 缺少 dailyItems/daily_items 字段，实际字段: {list(data.keys())}"
+        logger.info(f"  ✓ {daily_key}（文档写 dailyItems，实际为 {daily_key}）")
 
-        logger.info(f"✓ 配置对比获取成功，策略: {comparison.get('strategy_name')}")
-
-    @pytest.mark.skip(reason="需要真实数据，验证 allocations 结构")
-    def test_verify_allocations_structure(self, investment_api, short_date_range):
-        """
-        测试场景3：验证 allocations 数组（actual vs target，需要真实数据）
-        验证点：
-        1. allocations 是数组
-        2. 包含 actual 和 target 相关字段
-        """
-        logger.info("测试场景3：验证 allocations 数组")
-
-        response = investment_api.get_asset_allocations_comparison(
-            financial_account_id="<替换为真实FA ID>",
-            **short_date_range
-        )
-
-        assert_status_ok(response)
-
-        comparison = response.json()
-        allocations = comparison.get("allocations", [])
-        assert isinstance(allocations, list), "allocations 应为数组"
-
+        # allocations 数组结构（值可能为 null，无策略时）
+        allocations = data.get("allocations") or []
+        assert isinstance(allocations, list), f"allocations 应为数组或 null，实际: {type(allocations)}"
         if allocations:
-            expected_fields = [
-                "name",
-                "actual_start_percent", "actual_end_percent", "actual_diff",
-                "target_start_percent", "target_end_percent", "target_diff"
-            ]
-            for field in expected_fields:
+            alloc_fields = ["name", "actual_start_percent", "actual_end_percent",
+                            "actual_diff", "target_start_percent", "target_end_percent"]
+            for field in alloc_fields:
                 if field not in allocations[0]:
-                    logger.warning(f"⚠️ 缺少字段: {field}")
+                    logger.info(f"  ⚠ allocations[0] 缺少字段: '{field}'")
+                else:
+                    logger.info(f"  ✓ allocations[0].{field}: {allocations[0].get(field)}")
 
-        logger.info(f"✓ allocations 数组验证完成，包含 {len(allocations)} 个资产类别")
+        # dailyItems 数组结构
+        daily = data.get("daily_items", data.get("dailyItems")) or []
+        assert isinstance(daily, list)
+        if daily:
+            assert "date" in daily[0], "dailyItems 元素应含 date"
+            assert "allocations" in daily[0], "dailyItems 元素应含 allocations"
+            if daily[0].get("allocations"):
+                day_alloc = daily[0]["allocations"][0]
+                # 文档字段命名不一致，兼容 actual_percent 和 percent
+                has_actual = "actual_percent" in day_alloc
+                has_percent = "percent" in day_alloc
+                logger.info(f"  dailyItems.allocations 字段: {list(day_alloc.keys())}")
+                if has_actual:
+                    logger.info("  ✓ 使用 actual_percent 字段名（标准）")
+                elif has_percent:
+                    logger.info("  ⚠ 使用 percent 字段名（与 allocations 不一致，文档已知问题）")
 
-    @pytest.mark.skip(reason="需要真实数据，验证 dailyItems 结构")
-    def test_verify_daily_items_structure(self, investment_api, short_date_range):
+        logger.info("✓ asset_allocations_comparison 结构验证通过")
+
+    def test_invalid_date_format(self, investment_api, login_session):
         """
-        测试场景4：验证 dailyItems 数组（需要真实数据）
-        验证点：
-        1. dailyItems 是数组
-        2. 每个元素包含 date 和 allocations
-        3. 关注 actual_percent vs percent 字段命名不一致问题
+        测试场景3：无效日期格式
+        Test Scenario3: Invalid Date Format Returns Business Error
         """
-        logger.info("测试场景4：验证 dailyItems 数组")
-
+        account_id = _get_account_id(login_session)
         response = investment_api.get_asset_allocations_comparison(
-            financial_account_id="<替换为真实FA ID>",
-            **short_date_range
+            account_id=account_id,
+            begin_date="2024/01/01",
+            end_date="2024-01-31"
         )
+        assert response.status_code == 200
+        body = response.json()
+        assert body.get("code") != 200
+        logger.info(f"✓ 无效日期被拒绝: code={body.get('code')}")
 
-        assert_status_ok(response)
-
-        comparison = response.json()
-        daily_items = comparison.get("dailyItems", [])
-        assert isinstance(daily_items, list), "dailyItems 应为数组"
-
-        if daily_items:
-            first_day = daily_items[0]
-            assert "date" in first_day, "应包含 date 字段"
-            assert "allocations" in first_day, "应包含 allocations 字段"
-
-            day_allocations = first_day.get("allocations", [])
-            if day_allocations:
-                first_alloc = day_allocations[0]
-                if "actual_percent" in first_alloc:
-                    logger.info("✓ 使用 actual_percent 字段名")
-                elif "percent" in first_alloc:
-                    logger.warning("⚠️ 使用 percent 字段名（与 allocations 数组不一致）")
-
-        logger.info(f"✓ dailyItems 数组验证完成，包含 {len(daily_items)} 天的数据")
-
-    @pytest.mark.skip(reason="需要字段命名不一致的真实数据来验证")
-    def test_field_naming_consistency(self, investment_api, short_date_range):
+    def test_future_date_range(self, investment_api, login_session):
         """
-        测试场景5：字段命名一致性验证（需要真实数据）
-        验证点：
-        1. allocations 数组使用 actual_percent
-        2. dailyItems.allocations 可能使用 percent（文档问题）
-        3. 记录字段命名差异
+        测试场景4：未来日期范围
+        Test Scenario4: Future Date Range Returns Empty or Null Data
         """
-        logger.info("测试场景5：字段命名一致性验证")
-
+        account_id = _get_account_id(login_session)
         response = investment_api.get_asset_allocations_comparison(
-            financial_account_id="<替换为真实FA ID>",
-            **short_date_range
+            account_id=account_id,
+            begin_date="2099-01-01",
+            end_date="2099-12-31"
         )
+        assert response.status_code == 200
+        body = response.json()
+        code = body.get("code")
+        data = body.get("data")
+        if code == 200:
+            # 允许返回 data 但无实际内容（null 字段）
+            if data:
+                allocs = data.get("allocations") or []
+                daily = (data.get("daily_items") or data.get("dailyItems")) or []
+                # null 或空数组均视为无有效数据
+                assert not allocs or not daily, "未来日期配置对比应无有效数据"
+            logger.info("✓ 未来日期返回空对比数据")
+        else:
+            logger.info(f"✓ 未来日期被拒绝: code={code}")
 
-        assert_status_ok(response)
-
-        comparison = response.json()
-        allocations = comparison.get("allocations", [])
-        daily_items = comparison.get("dailyItems", [])
-
-        if allocations:
-            alloc_fields = list(allocations[0].keys())
-            logger.info(f"allocations 字段: {alloc_fields}")
-
-        if daily_items and daily_items[0].get("allocations"):
-            daily_alloc_fields = list(daily_items[0]["allocations"][0].keys())
-            logger.info(f"dailyItems.allocations 字段: {daily_alloc_fields}")
-
-            if allocations and set(alloc_fields) != set(daily_alloc_fields):
-                logger.warning("⚠️ 检测到字段命名不一致")
-
-        logger.info("✓ 字段命名一致性验证完成")
+    def test_date_range_reversed(self, investment_api, login_session):
+        """
+        测试场景5：日期范围倒置
+        Test Scenario5: Reversed Date Range Returns Error or Empty
+        """
+        account_id = _get_account_id(login_session)
+        response = investment_api.get_asset_allocations_comparison(
+            account_id=account_id,
+            begin_date="2024-01-31",
+            end_date="2024-01-01"
+        )
+        assert response.status_code == 200
+        body = response.json()
+        code = body.get("code")
+        if code != 200:
+            logger.info(f"✓ 倒置日期被拒绝: code={code}")
+        else:
+            data = body.get("data", {})
+            daily = data.get("daily_items", data.get("dailyItems", [])) if data else []
+            assert daily == [] or daily is None
+            logger.info("✓ 倒置日期返回空数据")
