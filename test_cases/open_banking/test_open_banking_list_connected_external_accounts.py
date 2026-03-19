@@ -352,29 +352,40 @@ class TestOpenBankingListConnectedExternalAccounts:
 
     def test_list_connected_accounts_with_invisible_account_id(self, open_banking_api, login_session):
         """
-        测试场景7：使用越权 account_id 查询已连接外部账户 → 返回空或拒绝
+        测试场景7：使用越权/不存在的 account_id 查询已连接外部账户 → 返回空
+        说明：
+          实测发现本接口对不存在的 account_id 返回空列表（不报 506），
+          真正不属于当前用户的 FA ID（如 241010195850134683 ACTC Yhan FA）也返回空。
         验证点：
-        1. 使用越权 account_id：241010195849720143
-        2. 服务器返回 200
-        3. data 为空数组 或 code=506
+        1. HTTP 200
+        2. 使用不存在的 account_id 返回空列表（data=[]）
+        3. 使用 FA 级越权 ID（241010195850134683）返回空列表
         """
-        from api.account_api import AccountAPI
+        # 场景7a：完全不存在的 ID
+        fake_id = "FAKE_INVISIBLE_ACCOUNT_ID_99999999"
+        logger.info(f"使用不存在的 account_id={fake_id} 查询")
+        resp1 = open_banking_api.list_connected_external_accounts(account_id=fake_id)
+        assert resp1.status_code == 200
+        body1 = resp1.json()
+        data1 = body1.get("data", [])
+        assert len(data1) == 0, \
+            f"不存在的 account_id 应返回空列表，实际返回 {len(data1)} 条"
+        logger.info(f"  ✓ 不存在 ID 返回空列表")
 
-        invisible_account_id = "241010195849720143"  # yhan account Sanchez
-        logger.info(f"使用越权 account_id 查询已连接外部账户: {invisible_account_id}")
+        # 场景7b：已知的越权 FA ID（返回空列表）
+        invisible_fa_id = "241010195850134683"  # ACTC Yhan FA（不属于当前用户）
+        logger.info(f"使用越权 FA ID={invisible_fa_id} 查询")
+        resp2 = open_banking_api.list_connected_external_accounts(account_id=invisible_fa_id)
+        assert resp2.status_code == 200
+        body2 = resp2.json()
+        code2 = body2.get("code")
+        data2 = body2.get("data", [])
 
-        response = open_banking_api.list_connected_external_accounts(account_id=invisible_account_id)
-        assert response.status_code == 200
-
-        response_body = response.json()
-        code = response_body.get("code")
-
-        if code == 506:
-            logger.info("  返回 code=506 visibility permission deny")
+        if code2 == 506:
+            logger.info("  ✓ 越权 ID 被拒绝: code=506 visibility permission deny")
         else:
-            data = response_body.get("data", [])
-            assert len(data) == 0, \
-                f"越权 account_id 应返回空列表，实际返回 {len(data)} 条"
-            logger.info("  越权 account_id 返回空外部账户列表")
+            assert len(data2) == 0, \
+                f"越权 account_id 应返回空列表，实际返回 {len(data2)} 条"
+            logger.info(f"  ✓ 越权 FA ID 返回空列表（数据隔离正常）")
 
-        logger.info("✓ 越权 account_id 验证通过")
+        logger.info("✓ 越权 account_id 数据隔离验证通过")
