@@ -54,10 +54,13 @@ if not report_files:
     st.warning("⚠️ 暂无 HTML 测试报告")
     st.info("💡 运行测试后会自动生成报告")
 else:
-    st.success(f"共找到 **{len(report_files)}** 个测试报告")
+    # 只显示最新 5 个报告
+    display_files = report_files[:5]
+    total_count = len(report_files)
+    st.success(f"共找到 **{total_count}** 个测试报告，显示最新 **{len(display_files)}** 个")
     st.markdown("---")
 
-    for idx, report_file in enumerate(report_files):
+    for idx, report_file in enumerate(display_files):
         file_stat = report_file.stat()
         file_size = file_stat.st_size / 1024
         file_time = datetime.fromtimestamp(file_stat.st_mtime)

@@ -893,6 +893,16 @@ def pytest_sessionfinish(session, exitstatus):
         
         # 报告永久保留，不再自动清理（可在测试平台手动删除）
 
+        # 自动生成 Excel 测试用例清单
+        try:
+            import sys
+            sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+            from utils.generate_case_list import main as generate_excel_list
+            generate_excel_list()
+            logger.info("Excel 测试用例清单已更新: reports/test_cases.xlsx")
+        except Exception as e:
+            logger.warning(f"Excel 测试用例清单生成失败（不影响报告）: {e}")
+
 
 # --- 自动拦截 Requests 流量的辅助工具（修复版）---
 @pytest.fixture(autouse=True)
