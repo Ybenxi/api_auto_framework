@@ -839,6 +839,115 @@ def pytest_runtest_makereport(item, call):
             test_results.append(test_data)
 
 
+def _generate_excel_from_results(results: list, output_path: str):
+    """
+    从 test_results（与 HTML 报告完全相同的数据源）生成 Excel。
+    规则：
+      - 所有文字纯英文（字段名、状态、标记等）
+      - 包含请求/响应信息（method, url, request_body, status_code, response_body）
+      - 按模块（module 字段）分 sheet，每个 sheet 含该模块所有用例
+      - 额外保留一个 "All" sheet 汇总所有数据
+    """
+    import pandas as pd
+    from pathlib import Path
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.utils import get_column_letter
+
+    def _safe_str(v, max_len=32767):
+        """Excel 单元格最大 32767 字符"""
+        s = str(v) if v is not None else ""
+        return s[:max_len] if len(s) > max_len else s
+
+    def _flatten(item: dict) -> dict:
+        """将一条 test_result 展开为 Excel 一行（纯英文字段名）"""
+        extra = item.get("extra") or {}
+        req = extra.get("request") or {}
+        resp = extra.get("response") or {}
+        import json as _json
+        req_body = req.get("body")
+        resp_body = resp.get("body")
+        return {
+            "Module":            _safe_str(item.get("module", "")),
+            "Test File":         _safe_str(item.get("test_file", "")),
+            "Test Case (EN)":    _safe_str(item.get("docstring_summary_en") or item.get("test_func_name", "")),
+            "API Path":          _safe_str(item.get("api_path", "")),
+            "Status":            _safe_str((item.get("status") or "").upper()),
+            "Duration (s)":      round(float(item.get("duration") or 0), 3),
+            "Start Time":        _safe_str(item.get("start_time", "")),
+            "Request Method":    _safe_str(req.get("method", "")),
+            "Request URL":       _safe_str(req.get("url", "")),
+            "Request Body":      _safe_str(_json.dumps(req_body, ensure_ascii=False) if req_body else ""),
+            "HTTP Status Code":  _safe_str(resp.get("status_code", "")),
+            "Response Body":     _safe_str(_json.dumps(resp_body, ensure_ascii=False) if resp_body else ""),
+            "Failure Analysis":  _safe_str(item.get("failure_analysis") or ""),
+            "Failure Detail":    _safe_str(item.get("failure_reason") or "", max_len=5000),
+        }
+
+    COLUMN_WIDTHS = {
+        "Module": 22, "Test File": 35, "Test Case (EN)": 60, "API Path": 45,
+        "Status": 10, "Duration (s)": 12, "Start Time": 20,
+        "Request Method": 12, "Request URL": 70, "Request Body": 50,
+        "HTTP Status Code": 14, "Response Body": 60,
+        "Failure Analysis": 50, "Failure Detail": 60,
+    }
+    STATUS_COLORS = {
+        "PASSED":  "C6EFCE", "FAILED":  "FFC7CE", "SKIPPED": "FFEB9C",
+        "ERROR":   "FFC7CE",
+    }
+
+    def _style_sheet(ws, df):
+        # 表头
+        hdr_font  = Font(bold=True, color="FFFFFF")
+        hdr_fill  = PatternFill(start_color="2F54EB", end_color="2F54EB", fill_type="solid")
+        hdr_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        for col_idx, col_name in enumerate(df.columns, 1):
+            cell = ws.cell(row=1, column=col_idx)
+            cell.font = hdr_font
+            cell.fill = hdr_fill
+            cell.alignment = hdr_align
+            ws.column_dimensions[get_column_letter(col_idx)].width = COLUMN_WIDTHS.get(col_name, 20)
+        ws.row_dimensions[1].height = 30
+        # 数据行：Status 列着色
+        status_col = None
+        for i, col_name in enumerate(df.columns, 1):
+            if col_name == "Status":
+                status_col = i
+                break
+        for row_idx in range(2, ws.max_row + 1):
+            status_val = ws.cell(row=row_idx, column=status_col).value if status_col else ""
+            bg = STATUS_COLORS.get(str(status_val).upper(), "FFFFFF")
+            fill = PatternFill(start_color=bg, end_color=bg, fill_type="solid")
+            for col_idx in range(1, len(df.columns) + 1):
+                cell = ws.cell(row=row_idx, column=col_idx)
+                cell.fill = fill
+                cell.alignment = Alignment(vertical="top", wrap_text=False)
+
+    rows = [_flatten(item) for item in results]
+    if not rows:
+        return
+
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+
+    # 按模块分组
+    from collections import defaultdict
+    modules = defaultdict(list)
+    for row in rows:
+        modules[row["Module"]].append(row)
+
+    with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
+        # 每个模块一个 sheet
+        for module_name, module_rows in sorted(modules.items()):
+            sheet_name = (module_name or "Unknown")[:31]  # Excel sheet 名限 31 字符
+            df = pd.DataFrame(module_rows)
+            df.to_excel(writer, index=False, sheet_name=sheet_name)
+            _style_sheet(writer.sheets[sheet_name], df)
+
+        # 汇总 All sheet
+        df_all = pd.DataFrame(rows)
+        df_all.to_excel(writer, index=False, sheet_name="All")
+        _style_sheet(writer.sheets["All"], df_all)
+
+
 def pytest_sessionfinish(session, exitstatus):
     """
     测试结束时，将结果注入 HTML 模板
@@ -893,12 +1002,9 @@ def pytest_sessionfinish(session, exitstatus):
         
         # 报告永久保留，不再自动清理（可在测试平台手动删除）
 
-        # 自动生成 Excel 测试用例清单
+        # 自动生成 Excel 测试用例清单（与 HTML 数据一致，从 test_results 直接生成）
         try:
-            import sys
-            sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-            from utils.generate_case_list import main as generate_excel_list
-            generate_excel_list()
+            _generate_excel_from_results(sorted_results, os.path.join(os.path.dirname(__file__), "..", "reports", "test_cases.xlsx"))
             logger.info("Excel 测试用例清单已更新: reports/test_cases.xlsx")
         except Exception as e:
             logger.warning(f"Excel 测试用例清单生成失败（不影响报告）: {e}")
