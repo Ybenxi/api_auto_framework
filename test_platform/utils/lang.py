@@ -29,43 +29,86 @@ def add_lang_switch() -> str:
     btn_label = "EN" if current == "zh" else "中"
     btn_title = "Switch to English" if current == "zh" else "切换为中文"
 
-    # 注入固定定位按钮 + 点击时修改 URL query param 并刷新
-    st.markdown(f"""
+    # Step1: 把 components.html 渲染的 iframe 容器用 CSS 固定到右上角
+    st.markdown("""
 <style>
-#lang-switch-btn {{
-    position: fixed;
-    top: 0.55rem;
-    right: 5.5rem;          /* 避开 Streamlit 自身右上角的菜单图标 */
-    z-index: 999999;
-    background: #fff;
+/* 把语言切换按钮的 iframe 容器固定到右上角 */
+div[data-testid="stCustomComponentV1"]:has(iframe#lang-iframe) {
+    position: fixed !important;
+    top: 0.5rem !important;
+    right: 4rem !important;
+    width: 80px !important;
+    height: 32px !important;
+    z-index: 9999999 !important;
+    overflow: visible !important;
+    border: none !important;
+    background: transparent !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+    # Step2: 用 components.html 渲染真正可点击的按钮（在 iframe 里，绕过 Streamlit 层级限制）
+    import streamlit.components.v1 as components
+    components.html(f"""
+<style>
+* {{ margin: 0; padding: 0; box-sizing: border-box; }}
+html, body {{ background: transparent; overflow: hidden; width: 100%; height: 100%; }}
+#lang-btn {{
+    display: inline-block;
+    background: rgba(255,255,255,0.95);
     border: 1.5px solid #d9d9d9;
     border-radius: 6px;
-    padding: 4px 12px;
+    padding: 3px 10px;
     font-size: 13px;
     font-weight: 600;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     color: #444;
     cursor: pointer;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.12);
-    transition: all 0.2s;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    white-space: nowrap;
+    transition: all 0.15s;
     line-height: 1.6;
 }}
-#lang-switch-btn:hover {{
+#lang-btn:hover {{
     background: #f0f2ff;
     border-color: #2f54eb;
     color: #2f54eb;
-    box-shadow: 0 3px 10px rgba(47,84,235,0.18);
+    box-shadow: 0 3px 10px rgba(47,84,235,0.2);
 }}
 </style>
-<button id="lang-switch-btn"
-    title="{btn_title}"
-    onclick="
-        const url = new URL(window.location.href);
+<button id="lang-btn" title="{btn_title}" onclick="switchLang()">🌐 {btn_label}</button>
+<script>
+function switchLang() {{
+    try {{
+        // Streamlit 页面运行在 iframe 里，需要通过 window.parent 操作父窗口 URL
+        var url = new URL(window.parent.location.href);
+        url.searchParams.set('lang', '{target}');
+        window.parent.location.href = url.toString();
+    }} catch(e) {{
+        var url = new URL(window.location.href);
         url.searchParams.set('lang', '{target}');
         window.location.href = url.toString();
-    ">
-    🌐 {btn_label}
-</button>
-""", unsafe_allow_html=True)
+    }}
+}}
+// 用 JS 直接把父 iframe 容器固定到右上角（比 CSS :has() 兼容性更好）
+(function positionFrame() {{
+    try {{
+        var frame = window.frameElement;
+        if (!frame) return;
+        // 找到 Streamlit 包裹这个 iframe 的最近 div 容器
+        var container = frame.parentElement;
+        while (container && container.tagName !== 'SECTION' && container.getAttribute('data-testid') !== 'stCustomComponentV1') {{
+            container = container.parentElement;
+        }}
+        // 直接操作 iframe 本身
+        frame.style.cssText = 'position:fixed!important;top:0.5rem!important;right:4rem!important;width:80px!important;height:32px!important;z-index:9999999!important;border:none!important;background:transparent!important;overflow:visible!important;';
+        if (container && container !== document.body) {{
+            container.style.cssText += ';position:fixed!important;top:0.5rem!important;right:4rem!important;width:80px!important;height:32px!important;z-index:9999999!important;';
+        }}
+    }} catch(e) {{ console.log('lang position err:', e); }}
+}})();
+</script>
+""", height=32, scrolling=False)
 
     return current
 
