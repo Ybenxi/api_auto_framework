@@ -1,61 +1,81 @@
 """
-语言切换辅助模块
-在每个页面顶部调用 add_lang_switch() 即可在侧边栏底部显示中/英切换开关
+语言切换辅助模块 v2
+- 右上角固定位置的语言切换按钮（CSS fixed + HTML button）
+- 通过 URL query param ?lang=en / ?lang=zh 保持语言状态
+- 页面刷新和跳转后语言不丢失
 """
 import streamlit as st
+from pathlib import Path
 
 
-TRANSLATIONS = {
-    # 首页
-    "API自动化测试管理平台": {"en": "API Automation Test Platform"},
-    "欢迎使用测试管理平台！": {"en": "Welcome to the Test Management Platform!"},
-    "测试模块": {"en": "Test Modules"},
-    "测试文件": {"en": "Test Files"},
-    "历史报告": {"en": "Reports"},
-    # 页面标题
-    "📊 历史报告": {"en": "📊 Reports"},
-    "⚙️ 系统设置": {"en": "⚙️ Settings"},
-    "🧪 测试用例": {"en": "🧪 Test Cases"},
-    "▶️ 运行测试": {"en": "▶️ Run Tests"},
-}
-
-
-def add_lang_switch():
+def add_lang_switch() -> str:
     """
-    在侧边栏底部添加中/英语言切换开关，并返回当前语言代码（'zh' 或 'en'）。
-    在页面顶部调用：
+    在页面右上角注入固定定位的语言切换按钮，返回当前语言代码（'zh' 或 'en'）。
+
+    用法（在每个页面 set_page_config 之后立即调用）：
         from utils.lang import add_lang_switch
         lang = add_lang_switch()
     """
-    if "platform_lang" not in st.session_state:
+    # 读取 URL query param，优先于 session_state
+    query_lang = st.query_params.get("lang", None)
+    if query_lang in ("zh", "en"):
+        st.session_state.platform_lang = query_lang
+    elif "platform_lang" not in st.session_state:
         st.session_state.platform_lang = "zh"
 
-    with st.sidebar:
-        st.divider()
-        cols = st.columns([1, 2, 1])
-        with cols[0]:
-            st.write("🌐")
-        with cols[1]:
-            is_en = st.toggle(
-                "English",
-                value=(st.session_state.platform_lang == "en"),
-                key="_lang_toggle",
-                help="Switch between Chinese / English"
-            )
-            if is_en:
-                st.session_state.platform_lang = "en"
-            else:
-                st.session_state.platform_lang = "zh"
+    current = st.session_state.platform_lang
+    # 点击按钮后切换到的目标语言
+    target = "en" if current == "zh" else "zh"
+    btn_label = "EN" if current == "zh" else "中"
+    btn_title = "Switch to English" if current == "zh" else "切换为中文"
 
-    return st.session_state.platform_lang
+    # 注入固定定位按钮 + 点击时修改 URL query param 并刷新
+    st.markdown(f"""
+<style>
+#lang-switch-btn {{
+    position: fixed;
+    top: 0.55rem;
+    right: 5.5rem;          /* 避开 Streamlit 自身右上角的菜单图标 */
+    z-index: 999999;
+    background: #fff;
+    border: 1.5px solid #d9d9d9;
+    border-radius: 6px;
+    padding: 4px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #444;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+    transition: all 0.2s;
+    line-height: 1.6;
+}}
+#lang-switch-btn:hover {{
+    background: #f0f2ff;
+    border-color: #2f54eb;
+    color: #2f54eb;
+    box-shadow: 0 3px 10px rgba(47,84,235,0.18);
+}}
+</style>
+<button id="lang-switch-btn"
+    title="{btn_title}"
+    onclick="
+        const url = new URL(window.location.href);
+        url.searchParams.set('lang', '{target}');
+        window.location.href = url.toString();
+    ">
+    🌐 {btn_label}
+</button>
+""", unsafe_allow_html=True)
+
+    return current
 
 
-def t(zh_text: str) -> str:
+def t(zh_text: str, en_text: str = "") -> str:
     """
     翻译辅助函数：根据当前语言返回对应文字。
-    lang = add_lang_switch() 后可直接用 t("中文")
+    示例：st.title(t("测试平台", "Test Platform"))
     """
     lang = st.session_state.get("platform_lang", "zh")
-    if lang == "en":
-        return TRANSLATIONS.get(zh_text, {}).get("en", zh_text)
+    if lang == "en" and en_text:
+        return en_text
     return zh_text
