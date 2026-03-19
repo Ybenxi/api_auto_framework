@@ -150,10 +150,9 @@ def extract_api_path_from_docstring(docstring: str) -> str:
 
 def extract_docstring_summary(item) -> str:
     """
-    提取测试用例的 docstring 摘要（第一行非空内容）
+    提取测试用例的 docstring 摘要（第一行非空内容，即中文描述）
     """
     try:
-        # 获取测试函数的 docstring
         func = item.obj if hasattr(item, 'obj') else None
         if func and func.__doc__:
             lines = func.__doc__.strip().split('\n')
@@ -161,6 +160,26 @@ def extract_docstring_summary(item) -> str:
                 line = line.strip()
                 if line:
                     return line
+    except Exception:
+        pass
+    return ""
+
+
+def extract_docstring_en(item) -> str:
+    """
+    提取 docstring 的第二行非空内容作为英文描述。
+    双行规范：
+      第一行：中文描述（如 "测试场景1：成功获取订单列表"）
+      第二行：英文描述（如 "Test Scenario1: Successfully Retrieve Order List"）
+    如果没有第二行，fallback 到测试函数名（已是英文命名规范）。
+    """
+    try:
+        func = item.obj if hasattr(item, 'obj') else None
+        if func and func.__doc__:
+            lines = [l.strip() for l in func.__doc__.strip().split('\n') if l.strip()]
+            # lines[0] = 中文，lines[1] = 英文（如果存在）
+            if len(lines) >= 2:
+                return lines[1]
     except Exception:
         pass
     return ""
@@ -783,8 +802,14 @@ def pytest_runtest_makereport(item, call):
         full_docstring = get_full_docstring(item)
         module_docstring = get_module_docstring(item)
         
-        # 生成英文版本的 docstring
-        docstring_summary_en = translate_docstring_to_english(docstring_summary_zh)
+        # 生成英文版本的 docstring（优先读第二行，fallback 到函数名）
+        docstring_en_from_line2 = extract_docstring_en(item)
+        if docstring_en_from_line2:
+            docstring_summary_en = docstring_en_from_line2
+        else:
+            # 没有第二行时 fallback：用函数名（已是英文），比词典替换更干净
+            test_func_name_en = item.nodeid.split("::")[-1]
+            docstring_summary_en = test_func_name_en
         
         # 提取 API 路径（优先从方法 docstring，其次从模块 docstring）
         api_path = extract_api_path_from_docstring(full_docstring)
@@ -1029,70 +1054,53 @@ def pytest_sessionfinish(session, exitstatus):
             logger.warning(f"PDF 摘要报告生成失败（不影响测试）: {e}")
 
 
-# --- 自动拦截 Requests 流量的辅助工具（修复版）---
+# --- 自动拦截 Requests 流量的辅助工具（修复版 v2）---
 @pytest.fixture(autouse=True)
-def capture_traffic(request, login_session):
+def capture_traffic(request):
     """
-    自动拦截用例中的 requests 调用并记录
-    修复版：正确捕获 GET 请求的 Query Params 和 POST 请求的 Body
+    自动拦截用例中的所有 requests.Session 调用并记录。
+    v2：改为 patch requests.Session.request（全局），
+    解决 identity_security 等模块使用独立 session 时流量无法捕获的问题。
     """
-    # 获取原始的 request 方法
-    original_method = login_session.request
+    import requests as _requests
 
-    def patched_request(method, url, **kwargs):
-        # 执行原始请求
-        response = original_method(method, url, **kwargs)
-        
-        # 记录流量数据（修复版）
+    original_method = _requests.Session.request
+
+    def patched_request(self_session, method, url, **kwargs):
+        response = original_method(self_session, method, url, **kwargs)
         try:
             # 解析响应 body
             try:
                 res_body = response.json()
-            except:
+            except Exception:
                 res_body = response.text
 
-            # 构建请求参数（修复重点）
+            # 构建请求参数
             req_body = {}
-            
             if method.upper() == "GET":
-                # GET 请求：提取 URL 中的 Query Parameters
                 parsed_url = urlparse(url)
                 query_params = parse_qs(parsed_url.query)
-                # 将列表值转换为单个值（如果只有一个元素）
                 req_body = {k: v[0] if len(v) == 1 else v for k, v in query_params.items()}
-                
-                # 如果 kwargs 中有 params，也合并进来
                 if 'params' in kwargs and kwargs['params']:
                     req_body.update(kwargs['params'])
             else:
-                # POST/PUT/PATCH 请求：提取 JSON Body 或 Data
                 if 'json' in kwargs and kwargs['json']:
                     req_body = kwargs['json']
                 elif 'data' in kwargs and kwargs['data']:
                     req_body = kwargs['data']
 
             traffic = {
-                "request": {
-                    "method": method.upper(),
-                    "url": url,
-                    "body": req_body
-                },
-                "response": {
-                    "status_code": response.status_code,
-                    "body": res_body
-                }
+                "request": {"method": method.upper(), "url": url, "body": req_body},
+                "response": {"status_code": response.status_code, "body": res_body}
             }
-            
-            # 将流量挂载到当前测试用例的 item 对象上
             request.node.extra_data = traffic
         except Exception as e:
             logger.warning(f"流量捕获失败: {e}")
-            request.node.extra_data = {}
-        
+            if not hasattr(request.node, 'extra_data'):
+                request.node.extra_data = {}
+
         return response
 
-    # 使用 monkeypatch 思想，在当前 fixture 作用域内替换 session 的方法
-    login_session.request = patched_request
+    _requests.Session.request = patched_request
     yield
-    # 恢复原始方法
-    login_session.request = original_method
+    _requests.Session.request = original_method

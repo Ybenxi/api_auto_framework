@@ -41,6 +41,7 @@ class TestRetrieveUserProfile:
     def test_get_profile_success(self, identity_api):
         """
         测试场景1：成功获取当前登录用户的个人资料
+        Test Scenario1: Successfully Retrieve Current User Profile
         验证点：
         1. HTTP 200，业务 code=200
         2. 返回 data 包含必需字段（id, first_name, last_name, status）
@@ -63,6 +64,7 @@ class TestRetrieveUserProfile:
     def test_get_profile_response_structure(self, identity_api):
         """
         测试场景2：验证 profile 响应数据结构完整性
+        Test Scenario2: Verify Profile Response Structure Completeness
         验证点：
         1. 返回包含所有文档定义字段
         2. 可选字段（null 值）也在响应中存在
@@ -99,6 +101,7 @@ class TestUpdateUserProfile:
     def test_update_profile_description(self, identity_api):
         """
         测试场景1：更新 description 字段（低风险可逆操作）
+        Test Scenario1: Update Description Field (Low-Risk Reversible Operation)
         验证点：
         1. HTTP 200，code=200
         2. 更新后再 GET profile，description 已变更
@@ -127,6 +130,7 @@ class TestUpdateUserProfile:
     def test_update_profile_invalid_gender(self, identity_api):
         """
         测试场景2：更新 gender 时使用无效枚举值
+        Test Scenario2: Update Gender with Invalid Enum Value
         验证点：
         1. HTTP 200
         2. 无效枚举值被拒绝（code != 200）或被忽略
@@ -142,6 +146,7 @@ class TestUpdateUserProfile:
     def test_update_profile_invalid_phone_format(self, identity_api):
         """
         测试场景3：更新 phone 时不符合 E.164 格式
+        Test Scenario3: Update Phone with Non-E.164 Format
         验证点：
         1. HTTP 200
         2. 非 E.164 手机号被拒绝（code != 200）
@@ -157,6 +162,7 @@ class TestUpdateUserProfile:
     def test_update_profile_valid_phone_format(self, identity_api):
         """
         测试场景4：更新 phone 时使用合法 E.164 格式（探索性，不实际修改真实手机号）
+        Test Scenario4: Update Phone with Valid E.164 Format (Exploratory)
         注意：更新 mobile_phone 会导致 SMS MFA 被移除（文档说明的副作用）
              此处只更新 phone（office phone），不改 mobile_phone
         验证点：
@@ -196,6 +202,7 @@ class TestListEnrolledFactors:
     def test_list_factors_success(self, identity_api):
         """
         测试场景1：成功获取已注册的 MFA 因子列表
+        Test Scenario1: Successfully Retrieve Enrolled MFA Factor List
         验证点：
         1. HTTP 200，code=200
         2. data 是数组
@@ -221,6 +228,7 @@ class TestListEnrolledFactors:
     def test_list_factors_response_structure(self, identity_api):
         """
         测试场景2：验证 factor 对象字段完整性
+        Test Scenario2: Verify Factor Object Field Completeness
         验证点：
         1. factor 对象包含 id, factor_type, status, profile
         2. profile 包含对应类型的配置信息
@@ -242,6 +250,7 @@ class TestListEnrolledFactors:
     def test_list_factors_status_values(self, identity_api):
         """
         测试场景3：验证 factor status 字段取值合法
+        Test Scenario3: Verify Factor Status Enum Values
         验证点：
         1. status 值为已知枚举（ACTIVE, INACTIVE, PENDING_ACTIVATION 等）
         """
@@ -362,6 +371,7 @@ class TestSendMfaMessage:
     def test_send_mfa_with_valid_factor(self, identity_api):
         """
         测试场景1：向已激活的 MFA 因子发送验证码
+        Test Scenario1: Send MFA Verification Code to Active Factor
         验证点：
         1. 先获取 factor 列表，找到已激活（ACTIVE）的因子
         2. 发送 MFA challenge，HTTP 200，code=200
@@ -394,6 +404,7 @@ class TestSendMfaMessage:
     def test_send_mfa_with_invalid_factor_id(self, identity_api):
         """
         测试场景2：使用不存在的 factor_id 发送 MFA
+        Test Scenario2: Send MFA with Non-existent Factor ID
         验证点：
         1. HTTP 200
         2. 业务 code != 200
@@ -408,6 +419,7 @@ class TestSendMfaMessage:
     def test_send_mfa_missing_factor_id(self, identity_api):
         """
         测试场景3：不传 factor_id 参数
+        Test Scenario3: Send MFA without factor_id Parameter
         验证点：
         1. HTTP 200
         2. 业务 code != 200
@@ -431,6 +443,7 @@ class TestVerifyMfaMessage:
     def test_verify_mfa_with_fake_passcode(self, identity_api):
         """
         测试场景1：使用假验证码验证 MFA
+        Test Scenario1: Verify MFA with Fake Pass Code
         策略：先发送 MFA，再用假验证码验证（自动化无法收取真实验证码）
         验证点：
         1. 先 send MFA（触发发送）
@@ -467,6 +480,7 @@ class TestVerifyMfaMessage:
     def test_verify_mfa_with_invalid_factor_id(self, identity_api):
         """
         测试场景2：使用不存在的 factor_id 验证
+        Test Scenario2: Verify MFA with Non-existent Factor ID
         验证点：
         1. HTTP 200
         2. 业务 code != 200
@@ -481,6 +495,7 @@ class TestVerifyMfaMessage:
     def test_verify_mfa_missing_params(self, identity_api):
         """
         测试场景3：缺少必填参数
+        Test Scenario3: Verify MFA with Missing Required Parameters
         验证点：
         1. HTTP 200
         2. 业务 code != 200
