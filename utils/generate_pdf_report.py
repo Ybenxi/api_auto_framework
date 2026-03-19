@@ -229,11 +229,10 @@ def generate_pdf_summary(
 
     # ── Donut chart (right side) + Legend (center-left area) ────────
     chart_y_start = card_start_y + 2 * (card_h + card_gap) + 10
-    chart_cx = 160    # center x of donut
+    chart_cx = 168    # center x of donut - moved right to avoid overlap
     chart_cy = chart_y_start + 30
     chart_r = 25
 
-    # Draw donut
     _draw_donut(pdf, chart_cx, chart_cy, chart_r, passed, failed, skipped, total)
 
     # Center text inside donut
@@ -248,10 +247,10 @@ def generate_pdf_summary(
     pdf.cell(30, 5, "Pass Rate", align="C",
              new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
-    # Stats panel (left of chart)
+    # Stats panel (left of chart) - narrowed to avoid overlapping donut
     panel_x = 11
     panel_y = chart_y_start
-    panel_w = 130
+    panel_w = 118   # reduced from 130 to give chart room (chart left edge at 143)
     panel_h = 62
 
     pdf.set_fill_color(248, 249, 252)
