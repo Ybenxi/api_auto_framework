@@ -9,11 +9,11 @@ Counterparty Transactions 接口测试用例
   - transaction_type: Credit | Debit
   - status: Processing | Reviewing | Completed | Cancelled | Failed
 
-策略说明：
-  - Counterparty 的交易数据需要 Payment 模块的接口才能产生，目前无法在自动化里直接构造
-  - 先在当前 list 中找一个有交易记录的 Counterparty，以该 ID 做查询测试
-  - 若所有 Counterparty 均无交易数据，核心 filter 场景使用 skip 标记，等 Payment 模块集成后再联调
-  - 无效 ID / 无效 status 等错误场景不依赖真实数据，直接运行
+查找有数据的 CP 策略（优先级）：
+  1. 从 GET /money-movements/ach/transactions 取 counterparty_id，
+     再用该 cp_id 调 counterparty transactions，若有数据则使用
+  2. 直接遍历 counterparty list，逐一查 transactions
+  3. 两者均无数据时 skip
 """
 import pytest
 import time
@@ -26,16 +26,46 @@ def _ts() -> str:
     return str(int(time.time()))
 
 
-def _find_cp_with_transactions(counterparty_api, page_size: int = 50) -> Tuple[Optional[str], Optional[dict]]:
+def _find_cp_with_transactions(counterparty_api, login_session=None,
+                               page_size: int = 50) -> Tuple[Optional[str], Optional[dict]]:
     """
-    遍历 Counterparty List，找到一个有交易数据的 Counterparty ID 和其第一条交易。
+    查找有交易数据的 Counterparty ID 和其第一条交易。
+    策略1：从 ACH transactions 反推 counterparty_id（高效，有真实数据）
+    策略2：直接遍历 Counterparty List
     返回 (cp_id, first_txn) 或 (None, None)
     """
+    # ── 策略1：从 ACH transactions 反推 counterparty_id ────────────────
+    try:
+        from api.ach_processing_api import ACHProcessingAPI
+        if login_session:
+            ach_api = ACHProcessingAPI(session=login_session)
+            ach_resp = ach_api.list_transactions(page=0, size=50)
+            if ach_resp.status_code == 200:
+                ach_body = ach_resp.json()
+                ach_data = ach_body.get("data", ach_body)
+                ach_txns = ach_data.get("content", []) if isinstance(ach_data, dict) else []
+                for ach_txn in ach_txns:
+                    cp_id = ach_txn.get("counterparty_id")
+                    if not cp_id:
+                        continue
+                    txn_resp = counterparty_api.list_counterparty_transactions(cp_id, page=0, size=1)
+                    if txn_resp.status_code != 200:
+                        continue
+                    txn_body = txn_resp.json()
+                    txn_data = txn_body.get("data", txn_body)
+                    content = txn_data.get("content", []) if isinstance(txn_data, dict) else []
+                    total = txn_data.get("total_elements", 0) if isinstance(txn_data, dict) else 0
+                    if total > 0 and content:
+                        logger.info(f"  [ACH反推] 找到有数据的 CP: {cp_id}，交易数: {total}")
+                        return cp_id, content[0]
+    except Exception as e:
+        logger.debug(f"  [ACH反推] 策略1失败（{e}），尝试策略2")
+
+    # ── 策略2：直接遍历 Counterparty List ─────────────────────────────
     list_resp = counterparty_api.list_counterparties(page=0, size=page_size)
     if list_resp.status_code != 200:
         return None, None
 
-    # 响应结构：{"code": 200, "data": {"content": [...]}}
     list_body = list_resp.json()
     counterparties = list_body.get("data", {}).get("content", [])
     for cp in counterparties:
@@ -46,10 +76,9 @@ def _find_cp_with_transactions(counterparty_api, page_size: int = 50) -> Tuple[O
         if txn_resp.status_code != 200:
             continue
         txn_body = txn_resp.json()
-        # transactions 响应结构也是 data.content
         txn_data = txn_body.get("data", txn_body)
-        content = txn_data.get("content", []) if isinstance(txn_data, dict) else txn_body.get("data", {}).get("content", [])
-        total = txn_data.get("total_elements", 0) if isinstance(txn_data, dict) else txn_body.get("data", {}).get("total_elements", 0)
+        content = txn_data.get("content", []) if isinstance(txn_data, dict) else []
+        total = txn_data.get("total_elements", 0) if isinstance(txn_data, dict) else 0
         if total > 0 and content:
             return cp_id, content[0]
 
@@ -65,7 +94,7 @@ class TestCounterpartyTransactions:
     # ------------------------------------------------------------------
     # 场景1：找有交易的 CP，基本查询成功，验证响应结构
     # ------------------------------------------------------------------
-    def test_list_transactions_basic_success(self, counterparty_api):
+    def test_list_transactions_basic_success(self, counterparty_api, login_session):
         """
         测试场景1：查询有交易的 Counterparty 的交易列表，验证响应结构
         验证点：
@@ -74,7 +103,7 @@ class TestCounterpartyTransactions:
         3. 每条交易包含必需字段（id, status, amount, create_time, counterparty_id）
         4. counterparty_id 字段与查询的 CP ID 一致（数据隔离）
         """
-        cp_id, first_txn = _find_cp_with_transactions(counterparty_api)
+        cp_id, first_txn = _find_cp_with_transactions(counterparty_api, login_session)
         if not cp_id:
             pytest.skip("未找到有交易数据的 Counterparty，等待 Payment 模块集成后联调")
 
@@ -106,14 +135,14 @@ class TestCounterpartyTransactions:
     # 场景2：transaction_type 枚举全覆盖（Credit/Debit）
     # ------------------------------------------------------------------
     @pytest.mark.parametrize("transaction_type", ["Credit", "Debit"])
-    def test_filter_by_transaction_type(self, counterparty_api, transaction_type):
+    def test_filter_by_transaction_type(self, counterparty_api, login_session, transaction_type):
         """
         测试场景2：按 transaction_type 枚举值筛选（覆盖 Credit 和 Debit）
         验证点：
         1. HTTP 200
         2. 若有返回数据，每条 transaction_type 均与筛选值一致
         """
-        cp_id, _ = _find_cp_with_transactions(counterparty_api)
+        cp_id, _ = _find_cp_with_transactions(counterparty_api, login_session)
         if not cp_id:
             pytest.skip("未找到有交易数据的 Counterparty，等待联调")
 
@@ -136,14 +165,14 @@ class TestCounterpartyTransactions:
     # 场景3：status 枚举全覆盖（5个值）
     # ------------------------------------------------------------------
     @pytest.mark.parametrize("status", ["Processing", "Reviewing", "Completed", "Cancelled", "Failed"])
-    def test_filter_by_status(self, counterparty_api, status):
+    def test_filter_by_status(self, counterparty_api, login_session, status):
         """
         测试场景3：按 status 枚举值筛选（覆盖全部 5 个枚举值）
         验证点：
         1. HTTP 200
         2. 若有返回数据，每条 status 均与筛选值一致
         """
-        cp_id, _ = _find_cp_with_transactions(counterparty_api)
+        cp_id, _ = _find_cp_with_transactions(counterparty_api, login_session)
         if not cp_id:
             pytest.skip("未找到有交易数据的 Counterparty，等待联调")
 
@@ -165,7 +194,7 @@ class TestCounterpartyTransactions:
     # ------------------------------------------------------------------
     # 场景4：按日期范围筛选，验证返回交易的 create_time 在范围内
     # ------------------------------------------------------------------
-    def test_filter_by_date_range(self, counterparty_api):
+    def test_filter_by_date_range(self, counterparty_api, login_session):
         """
         测试场景4：按 start_date/end_date 筛选，验证返回数据的日期在范围内
         验证点：
@@ -173,7 +202,7 @@ class TestCounterpartyTransactions:
         2. 返回的每条交易 create_time >= start_date（近 1 年）
         3. 日期格式 yyyy-MM-dd 被正确解析
         """
-        cp_id, first_txn = _find_cp_with_transactions(counterparty_api)
+        cp_id, first_txn = _find_cp_with_transactions(counterparty_api, login_session)
         if not cp_id:
             pytest.skip("未找到有交易数据的 Counterparty，等待联调")
 
@@ -204,14 +233,14 @@ class TestCounterpartyTransactions:
     # ------------------------------------------------------------------
     # 场景5：start_date 在 end_date 之后（无效日期范围）
     # ------------------------------------------------------------------
-    def test_filter_invalid_date_range(self, counterparty_api):
+    def test_filter_invalid_date_range(self, counterparty_api, login_session):
         """
         测试场景5：start_date 晚于 end_date（无效日期范围）
         验证点：
         1. HTTP 200
         2. 返回空列表或业务错误（正常拒绝无效时间范围）
         """
-        cp_id, _ = _find_cp_with_transactions(counterparty_api)
+        cp_id, _ = _find_cp_with_transactions(counterparty_api, login_session)
         if not cp_id:
             # 没有有数据的 CP 也能测这个场景（会返回空）
             list_resp = counterparty_api.list_counterparties(page=0, size=1)
@@ -243,14 +272,14 @@ class TestCounterpartyTransactions:
     # ------------------------------------------------------------------
     # 场景6：按 financial_account_id 筛选，验证数据隔离
     # ------------------------------------------------------------------
-    def test_filter_by_financial_account_id(self, counterparty_api):
+    def test_filter_by_financial_account_id(self, counterparty_api, login_session):
         """
         测试场景6：按 financial_account_id 筛选交易
         验证点：
         1. HTTP 200
         2. 若有返回数据，每条交易的 financial_account_id 与筛选值一致
         """
-        cp_id, first_txn = _find_cp_with_transactions(counterparty_api)
+        cp_id, first_txn = _find_cp_with_transactions(counterparty_api, login_session)
         if not cp_id or not first_txn:
             pytest.skip("未找到有交易数据的 Counterparty，等待联调")
 
@@ -276,14 +305,14 @@ class TestCounterpartyTransactions:
     # ------------------------------------------------------------------
     # 场景7：按 sub_account_id 筛选
     # ------------------------------------------------------------------
-    def test_filter_by_sub_account_id(self, counterparty_api):
+    def test_filter_by_sub_account_id(self, counterparty_api, login_session):
         """
         测试场景7：按 sub_account_id 筛选交易
         验证点：
         1. HTTP 200
         2. 若有返回数据，每条交易的 sub_account_id 与筛选值一致
         """
-        cp_id, first_txn = _find_cp_with_transactions(counterparty_api)
+        cp_id, first_txn = _find_cp_with_transactions(counterparty_api, login_session)
         if not cp_id or not first_txn:
             pytest.skip("未找到有交易数据的 Counterparty，等待联调")
 
@@ -309,14 +338,14 @@ class TestCounterpartyTransactions:
     # ------------------------------------------------------------------
     # 场景8：分页验证（size=1 再翻页）
     # ------------------------------------------------------------------
-    def test_pagination(self, counterparty_api):
+    def test_pagination(self, counterparty_api, login_session):
         """
         测试场景8：分页功能验证
         验证点：
         1. size=1，page=0 返回 1 条，total_elements 正确
         2. page=1 翻页，返回不同的交易 ID
         """
-        cp_id, _ = _find_cp_with_transactions(counterparty_api)
+        cp_id, _ = _find_cp_with_transactions(counterparty_api, login_session)
         if not cp_id:
             pytest.skip("未找到有交易数据的 Counterparty，等待联调")
 
