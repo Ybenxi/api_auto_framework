@@ -44,7 +44,7 @@ MODULE_NAME_MAPPING = {
     "identity_security": "Identity Security",
     "account_opening": "Account Opening",
     "trading_order": "Trading Order",
-    "client_list": "Client List",
+    "client_list": "Client List (Investment Positions)",
     "investment": "Report & Analytics",
     "account_summary": "Report & Analytics",
     "card_report": "Report & Analytics",

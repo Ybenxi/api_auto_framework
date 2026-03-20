@@ -241,7 +241,7 @@ with col1:
         "tenant":            "Tenant",
         "open_banking":      "Open Banking",
         "trading_order":     "Trading Order",
-        "client_list":       "Client List",
+        "client_list":           "Client List (Investment Positions)",
         "card":              "Card",
         "card_opening":      "Card Opening",
         "payment_deposit":   "Payment & Deposit",
