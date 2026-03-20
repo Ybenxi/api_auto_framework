@@ -126,20 +126,20 @@ class AccountSummaryAPI:
             sub_count = 0
             
             # 资产账户
-            asset_fas = response_data.get("asset_financial_accounts", {})
-            for record_type in asset_fas.get("record_type", []):
-                fas = record_type.get("financial_accounts", [])
+            asset_fas = response_data.get("asset_financial_accounts") or {}
+            for record_type in asset_fas.get("record_type") or []:
+                fas = record_type.get("financial_accounts") or []
                 fa_count += len(fas)
                 for fa in fas:
-                    sub_count += len(fa.get("sub_accounts", []))
+                    sub_count += len(fa.get("sub_accounts") or [])
             
             # 负债账户
-            liability_fas = response_data.get("liability_financial_accounts", {})
-            for record_type in liability_fas.get("record_type", []):
-                fas = record_type.get("financial_accounts", [])
+            liability_fas = response_data.get("liability_financial_accounts") or {}
+            for record_type in liability_fas.get("record_type") or []:
+                fas = record_type.get("financial_accounts") or []
                 fa_count += len(fas)
                 for fa in fas:
-                    sub_count += len(fa.get("sub_accounts", []))
+                    sub_count += len(fa.get("sub_accounts") or [])
             
             return {
                 "error": False,
@@ -148,7 +148,7 @@ class AccountSummaryAPI:
                 "liability_balance": self._to_float(liability_fas.get("total_balance")),
                 "financial_accounts_count": fa_count,
                 "sub_accounts_count": sub_count,
-                "debit_cards_count": len(response_data.get("debit_cards", []))
+                "debit_cards_count": len(response_data.get("debit_cards") or [])
             }
         except Exception as e:
             logger.error(f"解析响应失败: {e}", exc_info=True)
