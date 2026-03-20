@@ -52,7 +52,7 @@ def _display_name(folder_name: str) -> str:
 all_modules = [d for d in test_cases_dir.iterdir() if d.is_dir() and not d.name.startswith('__')]
 modules_with_tests = []
 for module_dir in all_modules:
-    test_files_check = list(module_dir.glob("test_*.py"))
+    test_files_check = list(module_dir.rglob("test_*.py"))
     if len(test_files_check) > 0:
         modules_with_tests.append(module_dir.name)
 
@@ -74,15 +74,20 @@ with sel_col1:
     selected_module = display_to_folder[selected_display]
 
 module_path = test_cases_dir / selected_module
-test_files = sorted(module_path.glob("test_*.py"))
+test_files = sorted(module_path.rglob("test_*.py"))
 
 with sel_col2:
     if test_files:
-        selected_file = st.selectbox(
+        # 显示相对于模块目录的路径（支持子目录结构，如 payment_deposit/ach_processing/test_xxx.py）
+        file_display_names = [str(f.relative_to(module_path)) for f in test_files]
+        selected_file_display = st.selectbox(
             "📄 选择测试文件",
-            [f.name for f in test_files],
+            file_display_names,
             index=0
         )
+        # 实际文件路径
+        selected_file_path = test_files[file_display_names.index(selected_file_display)]
+        selected_file = selected_file_display  # 用于显示
     else:
         st.warning("⚠️ 该模块暂无测试文件")
         st.stop()

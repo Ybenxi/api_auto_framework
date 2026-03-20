@@ -222,7 +222,7 @@ with col1:
     all_modules = [d for d in test_cases_dir.iterdir() if d.is_dir() and not d.name.startswith('__')]
     modules_with_tests = []
     for module_dir in all_modules:
-        if list(module_dir.glob("test_*.py")):
+        if list(module_dir.rglob("test_*.py")):
             modules_with_tests.append(module_dir.name)
 
     # 与测试用例页保持一致的映射
@@ -268,7 +268,9 @@ with col1:
         sel_disp = st.selectbox("📁 选择模块", display_names_run)
         selected_module = display_to_folder_run[sel_disp]
         module_path = test_cases_dir / selected_module
-        test_files = sorted([f.name for f in module_path.glob("test_*.py")])
+        test_files_rglob = sorted(module_path.rglob("test_*.py"))
+        # 显示相对于模块目录的路径（支持子目录，如 ach_processing/test_xxx.py）
+        test_files = [str(f.relative_to(module_path)) for f in test_files_rglob]
         if test_files:
             selected_file = st.selectbox("📄 选择文件", test_files)
             test_path = f"test_cases/{selected_module}/{selected_file}"
