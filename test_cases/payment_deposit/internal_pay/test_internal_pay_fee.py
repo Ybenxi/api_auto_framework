@@ -1,131 +1,129 @@
 """
 Internal Pay - Transaction Fee 接口测试用例
-测试 POST /api/v1/cores/{core}/money-movements/internal-pay/fee 接口
+POST /api/v1/cores/{core}/money-movements/internal-pay/fee
+
+响应结构：{"code": 200, "data": {financial_account_id, fee, amount, same_day}}
+
+已验证测试账户（dev actc）：
+  PAYER_FA = "251212054048210705"（有 sub，fee=3.51/10元）
+  INVISIBLE_FA = "241010195850134683"（越权，code=506）
 """
 import pytest
 from utils.logger import logger
-from utils.assertions import assert_status_ok
+
+PAYER_FA     = "251212054048210705"
+INVISIBLE_FA = "241010195850134683"
+
+pytestmark = pytest.mark.internal_pay
 
 
 @pytest.mark.internal_pay
-@pytest.mark.detail_api
 class TestInternalPayFee:
-    """
-    Internal Pay费用计算接口测试用例集
-    ⚠️ 文档问题：HTTP方法示例错误（POST写成GET）
-    """
 
-    @pytest.mark.skip(reason="需要真实的financial_account_id")
-    def test_quote_fee_success(self, internal_pay_api):
+    def test_fee_success_with_valid_fa(self, internal_pay_api):
         """
-        测试场景1：成功计算交易费用
+        测试场景1：传入有效 FA ID 和金额，成功计算手续费
+        Test Scenario1: Successfully Calculate Fee with Valid FA ID
         验证点：
-        1. 接口返回 200
-        2. code=200
-        3. 返回fee金额
+        1. HTTP 200，code=200
+        2. data 含 fee, amount, same_day, financial_account_id
+        3. fee 是数值类型
         """
-        logger.info("测试场景1：成功计算交易费用")
-        
-        response = internal_pay_api.quote_transaction_fee(
-            financial_account_id="test_fa_id",
-            amount="100.00"
+        resp = internal_pay_api.quote_transaction_fee(
+            financial_account_id=PAYER_FA, amount="10"
         )
-        
-        assert_status_ok(response)
-        
-        response_body = response.json()
-        assert response_body.get("code") == 200, "业务code应为200"
-        
-        data = response_body.get("data", {})
-        assert "fee" in data, "应包含fee字段"
-        assert "amount" in data, "应包含amount字段"
-        
-        logger.info(f"✓ 费用计算成功，fee: {data.get('fee')}, amount: {data.get('amount')}")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body.get("code") == 200, \
+            f"code 应为 200，实际: {body.get('code')}, err={body.get('error_message')}"
 
-    def test_invalid_financial_account_id(self, internal_pay_api):
-        """
-        测试场景2：无效的financial_account_id
-        验证点：
-        1. 接口返回错误
-        """
-        logger.info("测试场景2：无效的financial_account_id")
-        
-        response = internal_pay_api.quote_transaction_fee(
-            financial_account_id="INVALID_FA_ID_999",
-            amount="100.00"
-        )
-        
-        assert response.status_code == 200
-        
-        response_body = response.json()
-        if response_body.get("code") != 200:
-            logger.info(f"✓ 正确拒绝无效ID: {response_body.get('error_message')}")
-        
-        logger.info("✓ 无效账户ID测试完成")
+        data = body.get("data", {})
+        for field in ["fee", "amount", "same_day", "financial_account_id"]:
+            assert field in data, f"fee 响应缺少字段: '{field}'"
+        assert isinstance(data.get("fee"), (int, float))
+        assert data.get("financial_account_id") == PAYER_FA
+        logger.info(f"✓ 手续费计算成功: fa={PAYER_FA}, amount=10, fee={data.get('fee')}")
 
-    def test_same_day_field(self, internal_pay_api):
+    def test_fee_with_different_amounts(self, internal_pay_api):
         """
-        测试场景3：same_day字段验证
-        验证点：
-        1. 响应包含same_day字段
-        2. 但Properties中未定义
-        3. 含义不明（当天到账？）
+        测试场景2：不同金额的手续费计算
+        Test Scenario2: Calculate Fee for Different Amount Values
         """
-        logger.info("测试场景3：same_day字段验证")
-        
-        # 使用测试数据
-        response = internal_pay_api.quote_transaction_fee(
-            financial_account_id="test_fa_id",
-            amount="50.00"
-        )
-        
-        if response.status_code == 200 and response.json().get("code") == 200:
-            data = response.json().get("data", {})
-            
-            if "same_day" in data:
-                logger.warning("⚠️ 检测到same_day字段（Properties中未定义）")
-                logger.info(f"same_day值: {data['same_day']}")
-                logger.info("推测含义：是否当天到账/处理")
-            else:
-                logger.info("未检测到same_day字段")
-        
-        logger.info("✓ same_day字段验证完成")
-
-    def test_fee_calculation_for_different_amounts(self, internal_pay_api):
-        """
-        测试场景4：不同金额的费用计算
-        验证点：
-        1. 费用计算规则
-        2. 是否有最低/最高费用
-        """
-        logger.info("测试场景4：不同金额的费用计算")
-        
-        test_amounts = ["1.00", "100.00", "1000.00"]
-        
-        for amount in test_amounts:
-            response = internal_pay_api.quote_transaction_fee(
-                financial_account_id="test_fa_id",
-                amount=amount
+        for amount in ["1", "100", "0.01"]:
+            resp = internal_pay_api.quote_transaction_fee(
+                financial_account_id=PAYER_FA, amount=amount
             )
-            
-            if response.status_code == 200 and response.json().get("code") == 200:
-                fee = response.json().get("data", {}).get("fee")
-                logger.debug(f"金额: {amount}, 费用: {fee}")
-        
-        logger.info("✓ 费用计算测试完成")
+            assert resp.status_code == 200
+            body = resp.json()
+            assert body.get("code") == 200, \
+                f"amount={amount}: code={body.get('code')}, err={body.get('error_message')}"
+            logger.info(f"  amount={amount}: fee={body.get('data',{}).get('fee')}")
+        logger.info("✓ 不同金额手续费计算通过")
 
-    def test_http_method_error_in_doc(self, internal_pay_api):
+    def test_fee_invalid_fa_id(self, internal_pay_api):
         """
-        测试场景5：HTTP方法示例错误记录
-        验证点：
-        1. 文档标题：POST /fee
-        2. 示例中：GET /fee（错误）
+        测试场景3：使用不存在的 FA ID
+        Test Scenario3: Invalid FA ID Returns Business Error
+        验证点：code=599
         """
-        logger.info("测试场景5：HTTP方法示例错误")
-        
-        logger.warning("⚠️ 文档问题：HTTP方法示例错误")
-        logger.warning("标题标注: POST /internal-pay/fee")
-        logger.warning("示例代码: GET /internal-pay/fee")
-        logger.warning("正确的应该是POST（需要请求体）")
-        
-        logger.info("✓ HTTP方法错误已记录")
+        resp = internal_pay_api.quote_transaction_fee(
+            financial_account_id="INVALID_FA_ID_99999", amount="10"
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body.get("code") != 200
+        logger.info(f"✓ 无效 FA ID 被拒绝: code={body.get('code')}, msg={body.get('error_message')}")
+
+    def test_fee_invisible_fa_id(self, internal_pay_api):
+        """
+        测试场景4：使用不在 visible 范围内的 FA ID
+        Test Scenario4: Invisible FA ID Returns 506
+        验证点：code=506 "visibility permission deny"
+        """
+        resp = internal_pay_api.quote_transaction_fee(
+            financial_account_id=INVISIBLE_FA, amount="10"
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body.get("code") == 506, \
+            f"越权 FA 应返回 506，实际 code={body.get('code')}, msg={body.get('error_message')}"
+        logger.info(f"✓ 越权 FA 被拒绝: code=506")
+
+    def test_fee_negative_amount(self, internal_pay_api):
+        """
+        测试场景5：传入负数金额
+        Test Scenario5: Negative Amount Returns Business Error
+        """
+        resp = internal_pay_api.quote_transaction_fee(
+            financial_account_id=PAYER_FA, amount="-10"
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body.get("code") != 200
+        logger.info(f"✓ 负数金额被拒绝: code={body.get('code')}, msg={body.get('error_message')}")
+
+    def test_fee_zero_amount(self, internal_pay_api):
+        """
+        测试场景6：传入 0 金额（探索性）
+        Test Scenario6: Zero Amount - Exploratory
+        """
+        resp = internal_pay_api.quote_transaction_fee(
+            financial_account_id=PAYER_FA, amount="0"
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        if body.get("code") == 200:
+            logger.info(f"  ⚠ 接受了 amount=0，fee={body.get('data',{}).get('fee')}（探索性）")
+        else:
+            logger.info(f"✓ amount=0 被拒绝: code={body.get('code')}")
+
+    def test_fee_missing_required_params(self, internal_pay_api):
+        """
+        测试场景7：缺少必填参数 amount
+        Test Scenario7: Missing Required Amount Parameter Returns Error
+        """
+        url = internal_pay_api.config.get_full_url("/money-movements/internal-pay/fee")
+        resp = internal_pay_api.session.post(url, json={"financial_account_id": PAYER_FA})
+        assert resp.status_code == 200
+        assert resp.json().get("code") != 200
+        logger.info(f"✓ 缺少 amount 被拒绝: code={resp.json().get('code')}")

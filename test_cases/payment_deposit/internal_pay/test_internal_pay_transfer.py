@@ -1,163 +1,230 @@
 """
 Internal Pay - Transfer 接口测试用例
-测试 POST /api/v1/cores/{core}/money-movements/internal-pay/transfer 接口
+POST /api/v1/cores/{core}/money-movements/internal-pay/transfer
+
+响应结构：{"code": 200, "data": {status, transaction_id, amount, fee, memo, ...}}
+注意：Internal Pay 无 direction 字段（区别于 Account Transfer）。
+
+业务规则：
+  - 如果 payer FA 有 sub account，必须传 payer_sub_account_id
+  - payee FA 同理
+  - 转账完成后状态为 Completed（实时结算）
+  - 每笔转账产生 2 条 transaction 记录（Credit 和 Debit）
+  - memo 格式：Auto TestYan Internal Pay {timestamp}
+
+已验证测试账户（dev actc 环境）：
+  PAYER_FA  = "251212054048210705" (有 sub)
+  PAYER_SUB = "251212054048210868"
+  PAYEE_FA  = "250918043814723897" (有 sub)
+  PAYEE_SUB = "250918043814723925"
 """
 import pytest
+import time
 from utils.logger import logger
-from utils.assertions import assert_status_ok
+
+PAYER_FA  = "251212054048210705"
+PAYER_SUB = "251212054048210868"
+PAYEE_FA  = "250918043814723897"
+PAYEE_SUB = "250918043814723925"
+MEMO_PREFIX = "Auto TestYan Internal Pay"
+
+pytestmark = pytest.mark.internal_pay
+
+
+def _memo():
+    return f"{MEMO_PREFIX} {int(time.time())}"
 
 
 @pytest.mark.internal_pay
-@pytest.mark.create_api
-@pytest.mark.no_rerun
 class TestInternalPayTransfer:
-    """
-    Internal Pay转账接口测试用例集
-    ⚠️ 重要：这是真实的转账操作，会实际扣款
-    ⚠️ 大部分测试需要skip
-    """
 
-    @pytest.mark.skip(reason="真实转账操作，会实际扣款，需要测试账户")
-    def test_initiate_transfer_success(self, internal_pay_api):
+    @pytest.mark.no_rerun
+    def test_transfer_success(self, internal_pay_api):
         """
-        测试场景1：成功发起转账
+        测试场景1：成功发起 Internal Pay 转账（双方均用 sub）
+        Test Scenario1: Successfully Initiate Internal Pay Transfer
         验证点：
-        1. 接口返回 200
-        2. 返回交易ID和status
-        3. status应为Completed或Processing
+        1. HTTP 200，code=200
+        2. status=Completed（实时结算）
+        3. 无 direction 字段（与 Account Transfer 的区别）
+        4. memo 正确回显
+        5. 转账后在 transactions list 中可查到
         """
-        logger.info("测试场景1：成功发起转账")
-        
-        response = internal_pay_api.initiate_transfer(
-            payer_financial_account_id="test_payer_fa_id",
-            payee_financial_account_id="test_payee_fa_id",
-            amount="1.00",
-            memo="Auto TestYan Transfer"
+        memo = _memo()
+        resp = internal_pay_api.initiate_transfer(
+            payer_financial_account_id=PAYER_FA,
+            payer_sub_account_id=PAYER_SUB,
+            payee_financial_account_id=PAYEE_FA,
+            payee_sub_account_id=PAYEE_SUB,
+            amount="0.01",
+            memo=memo
         )
-        
-        assert response.status_code == 200
-        
-        # 响应无code包装层
-        transfer_data = response.json()
-        
-        assert transfer_data.get("id") is not None, "交易ID不应为空"
-        assert transfer_data.get("status") in ["Completed", "Processing", "Reviewing"]
-        
-        logger.info(f"✓ 转账发起成功，ID: {transfer_data['id']}, Status: {transfer_data['status']}")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body.get("code") == 200, \
+            f"转账应成功，实际 code={body.get('code')}, err={body.get('error_message')}"
 
-    @pytest.mark.skip(reason="真实转账，需要测试账户")
-    def test_transfer_with_sub_accounts(self, internal_pay_api):
-        """
-        测试场景2：使用Sub Accounts转账
-        验证点：
-        1. sub_account_id参数正确传递
-        2. 转账成功
-        """
-        logger.info("测试场景2：使用Sub Accounts转账")
-        
-        response = internal_pay_api.initiate_transfer(
-            payer_financial_account_id="test_payer_fa_id",
-            payer_sub_account_id="test_payer_sub_id",
-            payee_financial_account_id="test_payee_fa_id",
-            payee_sub_account_id="test_payee_sub_id",
-            amount="5.00",
-            memo="Sub Account Transfer"
+        data = body.get("data", {})
+        assert data.get("status") == "Completed", f"应为 Completed，实际: {data.get('status')}"
+        assert "direction" not in data, "Internal Pay 不应有 direction 字段"
+        assert data.get("memo") == memo, f"memo 回显不一致: {data.get('memo')}"
+
+        txn_id = data.get("transaction_id") or data.get("id")
+        logger.info(f"✓ 转账成功: txn_id={txn_id}, memo={memo}")
+
+        # 验证在 transactions list 可查到
+        time.sleep(1)
+        list_resp = internal_pay_api.list_transactions(
+            payer_financial_account_id=PAYER_FA, size=10
         )
-        
-        assert response.status_code == 200
-        
-        logger.info("✓ Sub Account转账验证通过")
+        content = list_resp.json().get("data", {}).get("content", [])
+        found = any(t.get("memo") == memo for t in content)
+        if found:
+            logger.info(f"✓ 转账记录在 list 中可查到，memo='{memo}'")
+        else:
+            logger.info(f"  ⚠ 未立即在 list 中找到（可能延迟），memo='{memo}'")
 
-    def test_missing_required_field(self, internal_pay_api):
+    @pytest.mark.no_rerun
+    def test_transfer_verify_two_records(self, internal_pay_api):
         """
-        测试场景3：缺少必需字段
-        验证点：
-        1. 接口返回错误
+        测试场景2：转账后验证产生 2 条记录（Credit + Debit）
+        Test Scenario2: Transfer Creates 2 Records (Credit and Debit)
         """
-        logger.info("测试场景3：缺少必需字段")
-        
-        response = internal_pay_api.initiate_transfer(
-            payer_financial_account_id="test_payer_id",
-            payee_financial_account_id="test_payee_id"
-            # 缺少 amount
+        memo = _memo()
+        resp = internal_pay_api.initiate_transfer(
+            payer_financial_account_id=PAYER_FA,
+            payer_sub_account_id=PAYER_SUB,
+            payee_financial_account_id=PAYEE_FA,
+            payee_sub_account_id=PAYEE_SUB,
+            amount="0.01",
+            memo=memo
         )
-        
-        assert response.status_code == 200
-        
-        # 检查是否有错误（可能有code字段，也可能直接是错误对象）
-        response_body = response.json()
-        logger.info(f"响应体: {response_body}")
-        
-        logger.info("✓ 缺少必需字段测试完成")
+        assert resp.json().get("code") == 200, "转账失败"
+        time.sleep(1)
 
-    def test_invalid_payer_account_id(self, internal_pay_api):
+        # 查与本次 memo 相关的记录
+        list_resp = internal_pay_api.list_transactions(size=50)
+        content = list_resp.json().get("data", {}).get("content", [])
+        memo_txns = [t for t in content if t.get("memo") == memo]
+
+        logger.info(f"  本次转账 memo='{memo}' 产生 {len(memo_txns)} 条记录")
+        if len(memo_txns) >= 2:
+            types = {t.get("transaction_type") for t in memo_txns}
+            logger.info(f"  transaction_type 值: {types}")
+            assert "Credit" in types and "Debit" in types, \
+                "应同时有 Credit（收款）和 Debit（付款）记录"
+            logger.info("✓ 每笔转账产生 Credit + Debit 两条记录验证通过")
+        elif len(memo_txns) == 1:
+            logger.info("  ⚠ 只查到 1 条记录（可能另一条在分页后面）")
+        else:
+            logger.info("  ⚠ 未查到记录（可能延迟）")
+
+    @pytest.mark.no_rerun
+    def test_transfer_verify_balance_change(self, internal_pay_api, login_session):
         """
-        测试场景4：无效的付款方账户ID
-        验证点：
-        1. 接口返回错误
+        测试场景3：转账后验证双方余额变动
+        Test Scenario3: Verify Balance Changes After Transfer
         """
-        logger.info("测试场景4：无效的付款方账户ID")
-        
-        response = internal_pay_api.initiate_transfer(
-            payer_financial_account_id="INVALID_PAYER_999",
-            payee_financial_account_id="test_payee_id",
-            amount="1.00"
+        from config.config import config as _config
+
+        def get_balance(fa_id):
+            r = login_session.get(
+                f"{_config.base_url}/api/v1/cores/{_config.core}/financial-accounts/{fa_id}"
+            )
+            d = r.json().get("data", r.json()) or {}
+            return float(d.get("available_balance") or d.get("balance") or 0)
+
+        payer_before = get_balance(PAYER_FA)
+        payee_before = get_balance(PAYEE_FA)
+        logger.info(f"  转账前 payer 余额: {payer_before}")
+        logger.info(f"  转账前 payee 余额: {payee_before}")
+
+        amount = "0.01"
+        memo = _memo()
+        resp = internal_pay_api.initiate_transfer(
+            payer_financial_account_id=PAYER_FA,
+            payer_sub_account_id=PAYER_SUB,
+            payee_financial_account_id=PAYEE_FA,
+            payee_sub_account_id=PAYEE_SUB,
+            amount=amount,
+            memo=memo
         )
-        
-        assert response.status_code == 200
-        logger.info(f"响应: {response.json()}")
-        
-        logger.info("✓ 无效付款方ID测试完成")
+        assert resp.json().get("code") == 200
+        fee = float(resp.json().get("data", {}).get("fee") or 0)
+        logger.info(f"  转账成功，amount={amount}, fee={fee}")
 
-    def test_invalid_payee_account_id(self, internal_pay_api):
+        time.sleep(1)
+        payer_after = get_balance(PAYER_FA)
+        payee_after = get_balance(PAYEE_FA)
+        logger.info(f"  转账后 payer 余额: {payer_after}")
+        logger.info(f"  转账后 payee 余额: {payee_after}")
+
+        assert payer_before - payer_after > 0, "payer 余额应减少"
+        assert payee_after - payee_before >= 0, "payee 余额应增加或不变"
+        logger.info("✓ 余额变动验证通过")
+
+    def test_transfer_missing_payer_fa(self, internal_pay_api):
         """
-        测试场景5：无效的收款方账户ID
-        验证点：
-        1. 接口返回错误
+        测试场景4：缺少 payer_financial_account_id（必填）
+        Test Scenario4: Missing payer_financial_account_id Returns Error
         """
-        logger.info("测试场景5：无效的收款方账户ID")
-        
-        response = internal_pay_api.initiate_transfer(
-            payer_financial_account_id="test_payer_id",
-            payee_financial_account_id="INVALID_PAYEE_999",
-            amount="1.00"
+        url = internal_pay_api.config.get_full_url("/money-movements/internal-pay/transfer")
+        resp = internal_pay_api.session.post(url, json={
+            "payee_financial_account_id": PAYEE_FA,
+            "payee_sub_account_id": PAYEE_SUB,
+            "amount": "0.01",
+            "memo": _memo()
+        })
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body.get("code") != 200
+        logger.info(f"✓ 缺少 payer_fa 被拒绝: code={body.get('code')}, msg={body.get('error_message')}")
+
+    def test_transfer_missing_amount(self, internal_pay_api):
+        """
+        测试场景5：缺少 amount（必填）
+        Test Scenario5: Missing amount Returns Error
+        """
+        url = internal_pay_api.config.get_full_url("/money-movements/internal-pay/transfer")
+        resp = internal_pay_api.session.post(url, json={
+            "payer_financial_account_id": PAYER_FA,
+            "payer_sub_account_id": PAYER_SUB,
+            "payee_financial_account_id": PAYEE_FA,
+            "payee_sub_account_id": PAYEE_SUB,
+            "memo": _memo()
+        })
+        assert resp.status_code == 200
+        assert resp.json().get("code") != 200
+        logger.info(f"✓ 缺少 amount 被拒绝: code={resp.json().get('code')}")
+
+    def test_transfer_negative_amount(self, internal_pay_api):
+        """
+        测试场景6：传入负数金额
+        Test Scenario6: Negative Amount Returns Error
+        """
+        resp = internal_pay_api.initiate_transfer(
+            payer_financial_account_id=PAYER_FA,
+            payer_sub_account_id=PAYER_SUB,
+            payee_financial_account_id=PAYEE_FA,
+            payee_sub_account_id=PAYEE_SUB,
+            amount="-10",
+            memo=_memo()
         )
-        
-        assert response.status_code == 200
-        logger.info(f"响应: {response.json()}")
-        
-        logger.info("✓ 无效收款方ID测试完成")
+        assert resp.status_code == 200
+        assert resp.json().get("code") != 200
+        logger.info(f"✓ 负数金额被拒绝: code={resp.json().get('code')}")
 
-    def test_conditional_sub_account_requirement(self, internal_pay_api):
+    def test_transfer_invalid_fa_ids(self, internal_pay_api):
         """
-        测试场景6：条件必需字段验证（sub_account_id）
-        验证点：
-        1. 文档说"Required if a sub account exists"
-        2. 逻辑不清晰：谁判断exists？
-        3. 验证实际行为
+        测试场景7：使用不存在的 FA ID
+        Test Scenario7: Non-existent FA IDs Return Error
         """
-        logger.info("测试场景6：条件必需字段验证")
-        
-        logger.warning("⚠️ 文档问题：条件必需字段逻辑不清")
-        logger.info("sub_account_id: Required if a sub account exists")
-        logger.info("问题：由谁判断'exists'？")
-        logger.info("问题：如果有多个sub account，如何处理？")
-        
-        logger.info("✓ 条件必需字段问题已记录")
-
-    def test_response_no_code_wrapper(self, internal_pay_api):
-        """
-        测试场景7：响应格式验证（无code包装层）
-        验证点：
-        1. Transfer响应直接返回交易对象
-        2. 无code包装层
-        3. parse方法正确处理
-        """
-        logger.info("测试场景7：响应格式验证")
-        
-        logger.warning("⚠️ 文档问题：响应格式不一致")
-        logger.info("List Transactions: 无code包装层")
-        logger.info("Transfer: 无code包装层")
-        logger.info("Quote Fee: 有code包装层")
-        
-        logger.info("✓ 格式不一致问题已记录")
+        resp = internal_pay_api.initiate_transfer(
+            payer_financial_account_id="INVALID_PAYER_999999",
+            payee_financial_account_id="INVALID_PAYEE_999999",
+            amount="0.01",
+            memo=_memo()
+        )
+        assert resp.status_code == 200
+        assert resp.json().get("code") != 200
+        logger.info(f"✓ 无效 FA ID 被拒绝: code={resp.json().get('code')}")
