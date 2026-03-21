@@ -713,12 +713,17 @@ def _analyze_failure(longrepr: str, extra_data: dict) -> str:
     e_msg = " | ".join(e_lines[:5]) if e_lines else ""
 
     # ── 提取接口响应信息 ──────────────────────────────────────────
+    # extra_data 现在是数组，取最后一条（最关键的 API 调用）
+    if isinstance(extra_data, list):
+        last_extra = extra_data[-1] if extra_data else {}
+    else:
+        last_extra = extra_data or {}
     resp = {}
-    if extra_data and extra_data.get("response"):
-        resp = extra_data["response"].get("body", {}) or {}
+    if last_extra and last_extra.get("response"):
+        resp = last_extra["response"].get("body", {}) or {}
     resp_code = resp.get("code") if isinstance(resp, dict) else None
     resp_err  = resp.get("error_message") if isinstance(resp, dict) else None
-    http_code = extra_data.get("response", {}).get("status_code") if extra_data else None
+    http_code = last_extra.get("response", {}).get("status_code") if last_extra else None
 
     # ── 规则匹配，输出简明结论 ─────────────────────────────────────
 
@@ -887,7 +892,18 @@ def _generate_excel_from_results(results: list, output_path: str):
 
     def _flatten(item: dict) -> dict:
         """将一条 test_result 展开为 Excel 一行（纯英文字段名）"""
-        extra = item.get("extra") or {}
+        extra_raw = item.get("extra") or {}
+        # extra_data 现在是数组（多次 API 调用）；兼容旧格式（单个对象）
+        if isinstance(extra_raw, list):
+            # 取最后一条作为代表（通常是最关键的那次）
+            extra = extra_raw[-1] if extra_raw else {}
+            # 所有调用的 URL 列表（Excel 里记录）
+            all_urls = " | ".join(
+                e.get("request", {}).get("url", "") for e in extra_raw if e.get("request")
+            )
+        else:
+            extra = extra_raw
+            all_urls = ""
         req = extra.get("request") or {}
         resp = extra.get("response") or {}
         import json as _json
@@ -1090,15 +1106,18 @@ def capture_traffic(request):
                 elif 'data' in kwargs and kwargs['data']:
                     req_body = kwargs['data']
 
-            traffic = {
+            traffic_item = {
                 "request": {"method": method.upper(), "url": url, "body": req_body},
                 "response": {"status_code": response.status_code, "body": res_body}
             }
-            request.node.extra_data = traffic
+            # 追加到数组，支持一个用例内多次 API 调用全部记录
+            if not hasattr(request.node, 'extra_data') or not isinstance(request.node.extra_data, list):
+                request.node.extra_data = []
+            request.node.extra_data.append(traffic_item)
         except Exception as e:
             logger.warning(f"流量捕获失败: {e}")
             if not hasattr(request.node, 'extra_data'):
-                request.node.extra_data = {}
+                request.node.extra_data = []
 
         return response
 

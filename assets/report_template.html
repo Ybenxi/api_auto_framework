@@ -801,8 +801,39 @@
             document.getElementById('modal-title').textContent = titleText;
             
             let extraHtml = '';
-            if (data.extra && data.extra.request) {
-                extraHtml = `
+            // extra 兼容新格式（数组）和旧格式（单对象）
+            const extraList = Array.isArray(data.extra) ? data.extra
+                            : (data.extra && data.extra.request ? [data.extra] : []);
+
+            if (extraList.length > 0) {
+                // 多条 API 调用时显示标题行
+                const totalCalls = extraList.length;
+                if (totalCalls > 1) {
+                    extraHtml += `
+                    <div style="background:#f0f5ff; border:1px solid #adc6ff; border-radius:6px;
+                                padding:8px 14px; margin-bottom:12px; font-size:13px; color:#2f54eb; font-weight:600;">
+                        📋 本用例共包含 ${totalCalls} 次 API 调用（下方逐一展示）
+                    </div>`;
+                }
+
+                extraList.forEach((apiCall, idx) => {
+                    const callNum = totalCalls > 1 ? `#${idx + 1} / ${totalCalls}  ` : '';
+                    const borderStyle = idx > 0
+                        ? 'border-top: 2px solid #e8e8e8; margin-top: 16px; padding-top: 16px;'
+                        : '';
+                    extraHtml += `<div style="${borderStyle}">`;
+
+                    if (totalCalls > 1) {
+                        extraHtml += `
+                        <div style="font-size:12px; font-weight:700; color:#595959;
+                                    margin-bottom:10px; display:flex; align-items:center; gap:8px;">
+                            <span style="background:#2f54eb; color:#fff; border-radius:10px;
+                                         padding:2px 8px; font-size:11px;">API ${idx + 1}</span>
+                            <span style="color:#8c8c8c;">${apiCall.request ? apiCall.request.url : ''}</span>
+                        </div>`;
+                    }
+
+                    extraHtml += `
                     <div class="detail-section">
                         <div class="detail-title">
                             <span data-lang="zh">基本信息</span>
@@ -814,14 +845,14 @@
                                     <span data-lang="zh">请求地址</span>
                                     <span data-lang="en" style="display:none;">Request URL</span>
                                 </div>
-                                <div class="info-value" style="color: var(--primary-color);">${data.extra.request.url}</div>
+                                <div class="info-value" style="color: var(--primary-color);">${apiCall.request ? apiCall.request.url : '-'}</div>
                             </div>
                             <div>
                                 <div class="info-label">
                                     <span data-lang="zh">请求方法</span>
                                     <span data-lang="en" style="display:none;">Method</span>
                                 </div>
-                                <div class="info-value"><span class="status-tag" style="background: #e6f7ff; color: #1890ff;">${data.extra.request.method}</span></div>
+                                <div class="info-value"><span class="status-tag" style="background: #e6f7ff; color: #1890ff;">${apiCall.request ? apiCall.request.method : '-'}</span></div>
                             </div>
                             <div>
                                 <div class="info-label">
@@ -835,7 +866,7 @@
                                     <span data-lang="zh">响应状态码</span>
                                     <span data-lang="en" style="display:none;">Status Code</span>
                                 </div>
-                                <div class="info-value">${data.extra.response.status_code}</div>
+                                <div class="info-value">${apiCall.response ? apiCall.response.status_code : '-'}</div>
                             </div>
                         </div>
                     </div>
@@ -844,20 +875,21 @@
                             <span data-lang="zh">请求参数</span>
                             <span data-lang="en" style="display:none;">Request Body</span>
                         </div>
-                        <pre><code class="language-json">${JSON.stringify(data.extra.request.body, null, 2)}</code></pre>
+                        <pre><code class="language-json">${JSON.stringify(apiCall.request ? apiCall.request.body : {}, null, 2)}</code></pre>
                     </div>
                     <div class="detail-section">
                         <div class="detail-title">
                             <span data-lang="zh">响应数据</span>
                             <span data-lang="en" style="display:none;">Response</span>
                         </div>
-                        <pre><code class="language-json">${JSON.stringify(data.extra.response.body, null, 2)}</code></pre>
+                        <pre><code class="language-json">${JSON.stringify(apiCall.response ? apiCall.response.body : {}, null, 2)}</code></pre>
                     </div>
-                `;
+                    </div>`;
+                });
             } else {
                 extraHtml = `<div style="text-align: center; color: #999; padding: 40px;">
-                    <span data-lang="zh">该用例未捕获到接口流量数据</span>
-                    <span data-lang="en" style="display:none;">No API traffic data captured</span>
+                    <span data-lang="zh" style="display:${currentLang === 'zh' ? '' : 'none'};">该用例未捕获到接口流量数据</span>
+                    <span data-lang="en" style="display:${currentLang === 'en' ? '' : 'none'};">No API traffic data captured</span>
                 </div>`;
             }
 
@@ -915,7 +947,13 @@
 
             try {
                 // 准备导出数据（仅使用英文版本）
-                const exportData = testData.map(item => ({
+                const exportData = testData.map(item => {
+                    // 兼容 extra 为数组（新格式）或单对象（旧格式）
+                    const extraList = Array.isArray(item.extra) ? item.extra
+                                    : (item.extra && item.extra.request ? [item.extra] : []);
+                    const lastExtra = extraList.length > 0 ? extraList[extraList.length - 1] : {};
+                    const allUrls = extraList.map(e => e.request?.url || '').filter(Boolean).join(' | ');
+                    return {
                     'Module': item.module || 'Unknown',
                     'Test File': item.test_file || '',
                     'Test Case': item.docstring_summary_en || item.test_func_name || '',
@@ -923,14 +961,17 @@
                     'Status': item.status.toUpperCase(),
                     'Duration (s)': parseFloat(item.duration.toFixed(3)),
                     'Execution Time': item.start_time,
-                    'Request Method': item.extra?.request?.method || '',
-                    'Request URL': item.extra?.request?.url || '',
-                    'Request Params': JSON.stringify(item.extra?.request?.body || {}),
-                    'Response Code': item.extra?.response?.status_code || '',
-                    'Response Body': JSON.stringify(item.extra?.response?.body || {}),
+                    'API Calls Count': extraList.length,
+                    'All Request URLs': allUrls,
+                    'Last Request Method': lastExtra.request?.method || '',
+                    'Last Request URL': lastExtra.request?.url || '',
+                    'Last Request Params': JSON.stringify(lastExtra.request?.body || {}),
+                    'Last Response Code': lastExtra.response?.status_code || '',
+                    'Last Response Body': JSON.stringify(lastExtra.response?.body || {}),
                     'Failure Analysis': item.failure_analysis || '',
                     'Failure Detail': item.failure_reason || ''
-                }));
+                    };
+                });
                 
                 // 创建工作簿
                 const wb = XLSX.utils.book_new();
@@ -945,11 +986,13 @@
                     {wch: 10},  // Status
                     {wch: 12},  // Duration
                     {wch: 20},  // Execution Time
-                    {wch: 12},  // Request Method
-                    {wch: 70},  // Request URL
-                    {wch: 50},  // Request Params
-                    {wch: 15},  // Response Code
-                    {wch: 80},  // Response Body
+                    {wch: 10},  // API Calls Count
+                    {wch: 100}, // All Request URLs
+                    {wch: 12},  // Last Request Method
+                    {wch: 70},  // Last Request URL
+                    {wch: 50},  // Last Request Params
+                    {wch: 15},  // Last Response Code
+                    {wch: 80},  // Last Response Body
                     {wch: 60},  // Failure Analysis
                     {wch: 80}   // Failure Detail
                 ];
