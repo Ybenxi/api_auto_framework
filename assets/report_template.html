@@ -591,6 +591,15 @@
         }
 
         // Toggle module collapse (折叠/展开整个模块)
+        function toggleApiCall(callId) {
+            const content = document.getElementById(callId);
+            const icon = document.getElementById(callId + '-icon');
+            if (!content) return;
+            const isCollapsed = content.style.display === 'none';
+            content.style.display = isCollapsed ? '' : 'none';
+            if (icon) icon.style.transform = isCollapsed ? '' : 'rotate(-90deg)';
+        }
+
         function toggleModuleCollapse(moduleName) {
             const moduleHeader = document.querySelector(`.group-header[data-module="${moduleName}"]`);
             const isCollapsed = moduleHeader.classList.toggle('collapsed');
@@ -812,25 +821,41 @@
                     extraHtml += `
                     <div style="background:#f0f5ff; border:1px solid #adc6ff; border-radius:6px;
                                 padding:8px 14px; margin-bottom:12px; font-size:13px; color:#2f54eb; font-weight:600;">
-                        📋 本用例共包含 ${totalCalls} 次 API 调用（下方逐一展示）
+                        📋 本用例共包含 ${totalCalls} 次 API 调用（下方逐一展示，点击标题可折叠）
                     </div>`;
                 }
 
                 extraList.forEach((apiCall, idx) => {
-                    const callNum = totalCalls > 1 ? `#${idx + 1} / ${totalCalls}  ` : '';
+                    const callId = `api-call-${index}-${idx}`;
+                    const isFirst = idx === 0;
+                    // 单个调用时不折叠；多个调用时默认展开
                     const borderStyle = idx > 0
-                        ? 'border-top: 2px solid #e8e8e8; margin-top: 16px; padding-top: 16px;'
+                        ? 'border-top: 2px solid #e8e8e8; margin-top: 16px; padding-top: 4px;'
                         : '';
                     extraHtml += `<div style="${borderStyle}">`;
 
                     if (totalCalls > 1) {
+                        // 可折叠标题行
+                        const apiUrl = apiCall.request ? apiCall.request.url : '';
+                        const methodColor = {'GET':'#52c41a','POST':'#1890ff','PATCH':'#fa8c16','DELETE':'#ff4d4f','PUT':'#722ed1'}[apiCall.request ? apiCall.request.method : 'GET'] || '#1890ff';
                         extraHtml += `
-                        <div style="font-size:12px; font-weight:700; color:#595959;
-                                    margin-bottom:10px; display:flex; align-items:center; gap:8px;">
+                        <div onclick="toggleApiCall('${callId}')"
+                             style="cursor:pointer; background:#fafafa; border:1px solid #e8e8e8;
+                                    border-radius:6px; padding:8px 12px; margin-bottom:8px;
+                                    display:flex; align-items:center; gap:10px; user-select:none;
+                                    transition:background 0.2s;"
+                             onmouseover="this.style.background='#f0f5ff'" onmouseout="this.style.background='#fafafa'">
+                            <span id="${callId}-icon" style="font-size:11px; color:#8c8c8c; transition:transform 0.2s; display:inline-block;">▼</span>
+                            <span style="background:${methodColor}; color:#fff; border-radius:4px;
+                                         padding:2px 8px; font-size:11px; font-weight:700; flex-shrink:0;">
+                                ${apiCall.request ? apiCall.request.method : '-'}
+                            </span>
                             <span style="background:#2f54eb; color:#fff; border-radius:10px;
-                                         padding:2px 8px; font-size:11px;">API ${idx + 1}</span>
-                            <span style="color:#8c8c8c;">${apiCall.request ? apiCall.request.url : ''}</span>
-                        </div>`;
+                                         padding:2px 8px; font-size:11px; flex-shrink:0;">API ${idx + 1}</span>
+                            <span style="color:#595959; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1;"
+                                  title="${apiUrl}">${apiUrl}</span>
+                        </div>
+                        <div id="${callId}" style="">`;
                     }
 
                     extraHtml += `
@@ -883,8 +908,12 @@
                             <span data-lang="en" style="display:none;">Response</span>
                         </div>
                         <pre><code class="language-json">${JSON.stringify(apiCall.response ? apiCall.response.body : {}, null, 2)}</code></pre>
-                    </div>
                     </div>`;
+
+                    if (totalCalls > 1) {
+                        extraHtml += `</div>`; // close collapsible div
+                    }
+                    extraHtml += `</div>`; // close outer div
                 });
             } else {
                 extraHtml = `<div style="text-align: center; color: #999; padding: 40px;">

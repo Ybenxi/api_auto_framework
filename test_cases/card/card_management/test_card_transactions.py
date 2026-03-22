@@ -34,7 +34,7 @@ class TestCardTransactions:
         
         response_body = response.json()
         assert response_body.get("code") == 200
-        assert_list_structure(response_body)
+        assert_list_structure(response_body.get("data", response_body))
         
         logger.info(f"✓ 交易列表获取成功")
 

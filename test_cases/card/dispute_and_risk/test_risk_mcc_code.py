@@ -30,7 +30,7 @@ class TestRiskMCCCode:
         
         response_body = response.json()
         assert response_body.get("code") == 200
-        assert_list_structure(response_body)
+        assert_list_structure(response_body.get("data", response_body))
         
         logger.info(f"✓ MCC码列表获取成功")
 
@@ -73,7 +73,11 @@ class TestRiskMCCCode:
         response = card_dispute_api.list_mcc_codes(page=0, size=5)
         
         assert_status_ok(response)
-        assert_pagination(response, page=0, size=5)
+        body = response.json()
+        assert body.get("code") == 200
+        data = body.get("data", {}) or {}
+        content = data.get("content", [])
+        assert len(content) == 5, f"分页 size=5 应返回 5 条，实际: {len(content)}"
         
         logger.info("✓ 分页验证通过")
 

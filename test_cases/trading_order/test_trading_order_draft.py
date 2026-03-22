@@ -27,8 +27,9 @@ from utils.assertions import assert_status_ok
 def _get_real_ids(trading_order_api) -> Tuple[Optional[str], Optional[str], Optional[str]]:
     """
     从 list_orders 反查真实可用的 financial_account_id, sub_account_id, security_id。
-    返回 (financial_account_id, sub_account_id, security_id) 三元组，
-    优先返回有 financial_account_id 的订单数据。
+    返回 (financial_account_id, sub_account_id, security_id) 三元组。
+    ⚠ API 要求使用 sub_account_id 进行交易（code=300: Only sub-accounts are supported）
+    优先返回有 sub_account_id 的订单数据。
     """
     resp = trading_order_api.list_orders(page=0, size=50)
     if resp.status_code != 200:
@@ -38,14 +39,18 @@ def _get_real_ids(trading_order_api) -> Tuple[Optional[str], Optional[str], Opti
         return None, None, None
 
     orders = body.get("data", {}).get("content", [])
+
+    # 优先找有 sub_account_id 的订单（API 要求必须用 sub_account）
     for order in orders:
-        fa_id = order.get("financial_account_id")
         sa_id = order.get("sub_account_id")
         sec_id = order.get("security_id")
-        if sec_id and (fa_id or sa_id):
-            logger.info(f"  反查到可用 IDs: fa_id={fa_id}, sa_id={sa_id}, security_id={sec_id}")
+        if sec_id and sa_id:
+            fa_id = order.get("financial_account_id")
+            logger.info(f"  反查到可用 IDs (含 sub): fa_id={fa_id}, sa_id={sa_id}, security_id={sec_id}")
             return fa_id, sa_id, sec_id
 
+    # 没有含 sub_account_id 的订单，返回 None
+    logger.warning("  未找到含 sub_account_id 的订单，Trading Order Draft 测试将跳过")
     return None, None, None
 
 
