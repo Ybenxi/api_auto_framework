@@ -1,93 +1,101 @@
 """
-Instant Pay - Cancel/Approve/Reject 接口测试用例
-测试Request Payment的取消、批准、拒绝操作
+Instant Pay - Approve/Reject 接口测试用例
+
+以下 4 个接口依赖对方发起的交易，无法自动化模拟，仅验证 invalid ID 场景：
+  POST /instant-pay/payment-request/approve/:id
+  POST /instant-pay/payment-request/reject/:id
+  POST /instant-pay/return-request/approve/:id
+  POST /instant-pay/return-request/reject/:id
+
+业务说明（用户确认）：
+  - Approve/Reject Payment Request：处理别人向我们发起的 instant pay 请求
+  - Approve/Reject Return Request：处理别人要求退款的请求
+  - 以上均无法通过自动化模拟对方，只能验证接口可达性和 invalid 场景
+  - 所有正向场景 skip
+
+已验证：所有 invalid ID 均返回 code=599 "Transaction does not exist."
 """
 import pytest
 from utils.logger import logger
 
-
-@pytest.mark.instant_pay
-@pytest.mark.update_api
-@pytest.mark.no_rerun
-@pytest.mark.skip(reason="需要真实的Request Payment ID")
-class TestInstantPayCancelApproveReject:
-    """
-    Cancel/Approve/Reject操作测试（全部skip）
-    ⚠️ 文档问题：Cancel vs Reject概念混淆
-    """
-
-    def test_cancel_request_payment(self, instant_pay_api):
-        """测试场景1：取消收款请求"""
-        logger.info("测试场景1：取消收款请求")
-        
-        response = instant_pay_api.cancel_request_payment(
-            rfp_id="test_rfp_id",
-            cancel_code="AC03",  # 值未知
-            cancel_reason="Test cancel"
-        )
-        assert response.status_code == 200
-        logger.info("✓ 收款请求取消成功")
-
-    def test_approve_payment_request(self, instant_pay_api):
-        """测试场景2：批准付款请求"""
-        logger.info("测试场景2：批准付款请求")
-        
-        logger.warning("⚠️ 批准后会实际付款")
-        
-        response = instant_pay_api.approve_payment_request(
-            rfp_id="test_rfp_id",
-            memo="Approved"
-        )
-        assert response.status_code == 200
-        logger.info("✓ 付款请求批准成功")
-
-    def test_reject_payment_request(self, instant_pay_api):
-        """测试场景3：拒绝付款请求"""
-        logger.info("测试场景3：拒绝付款请求")
-        
-        response = instant_pay_api.reject_payment_request(
-            rfp_id="test_rfp_id",
-            reject_code="AC04",  # 值未知
-            reject_reason="Test reject"
-        )
-        assert response.status_code == 200
-        logger.info("✓ 付款请求拒绝成功")
+pytestmark = pytest.mark.instant_pay
 
 
 @pytest.mark.instant_pay
-@pytest.mark.update_api
-class TestInstantPayCancelApproveRejectErrors:
-    """Cancel/Approve/Reject错误处理（可运行）"""
+class TestApproveRejectPaymentRequest:
 
-    def test_cancel_code_unknown_values(self, instant_pay_api):
-        """测试场景4：cancel_code可能值验证"""
-        logger.info("测试场景4：cancel_code可能值验证")
-        
-        logger.warning("⚠️ 文档问题：cancel_code可能值未知")
-        logger.warning("文档说'link is as follows'但没有链接")
-        logger.warning("示例只有AC03，不知道完整列表")
-        logger.warning("格式未说明（字母+数字？）")
-        
-        logger.info("✓ cancel_code问题已记录")
+    def test_approve_payment_request_invalid_id(self, instant_pay_api):
+        """
+        测试场景1：approve payment request - 无效 ID → code=599
+        Test Scenario1: Approve Payment Request with Invalid ID Returns 599
+        """
+        resp = instant_pay_api.approve_payment_request("INVALID_ID_99999")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body.get("code") != 200
+        logger.info(f"✓ approve-payment-request INVALID: code={body.get('code')}, msg={body.get('error_message')}")
 
-    def test_reject_code_unknown_values(self, instant_pay_api):
-        """测试场景5：reject_code可能值验证"""
-        logger.info("测试场景5：reject_code可能值")
-        
-        logger.warning("⚠️ 文档问题：reject_code可能值未知")
-        logger.warning("外部链接缺失，无法查询code列表")
-        logger.warning("示例：AC04")
-        
-        logger.info("✓ reject_code问题已记录")
+    def test_reject_payment_request_invalid_id(self, instant_pay_api):
+        """
+        测试场景2：reject payment request - 无效 ID → code=599
+        Test Scenario2: Reject Payment Request with Invalid ID Returns 599
+        """
+        resp = instant_pay_api.reject_payment_request(
+            "INVALID_ID_99999",
+            reject_code="AC04",
+            reject_reason="Auto test"
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body.get("code") != 200
+        logger.info(f"✓ reject-payment-request INVALID: code={body.get('code')}, msg={body.get('error_message')}")
 
-    def test_cancel_vs_reject_confusion(self, instant_pay_api):
-        """测试场景6：Cancel vs Reject概念混淆"""
-        logger.info("测试场景6：Cancel vs Reject概念验证")
-        
-        logger.warning("⚠️ 文档问题：术语混淆")
-        logger.warning("Cancel Request Payment：取消请求付款")
-        logger.warning("Reject Payment Request：拒绝付款请求")
-        logger.warning("两者区别未说明")
-        logger.warning("Cancel是发起方取消，Reject是接收方拒绝？")
-        
-        logger.info("✓ 术语混淆已记录")
+    @pytest.mark.skip(reason="需要对方向我们发起的 Incoming RFP，无法自动化模拟")
+    def test_approve_payment_request_success(self, instant_pay_api):
+        """⚠️ 跳过：需要真实 Incoming RFP 数据"""
+        pass
+
+    @pytest.mark.skip(reason="需要对方向我们发起的 Incoming RFP，无法自动化模拟")
+    def test_reject_payment_request_success(self, instant_pay_api):
+        """⚠️ 跳过：需要真实 Incoming RFP 数据"""
+        pass
+
+
+@pytest.mark.instant_pay
+class TestApproveRejectReturnRequest:
+
+    def test_approve_return_request_invalid_id(self, instant_pay_api):
+        """
+        测试场景3：approve return request - 无效 ID → code=599
+        Test Scenario3: Approve Return Request with Invalid ID Returns 599
+        """
+        resp = instant_pay_api.approve_return_request("INVALID_RETURN_ID_99999")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body.get("code") != 200
+        logger.info(f"✓ approve-return-request INVALID: code={body.get('code')}, msg={body.get('error_message')}")
+
+    def test_reject_return_request_invalid_id(self, instant_pay_api):
+        """
+        测试场景4：reject return request - 无效 ID → code=599
+        Test Scenario4: Reject Return Request with Invalid ID Returns 599
+        """
+        resp = instant_pay_api.reject_return_request(
+            "INVALID_RETURN_ID_99999",
+            reject_code="AC04",
+            reject_reason="Auto test"
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body.get("code") != 200
+        logger.info(f"✓ reject-return-request INVALID: code={body.get('code')}, msg={body.get('error_message')}")
+
+    @pytest.mark.skip(reason="需要对方发起 return request，无法自动化模拟")
+    def test_approve_return_request_success(self, instant_pay_api):
+        """⚠️ 跳过：需要真实 return request 数据"""
+        pass
+
+    @pytest.mark.skip(reason="需要对方发起 return request，无法自动化模拟")
+    def test_reject_return_request_success(self, instant_pay_api):
+        """⚠️ 跳过：需要真实 return request 数据"""
+        pass

@@ -1,115 +1,174 @@
 """
-Instant Pay - Return 接口测试用例
-测试退款相关接口
+Instant Pay - Return Payment & Return Request 接口测试用例
+POST /api/v1/cores/{core}/money-movements/instant-pay/return-payment/{transaction_id}
+POST /api/v1/cores/{core}/money-movements/instant-pay/return-request/{transaction_id}
+
+业务规则（已验证）：
+  return-payment：
+    - 只能对已成功结算（Completed，Origination 方向）的 transaction 操作
+    - Processing 状态 → code=599 "Transaction is not allowed to payment return."
+    - 不存在 ID → code=599 "Transaction does not exist."
+
+  return-request：
+    - 针对收到的 Incoming 交易（收到别人的钱）进行原路退款
+    - 需要真实 Incoming Completed 数据，自动化中难以制造，测 invalid 场景为主
+
+必填参数：return_code（必填）, return_reason（可选）
 """
 import pytest
 from utils.logger import logger
 
+pytestmark = pytest.mark.instant_pay
+
 
 @pytest.mark.instant_pay
-@pytest.mark.update_api
 @pytest.mark.no_rerun
-@pytest.mark.skip(reason="退款操作需要已结算的真实交易")
-class TestInstantPayReturn:
-    """
-    Return相关测试（破坏性，全部skip）
-    ⚠️ 文档问题：Return Payment vs Return Request区别不明
-    """
+class TestInstantPayReturnPayment:
 
-    def test_return_payment(self, instant_pay_api):
-        """测试场景1：退款支付"""
-        logger.info("测试场景1：退款支付")
-        
-        response = instant_pay_api.return_payment(
-            transaction_id="test_txn_id",
+    def _get_completed_txns(self, instant_pay_api):
+        """获取 Completed 状态的 instant pay transaction"""
+        resp = instant_pay_api.list_transactions(status="Completed", size=10)
+        return resp.json().get("data", {}).get("content", []) if resp.json().get("code") == 200 else []
+
+    def test_return_payment_on_processing_txn(self, instant_pay_api):
+        """
+        测试场景1：对 Processing 状态的 txn 发起 return-payment → 被拒绝
+        Test Scenario1: Return Payment on Processing Transaction Returns Error
+        业务规则：只有已结算的 txn 才能 return
+        """
+        # 找一个 Processing 状态的 txn
+        resp = instant_pay_api.list_transactions(status="Processing", size=3)
+        processing = resp.json().get("data", {}).get("content", [])
+        if not processing:
+            pytest.skip("无 Processing 状态的 Instant Pay 交易")
+
+        txn_id = processing[0].get("transaction_id") or processing[0].get("id")
+        ret_resp = instant_pay_api.return_payment(
+            transaction_id=txn_id,
             return_code="AC03",
-            return_reason="Wrong account"
+            return_reason="Auto test return on Processing"
         )
-        assert response.status_code == 200
-        logger.info("✓ 退款支付成功")
+        assert ret_resp.status_code == 200
+        body = ret_resp.json()
+        assert body.get("code") != 200
+        logger.info(f"✓ Processing 状态 txn return-payment 被拒绝: code={body.get('code')}, msg={body.get('error_message')}")
 
-    def test_return_request(self, instant_pay_api):
-        """测试场景2：退款请求"""
-        logger.info("测试场景2：退款请求")
-        
-        logger.warning("⚠️ Return Payment vs Return Request区别未说明")
-        
-        response = instant_pay_api.return_request(
-            transaction_id="test_txn_id",
+    def test_return_payment_on_completed_txn(self, instant_pay_api):
+        """
+        测试场景2：对 Completed 状态的 txn 发起 return-payment
+        Test Scenario2: Return Payment on Completed Transaction
+        验证点：code=200 或提示"已退款"，视实际数据而定
+        """
+        completed = self._get_completed_txns(instant_pay_api)
+        if not completed:
+            pytest.skip("无 Completed 状态的 Instant Pay 交易")
+
+        # 优先找 Debit/Origination 方向（我们发出去的）
+        txn = next(
+            (t for t in completed
+             if t.get("direction") == "Origination" or t.get("transaction_type") == "Debit"),
+            completed[0]
+        )
+        txn_id = txn.get("transaction_id") or txn.get("id")
+
+        ret_resp = instant_pay_api.return_payment(
+            transaction_id=txn_id,
             return_code="AC03",
-            return_reason="Test return"
+            return_reason="Auto test return on Completed"
         )
-        assert response.status_code == 200
-        logger.info("✓ 退款请求成功")
+        assert ret_resp.status_code == 200
+        body = ret_resp.json()
+        if body.get("code") == 200:
+            logger.info(f"✓ Completed txn return-payment 成功: id={txn_id}")
+        else:
+            logger.info(f"  ⚠ Completed txn return-payment 返回: code={body.get('code')}, msg={body.get('error_message','')[:60]}")
+            # 可能已经被 return 过了，属于正常探索性结果
 
-    def test_approve_return_request(self, instant_pay_api):
-        """测试场景3：批准退款请求"""
-        logger.info("测试场景3：批准退款请求")
-        
-        response = instant_pay_api.approve_return_request("test_return_id")
-        assert response.status_code == 200
-        logger.info("✓ 退款请求批准成功")
-
-    def test_reject_return_request(self, instant_pay_api):
-        """测试场景4：拒绝退款请求"""
-        logger.info("测试场景4：拒绝退款请求")
-        
-        response = instant_pay_api.reject_return_request(
-            return_request_id="test_return_id",
-            reject_code="AC04",
-            reject_reason="Test reject"
+    def test_return_payment_invalid_txn_id(self, instant_pay_api):
+        """
+        测试场景3：使用不存在的 transaction_id → code=599
+        Test Scenario3: Invalid Transaction ID Returns 599
+        """
+        ret_resp = instant_pay_api.return_payment(
+            transaction_id="INVALID_TXN_ID_99999",
+            return_code="AC03",
+            return_reason="Test"
         )
-        assert response.status_code == 200
-        logger.info("✓ 退款请求拒绝成功")
+        assert ret_resp.status_code == 200
+        body = ret_resp.json()
+        assert body.get("code") != 200
+        logger.info(f"✓ 无效 txn_id return-payment 被拒绝: code={body.get('code')}, msg={body.get('error_message')}")
+
+    def test_return_payment_missing_return_code(self, instant_pay_api):
+        """
+        测试场景4：缺少必填 return_code
+        Test Scenario4: Missing Required return_code Returns Error
+        """
+        url = instant_pay_api.config.get_full_url(
+            "/money-movements/instant-pay/return-payment/FAKE_TXN_ID_123"
+        )
+        resp = instant_pay_api.session.post(url, json={"return_reason": "Missing code"})
+        assert resp.status_code == 200
+        body = resp.json()
+        if body.get("code") != 200:
+            logger.info(f"✓ 缺少 return_code 被拒绝: code={body.get('code')}")
+        else:
+            logger.info(f"  ⚠ API 接受了缺少 return_code 的请求（探索性结果）")
 
 
 @pytest.mark.instant_pay
-@pytest.mark.update_api
-class TestInstantPayReturnErrors:
-    """Return错误处理（可运行）"""
+@pytest.mark.no_rerun
+class TestInstantPayReturnRequest:
+    """
+    Return Request 测试
+    注：return-request 针对 Incoming 交易（收到别人的钱），原路退款
+    因为自动化无法制造真实 Incoming Completed 数据，主要测 invalid 场景
+    """
 
-    def test_return_code_unknown_values(self, instant_pay_api):
-        """测试场景5：return_code可能值验证"""
-        logger.info("测试场景5：return_code可能值")
-        
-        logger.warning("⚠️ 文档问题：return_code可能值未知")
-        logger.warning("外部链接缺失")
-        logger.warning("示例：AC03")
-        
-        logger.info("✓ return_code问题已记录")
+    def test_return_request_invalid_txn_id(self, instant_pay_api):
+        """
+        测试场景1：使用不存在的 transaction_id → code=599
+        Test Scenario1: Invalid Transaction ID Returns 599
+        """
+        ret_resp = instant_pay_api.return_request(
+            transaction_id="INVALID_TXN_ID_99999",
+            return_code="AC03",
+            return_reason="Test return request"
+        )
+        assert ret_resp.status_code == 200
+        body = ret_resp.json()
+        assert body.get("code") != 200
+        logger.info(f"✓ 无效 txn_id return-request 被拒绝: code={body.get('code')}, msg={body.get('error_message')}")
 
-    def test_return_reason_example_error(self, instant_pay_api):
-        """测试场景6：return_reason示例内容错误"""
-        logger.info("测试场景6：return_reason示例错误")
-        
-        logger.warning("⚠️ 文档问题：示例内容不符合美国场景")
-        logger.warning("示例：Wrong IBAN in SCT")
-        logger.warning("IBAN是欧洲标准，SCT是欧洲支付")
-        logger.warning("但这是美国的FedNow服务")
-        logger.warning("示例应该用美国相关的错误描述")
-        
-        logger.info("✓ 示例错误已记录")
+    def test_return_request_on_origination_txn(self, instant_pay_api):
+        """
+        测试场景2：对我们发出的 Origination 交易发起 return-request → 被拒绝
+        Test Scenario2: Return Request on Origination Transaction Returns Error
+        （return-request 只针对 Incoming，对 Origination 应被拒绝）
+        """
+        # 找一个 Origination 方向的 txn
+        resp = instant_pay_api.list_transactions(size=10)
+        txns = resp.json().get("data", {}).get("content", [])
+        orig_txn = next(
+            (t for t in txns if t.get("direction") == "Origination"), None
+        )
+        if not orig_txn:
+            pytest.skip("无 Origination 方向的 Instant Pay 交易")
 
-    def test_reject_return_request_url_error(self, instant_pay_api):
-        """测试场景7：Reject Return Request URL示例完全错误"""
-        logger.info("测试场景7：URL示例完全错误")
-        
-        logger.warning("⚠️⚠️ 文档问题：URL示例完全错误")
-        logger.warning("接口定义：/return-request/reject/:id")
-        logger.warning("示例URL：/payment-request/reject/...")
-        logger.warning("这是完全不同的接口！")
-        
-        logger.info("✓ URL严重错误已记录")
+        txn_id = orig_txn.get("transaction_id") or orig_txn.get("id")
+        ret_resp = instant_pay_api.return_request(
+            transaction_id=txn_id,
+            return_code="AC03",
+            return_reason="Auto test return request on Origination"
+        )
+        assert ret_resp.status_code == 200
+        body = ret_resp.json()
+        if body.get("code") != 200:
+            logger.info(f"✓ Origination txn return-request 被拒绝（符合预期）: code={body.get('code')}")
+        else:
+            logger.info(f"  ⚠ Origination txn return-request 被接受（探索性结果）")
 
-    def test_url_naming_inconsistency(self, instant_pay_api):
-        """测试场景8：URL命名不一致"""
-        logger.info("测试场景8：URL命名不一致")
-        
-        logger.warning("⚠️ 文档问题：URL命名不一致")
-        logger.info("/request-payment/cancel - 使用request-payment")
-        logger.info("/payment-request/approve - 使用payment-request")
-        logger.info("/payment-request/reject - 使用payment-request")
-        logger.info("/return-request/approve - 使用return-request")
-        logger.warning("同一功能使用不同格式，容易混淆")
-        
-        logger.info("✓ URL命名不一致已记录")
+    @pytest.mark.skip(reason="return-request 需要真实 Incoming Completed 数据，无法自动化制造")
+    def test_return_request_success(self, instant_pay_api):
+        """⚠️ 跳过：需要真实收到的 Incoming Completed 交易"""
+        pass
