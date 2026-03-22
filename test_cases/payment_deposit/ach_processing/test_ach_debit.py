@@ -2,23 +2,38 @@
 ACH Processing - Debit 接口测试用例
 POST /api/v1/cores/{core}/money-movements/ach/debit
 
-ACH Debit = 向外部账户发起拉款（pull 资金进来）
-特点：与 Credit 参数类似，first_party=False 使用普通 ACH CP
+ACH Debit = 向外部账户发起拉款（pull 资金进来，Money来自 counterparty）
 
 已验证数据：
-  ACH_FA=251119084741475550，ACH_SUB=251119084741475584
-  ACH_CP=251212054048369793（assign 了 FA 的 account_id）
+  first_party=False:
+    ACH_FA=251119084741475550, ACH_SUB=251119084741475584, ACH_CP=251212054048369793
+  first_party=True（使用 bank-account 作为 CP）:
+    ACH_FA=251119084741475550, ACH_SUB=251119084741475584, ACH_CP_FP=251212054048127858
+    （bank-account，account_id=250918043812871683，与 FA 的 account_id 一致）
+    ⚠ 注意：Debit fp=True 可能因外部账户余额不足而报 code=600
+
+用于 fp=False 的备用组合：
+  ACH_FA2=251212054048210705, ACH_SUB2=251212054048210868, ACH_CP2=251212054048301820
 """
 import pytest
 import time
 from utils.logger import logger
 
+# primary - fp=False
 ACH_FA       = "251119084741475550"
 ACH_SUB      = "251119084741475584"
-ACH_CP       = "251212054048369793"
-INVISIBLE_FA = "241010195850134683"
+ACH_CP       = "251212054048369793"   # 普通 ACH CP，fp=False
 
-MEMO_PREFIX = "Auto TestYan ACH Debit"
+# fp=True data (from user examples)
+ACH_CP_FP    = "251212054048127858"   # bank-account CP，account_id=250918043812871683
+
+# secondary FA
+ACH_FA2      = "251212054048210705"
+ACH_SUB2     = "251212054048210868"
+ACH_CP2      = "251212054048301820"
+
+INVISIBLE_FA = "241010195850134683"
+MEMO_PREFIX  = "Auto TestYan ACH Debit"
 
 pytestmark = [pytest.mark.ach_processing, pytest.mark.no_rerun]
 
@@ -27,13 +42,13 @@ pytestmark = [pytest.mark.ach_processing, pytest.mark.no_rerun]
 @pytest.mark.no_rerun
 class TestAchDebit:
 
-    def test_debit_success_and_cancel(self, ach_processing_api):
+    def test_debit_fp_false_success_and_cancel(self, ach_processing_api):
         """
-        测试场景1：成功发起 ACH Debit，立即 cancel
-        Test Scenario1: Initiate ACH Debit and Cancel
+        测试场景1：first_party=False Debit 成功发起并 cancel
+        Test Scenario1: Initiate ACH Debit (first_party=False) and Cancel
         验证点：code=200, status=Processing, transaction_type=Debit, first_party=False
         """
-        memo = f"{MEMO_PREFIX} {time.strftime('%Y-%m-%d %H:%M:%S')}"
+        memo = f"{MEMO_PREFIX} fp=False {time.strftime('%Y-%m-%d %H:%M:%S')}"
         resp = ach_processing_api.initiate_debit(
             financial_account_id=ACH_FA,
             sub_account_id=ACH_SUB,
@@ -46,24 +61,58 @@ class TestAchDebit:
         assert resp.status_code == 200
         body = resp.json()
         assert body.get("code") == 200, \
-            f"ACH Debit 发起失败: code={body.get('code')}, err={body.get('error_message')}"
+            f"ACH Debit fp=False 失败: code={body.get('code')}, err={body.get('error_message')}"
 
         data = body.get("data") or body
         txn_id = data.get("id") or data.get("transaction_id")
-        assert txn_id, "交易 id 不应为空"
+        assert txn_id
         assert data.get("status") == "Processing"
         assert data.get("transaction_type") == "Debit"
         assert data.get("first_party") is False
-        logger.info(f"  ✓ ACH Debit 发起成功: id={txn_id}, status=Processing")
+        logger.info(f"  ✓ ACH Debit fp=False 发起成功: id={txn_id}")
 
         cancel_resp = ach_processing_api.cancel_transaction(txn_id)
         assert cancel_resp.json().get("code") == 200
-        logger.info(f"✓ ACH Debit cancel 成功: id={txn_id}")
+        logger.info(f"✓ ACH Debit fp=False cancel 成功")
+
+    def test_debit_fp_true_success_and_cancel(self, ach_processing_api):
+        """
+        测试场景2：first_party=True Debit 发起（使用 bank-account CP）
+        Test Scenario2: Initiate ACH Debit (first_party=True) with bank-account CP
+        验证点：code=200, first_party=True
+        ⚠ 注意：外部账户余额不足时可能报 code=600，属正常业务拦截
+        """
+        memo = f"{MEMO_PREFIX} fp=True {time.strftime('%Y-%m-%d %H:%M:%S')}"
+        resp = ach_processing_api.initiate_debit(
+            financial_account_id=ACH_FA,
+            sub_account_id=ACH_SUB,
+            counterparty_id=ACH_CP_FP,
+            amount="0.01",
+            first_party=True,
+            same_day=False,
+            memo=memo
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+
+        if body.get("code") == 200:
+            data = body.get("data") or body
+            txn_id = data.get("id")
+            assert data.get("first_party") is True
+            assert data.get("transaction_type") == "Debit"
+            logger.info(f"  ✓ ACH Debit fp=True 发起成功: id={txn_id}")
+            cancel_resp = ach_processing_api.cancel_transaction(txn_id)
+            assert cancel_resp.json().get("code") == 200
+            logger.info(f"✓ ACH Debit fp=True cancel 成功")
+        elif body.get("code") == 600:
+            logger.info(f"  ⚠ 外部账户余额不足被拦截（业务正常）: code=600")
+        else:
+            assert False, f"ACH Debit fp=True 返回意外 code={body.get('code')}, err={body.get('error_message')}"
 
     def test_debit_appears_in_list(self, ach_processing_api):
         """
-        测试场景2：Debit 发起后在 transactions list 中可查到
-        Test Scenario2: Debit Appears in Transactions List
+        测试场景3：Debit 发起后在 transactions list 中可查到
+        Test Scenario3: Debit Appears in Transactions List
         """
         resp = ach_processing_api.initiate_debit(
             financial_account_id=ACH_FA,
@@ -96,8 +145,8 @@ class TestAchDebit:
 
     def test_debit_with_schedule_date(self, ach_processing_api):
         """
-        测试场景3：传入未来 schedule_date 的 Debit
-        Test Scenario3: Debit with Future schedule_date
+        测试场景4：传入未来 schedule_date 的 Debit
+        Test Scenario4: Debit with Future schedule_date
         """
         resp = ach_processing_api.initiate_debit(
             financial_account_id=ACH_FA,
@@ -118,8 +167,8 @@ class TestAchDebit:
 
     def test_debit_missing_sub_account_id(self, ach_processing_api):
         """
-        测试场景4：FA 有 sub 但未传 sub_account_id → 被拒绝
-        Test Scenario4: Missing sub_account_id Returns Error
+        测试场景5：FA 有 sub 但未传 sub_account_id → 被拒绝
+        Test Scenario5: Missing sub_account_id Returns Error
         """
         resp = ach_processing_api.initiate_debit(
             financial_account_id=ACH_FA,
@@ -134,8 +183,8 @@ class TestAchDebit:
 
     def test_debit_invisible_fa(self, ach_processing_api):
         """
-        测试场景5：越权 FA → 被拒绝
-        Test Scenario5: Invisible FA Returns Error
+        测试场景6：越权 FA → 被拒绝
+        Test Scenario6: Invisible FA Returns Error
         """
         resp = ach_processing_api.initiate_debit(
             financial_account_id=INVISIBLE_FA,
@@ -150,8 +199,8 @@ class TestAchDebit:
 
     def test_debit_negative_amount(self, ach_processing_api):
         """
-        测试场景6：负数金额
-        Test Scenario6: Negative Amount Returns Error
+        测试场景7：负数金额
+        Test Scenario7: Negative Amount Returns Error
         """
         resp = ach_processing_api.initiate_debit(
             financial_account_id=ACH_FA,

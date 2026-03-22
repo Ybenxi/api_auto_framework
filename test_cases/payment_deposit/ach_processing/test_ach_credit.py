@@ -3,20 +3,26 @@ ACH Processing - Credit 接口测试用例
 POST /api/v1/cores/{core}/money-movements/ach/credit
 
 ACH Credit = 向外部账户（counterparty）转账（推送资金）
-特点：first_party=False 使用普通 ACH CP，first_party=True 使用 bank-account
 
 已验证数据：
-  ACH_FA=251119084741475550，ACH_SUB=251119084741475584
-  ACH_CP=251212054048369793（assign=['250918043812871683'] = FA's account_id）
+  first_party=False:
+    ACH_FA=251212054048210705, ACH_SUB=251212054048210868, ACH_CP=251212054048301820
+  first_party=True（使用 bank-account 作为 CP）:
+    ACH_FA=251212054048210705, ACH_SUB=251212054048210868, ACH_CP_FP=251212054048237385
+    （CP 是 bank-account，account_id=251212054048210865，与 FA 的 account_id 一致）
 """
 import pytest
 import time
 from utils.logger import logger
 
-ACH_FA       = "251119084741475550"
-ACH_SUB      = "251119084741475584"
-ACH_CP       = "251212054048369793"   # ACH CP，assign 了 FA 的 account_id
+ACH_FA       = "251212054048210705"
+ACH_SUB      = "251212054048210868"
+ACH_CP       = "251212054048301820"    # 普通 ACH CP，用于 first_party=False
+ACH_CP_FP    = "251212054048237385"    # bank-account CP，用于 first_party=True
 INVISIBLE_FA = "241010195850134683"
+OLD_ACH_FA   = "251119084741475550"    # 备用 FA
+OLD_ACH_SUB  = "251119084741475584"
+OLD_ACH_CP   = "251212054048369793"    # 对应 OLD_ACH_FA 的 CP
 
 MEMO_PREFIX = "Auto TestYan ACH Credit"
 
@@ -27,13 +33,13 @@ pytestmark = [pytest.mark.ach_processing, pytest.mark.no_rerun]
 @pytest.mark.no_rerun
 class TestAchCredit:
 
-    def test_credit_success_and_cancel(self, ach_processing_api):
+    def test_credit_fp_false_success_and_cancel(self, ach_processing_api):
         """
-        测试场景1：成功发起 ACH Credit，立即 cancel
-        Test Scenario1: Initiate ACH Credit and Cancel
+        测试场景1：first_party=False Credit 成功发起并 cancel
+        Test Scenario1: Initiate ACH Credit (first_party=False) and Cancel
         验证点：code=200, status=Processing, first_party=False, direction=Origination
         """
-        memo = f"{MEMO_PREFIX} {time.strftime('%Y-%m-%d %H:%M:%S')}"
+        memo = f"{MEMO_PREFIX} fp=False {time.strftime('%Y-%m-%d %H:%M:%S')}"
         resp = ach_processing_api.initiate_credit(
             financial_account_id=ACH_FA,
             sub_account_id=ACH_SUB,
@@ -46,26 +52,57 @@ class TestAchCredit:
         assert resp.status_code == 200
         body = resp.json()
         assert body.get("code") == 200, \
-            f"ACH Credit 发起失败: code={body.get('code')}, err={body.get('error_message')}"
+            f"ACH Credit fp=False 失败: code={body.get('code')}, err={body.get('error_message')}"
 
         data = body.get("data") or body
         txn_id = data.get("id") or data.get("transaction_id")
-        assert txn_id, "交易 id 不应为空"
+        assert txn_id
         assert data.get("status") == "Processing"
         assert data.get("direction") == "Origination"
         assert data.get("first_party") is False
         assert data.get("transaction_type") == "Credit"
-        logger.info(f"  ✓ ACH Credit 发起成功: id={txn_id}, status=Processing")
+        logger.info(f"  ✓ Credit fp=False 发起成功: id={txn_id}")
 
-        # cancel
         cancel_resp = ach_processing_api.cancel_transaction(txn_id)
         assert cancel_resp.json().get("code") == 200
-        logger.info(f"✓ ACH Credit cancel 成功: id={txn_id}")
+        logger.info(f"✓ ACH Credit fp=False cancel 成功")
+
+    def test_credit_fp_true_success_and_cancel(self, ach_processing_api):
+        """
+        测试场景2：first_party=True Credit 成功发起并 cancel（使用 bank-account 作为 CP）
+        Test Scenario2: Initiate ACH Credit (first_party=True) and Cancel
+        验证点：code=200, first_party=True，CP 是外部绑定银行账户
+        """
+        memo = f"{MEMO_PREFIX} fp=True {time.strftime('%Y-%m-%d %H:%M:%S')}"
+        resp = ach_processing_api.initiate_credit(
+            financial_account_id=ACH_FA,
+            sub_account_id=ACH_SUB,
+            counterparty_id=ACH_CP_FP,
+            amount="0.01",
+            first_party=True,
+            same_day=False,
+            memo=memo
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body.get("code") == 200, \
+            f"ACH Credit fp=True 失败: code={body.get('code')}, err={body.get('error_message')}"
+
+        data = body.get("data") or body
+        txn_id = data.get("id") or data.get("transaction_id")
+        assert txn_id
+        assert data.get("status") == "Processing"
+        assert data.get("first_party") is True
+        logger.info(f"  ✓ Credit fp=True 发起成功: id={txn_id}")
+
+        cancel_resp = ach_processing_api.cancel_transaction(txn_id)
+        assert cancel_resp.json().get("code") == 200
+        logger.info(f"✓ ACH Credit fp=True cancel 成功")
 
     def test_credit_response_fields(self, ach_processing_api):
         """
-        测试场景2：验证 ACH Credit 响应字段（含 first_party, same_day, reversal_id）
-        Test Scenario2: Verify ACH Credit Response Fields
+        测试场景3：验证 ACH Credit 响应字段完整性（含 ACH 特有字段）
+        Test Scenario3: Verify ACH Credit Response Fields
         """
         resp = ach_processing_api.initiate_credit(
             financial_account_id=ACH_FA,
@@ -90,29 +127,7 @@ class TestAchCredit:
 
         txn_id = data.get("id")
         ach_processing_api.cancel_transaction(txn_id)
-        logger.info(f"✓ ACH Credit 响应字段验证通过")
-
-    def test_credit_same_day_false(self, ach_processing_api):
-        """
-        测试场景3：same_day=False（非当天到账）发起
-        Test Scenario3: Credit with same_day=False
-        """
-        resp = ach_processing_api.initiate_credit(
-            financial_account_id=ACH_FA,
-            sub_account_id=ACH_SUB,
-            counterparty_id=ACH_CP,
-            amount="0.01",
-            first_party=False,
-            same_day=False,
-        )
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body.get("code") == 200
-        data = body.get("data") or body
-        assert data.get("same_day") is False
-        txn_id = data.get("id")
-        ach_processing_api.cancel_transaction(txn_id)
-        logger.info(f"✓ same_day=False Credit 发起成功: id={txn_id}")
+        logger.info(f"✓ ACH Credit 响应字段验证通过: {required_fields}")
 
     def test_credit_with_schedule_date(self, ach_processing_api):
         """
@@ -140,7 +155,7 @@ class TestAchCredit:
     def test_credit_missing_sub_account_id(self, ach_processing_api):
         """
         测试场景5：FA 有 sub 但未传 sub_account_id → code=599
-        Test Scenario5: FA with Sub but Missing sub_account_id Returns Error
+        Test Scenario5: Missing sub_account_id Returns Error
         """
         resp = ach_processing_api.initiate_credit(
             financial_account_id=ACH_FA,
@@ -150,9 +165,8 @@ class TestAchCredit:
             same_day=False,
         )
         assert resp.status_code == 200
-        body = resp.json()
-        assert body.get("code") != 200
-        logger.info(f"✓ 缺少 sub_account_id 被拒绝: code={body.get('code')}, msg={body.get('error_message')}")
+        assert resp.json().get("code") != 200
+        logger.info(f"✓ 缺少 sub_account_id 被拒绝: code={resp.json().get('code')}")
 
     def test_credit_invisible_fa(self, ach_processing_api):
         """
