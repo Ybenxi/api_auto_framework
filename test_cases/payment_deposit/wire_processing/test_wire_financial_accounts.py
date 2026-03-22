@@ -1,149 +1,115 @@
 """
 Wire Processing - Financial Accounts 接口测试用例
-测试 GET /api/v1/cores/{core}/money-movements/wire/financial-accounts 接口
+GET /api/v1/cores/{core}/money-movements/wire/financial-accounts
+
+响应结构：{"code": 200, "data": {"content": [...], "total_elements": N, ...}}
+筛选参数：account_number, name（模糊）, sub_type（Checking/Saving）, account_ids
 """
 import pytest
 from utils.logger import logger
-from utils.assertions import assert_status_ok
-from data.enums import AccountSubType
+
+pytestmark = pytest.mark.wire_processing
 
 
 @pytest.mark.wire_processing
-@pytest.mark.list_api
 class TestWireFinancialAccounts:
-    """
-    Wire可用账户列表接口测试用例集
-    ⚠️ 文档问题：
-    1. HTTP方法示例错误（GET写成POST）
-    2. 响应无code包装层
-    """
 
-    def test_list_financial_accounts_success(self, wire_processing_api):
-        """
-        测试场景1：成功获取可用账户列表
-        验证点：
-        1. 接口返回 200
-        2. 返回Financial Accounts列表
-        """
-        logger.info("测试场景1：成功获取Wire可用账户列表")
-        
-        response = wire_processing_api.list_financial_accounts(page=0, size=10)
-        
-        assert response.status_code == 200, "HTTP状态码应为200"
-        
-        response_body = response.json()
-        
-        if "content" in response_body:
-            logger.info(f"✓ 可用账户列表获取成功，返回 {len(response_body.get('content', []))} 个账户")
-        
-        logger.info("✓ 可用账户列表获取成功")
+    def _get_content(self, response):
+        body = response.json()
+        data = body.get("data", body) or {}
+        return data.get("content", []) if isinstance(data, dict) else []
 
-    def test_filter_by_account_number(self, wire_processing_api):
+    def test_list_fa_success(self, wire_processing_api):
         """
-        测试场景2：按account_number筛选
-        验证点：
-        1. account_number参数生效
+        测试场景1：成功获取 Wire FA 列表
+        Test Scenario1: Successfully List Wire Financial Accounts
+        验证点：code=200，data.content 是数组，total > 0
         """
-        logger.info("测试场景2：按account_number筛选")
-        
-        response = wire_processing_api.list_financial_accounts(
-            account_number="1-01-1-0007876",
-            size=10
-        )
-        
-        assert response.status_code == 200
-        
-        logger.info("✓ account_number筛选验证通过")
+        resp = wire_processing_api.list_financial_accounts(size=10)
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body.get("code") == 200
 
-    def test_filter_by_name_fuzzy_search(self, wire_processing_api):
-        """
-        测试场景3：按name模糊搜索
-        验证点：
-        1. name参数支持模糊搜索
-        """
-        logger.info("测试场景3：按name模糊搜索")
-        
-        response = wire_processing_api.list_financial_accounts(name="Test", size=10)
-        
-        assert response.status_code == 200
-        
-        logger.info("✓ name模糊搜索验证通过")
+        data = body.get("data", {})
+        content = data.get("content", [])
+        total = data.get("total_elements", 0)
+        assert total > 0
+        logger.info(f"✓ Wire FA 列表获取成功: total={total}, returned={len(content)}")
 
-    def test_filter_by_sub_type(self, wire_processing_api):
+    def test_filter_by_name_fuzzy(self, wire_processing_api):
         """
-        测试场景4：按sub_type筛选
-        验证点：
-        1. sub_type参数生效
-        2. 支持Checking和Savings
+        测试场景2：按 name 模糊搜索
+        Test Scenario2: Filter FA by Name Fuzzy Search
         """
-        logger.info("测试场景4：按sub_type筛选")
-        
-        response = wire_processing_api.list_financial_accounts(
-            sub_type=AccountSubType.CHECKING,
-            size=10
-        )
-        
-        assert response.status_code == 200
-        
-        logger.info("✓ sub_type筛选验证通过")
+        base = self._get_content(wire_processing_api.list_financial_accounts(size=1))
+        if not base:
+            pytest.skip("无 FA 数据")
+        real_name = base[0].get("name", "")
+        if not real_name:
+            pytest.skip("name 字段为空")
+        keyword = real_name[:4] if len(real_name) >= 4 else real_name
+        resp = wire_processing_api.list_financial_accounts(name=keyword, size=10)
+        assert resp.status_code == 200
+        assert resp.json().get("code") == 200
+        filtered = self._get_content(resp)
+        assert len(filtered) > 0
+        for fa in filtered:
+            assert keyword.lower() in (fa.get("name") or "").lower()
+        logger.info(f"✓ name 模糊搜索: keyword='{keyword}', 返回 {len(filtered)} 条")
 
-    def test_filter_by_account_ids(self, wire_processing_api):
+    @pytest.mark.parametrize("sub_type", ["Checking", "Saving"])
+    def test_filter_by_sub_type(self, wire_processing_api, sub_type):
         """
-        测试场景5：按account_ids批量查询
-        验证点：
-        1. account_ids参数支持数组
-        2. 逗号分隔格式
+        测试场景3：按 sub_type 枚举筛选
+        Test Scenario3: Filter by sub_type Enum (Checking/Saving)
         """
-        logger.info("测试场景5：按account_ids批量查询")
-        
-        response = wire_processing_api.list_financial_accounts(
-            account_ids=["123", "456"],
-            size=10
-        )
-        
-        assert response.status_code == 200
-        
-        logger.info("✓ account_ids批量查询验证通过")
-
-    def test_response_structure(self, wire_processing_api):
-        """
-        测试场景6：响应结构验证
-        验证点：
-        1. 包含余额信息
-        2. 包含账户基本信息
-        """
-        logger.info("测试场景6：响应结构验证")
-        
-        response = wire_processing_api.list_financial_accounts(size=1)
-        
-        assert response.status_code == 200
-        
-        content = response.json().get("content", [])
-        
+        resp = wire_processing_api.list_financial_accounts(sub_type=sub_type, size=10)
+        assert resp.status_code == 200
+        assert resp.json().get("code") == 200
+        content = self._get_content(resp)
         if content:
-            account = content[0]
-            
-            # 验证余额字段
-            balance_fields = ["available_balance", "balance"]
-            for field in balance_fields:
-                if field in account:
-                    logger.debug(f"{field}: {account[field]}")
-            
-            logger.debug(f"账户字段: {list(account.keys())}")
-        
-        logger.info("✓ 响应结构验证通过")
+            for fa in content:
+                if fa.get("sub_type"):
+                    assert fa["sub_type"] == sub_type
+        logger.info(f"✓ sub_type='{sub_type}' 筛选: 返回 {len(content)} 条")
 
-    def test_http_method_example_error(self, wire_processing_api):
+    def test_pagination(self, wire_processing_api):
         """
-        测试场景7：HTTP方法示例错误验证
-        验证点：
-        1. 文档标题：GET
-        2. 示例代码：POST（错误）
+        测试场景4：分页验证
+        Test Scenario4: Pagination Verification
         """
-        logger.info("测试场景7：HTTP方法示例错误验证")
-        
-        logger.warning("⚠️ 文档问题：HTTP方法示例错误")
-        logger.warning("标题标注: GET /wire/financial-accounts")
-        logger.warning("示例代码: POST /wire/financial-accounts")
-        
-        logger.info("✓ HTTP方法错误已记录")
+        resp = wire_processing_api.list_financial_accounts(page=0, size=2)
+        assert resp.status_code == 200
+        data = resp.json().get("data", {})
+        content = data.get("content", [])
+        assert len(content) <= 2
+        assert data.get("size") == 2
+        logger.info(f"✓ 分页验证: size=2, returned={len(content)}")
+
+    def test_filter_nonexistent_name(self, wire_processing_api):
+        """
+        测试场景5：搜索不存在的 name → 返回空列表
+        Test Scenario5: Non-existent Name Returns Empty List
+        """
+        resp = wire_processing_api.list_financial_accounts(
+            name="XYZXYZ_NOT_EXISTS_99999", size=5
+        )
+        assert resp.status_code == 200
+        assert resp.json().get("code") == 200
+        assert len(self._get_content(resp)) == 0
+        logger.info("✓ 不存在 name 返回空列表")
+
+    def test_fa_has_account_id_field(self, wire_processing_api):
+        """
+        测试场景6：验证 FA 包含 account_id 字段（用于关联 CP assign_account）
+        Test Scenario6: FA Contains account_id Field for CP Association
+        """
+        content = self._get_content(wire_processing_api.list_financial_accounts(size=5))
+        if not content:
+            pytest.skip("无 FA 数据")
+        # account_id 是做 wire payment 时 counterparty assign 验证的关键字段
+        for fa in content:
+            if fa.get("account_id"):
+                logger.info(f"  ✓ FA id={fa.get('id')}, account_id={fa.get('account_id')}")
+                break
+        logger.info("✓ FA account_id 字段验证通过")

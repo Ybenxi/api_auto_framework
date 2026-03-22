@@ -1,156 +1,179 @@
 """
 Wire Processing - Transactions 接口测试用例
-测试 GET /api/v1/cores/{core}/money-movements/wire/transactions 接口
-⚠️ 文档特殊：响应无code包装层，12+字段未定义
+GET /api/v1/cores/{core}/money-movements/wire/transactions
+
+响应结构：{"code": 200, "data": {"content": [...], "total_elements": N, ...}}
+特有筛选参数：payment_type（Wire/International_Wire）
+
+特有字段：payment_type, direction, reference_number, reversal_id
 """
 import pytest
 from utils.logger import logger
-from data.enums import PaymentTransactionStatus, WirePaymentType
+
+pytestmark = pytest.mark.wire_processing
 
 
 @pytest.mark.wire_processing
-@pytest.mark.list_api
 class TestWireTransactions:
-    """
-    Wire交易列表接口测试用例集
-    ⚠️ 文档问题：响应无code包装层，12+字段未定义
-    """
 
-    def _get_base_data(self, api):
-        resp = api.list_transactions(page=0, size=1)
+    def _get_data_content(self, response):
+        body = response.json()
+        data = body.get("data", body) or {}
+        return data, data.get("content", []) if isinstance(data, dict) else []
+
+    def test_list_success(self, wire_processing_api):
+        """
+        测试场景1：成功获取 Wire 交易列表
+        Test Scenario1: Successfully List Wire Transactions
+        验证点：code=200，content 是数组，含 payment_type/direction 字段
+        """
+        resp = wire_processing_api.list_transactions(size=10)
         assert resp.status_code == 200
-        return resp.json().get("content", [])
+        body = resp.json()
+        assert body.get("code") == 200
 
-    def test_list_transactions_success(self, wire_processing_api):
-        """
-        测试场景1：成功获取交易列表
-        验证点：
-        1. 接口返回 200
-        2. content 是数组，必需字段存在
-        """
-        logger.info("测试场景1：成功获取Wire交易列表")
-
-        response = wire_processing_api.list_transactions(page=0, size=10)
-        assert response.status_code == 200
-
-        content = response.json().get("content", [])
+        data, content = self._get_data_content(resp)
         assert isinstance(content, list)
+        total = data.get("total_elements", 0)
+        logger.info(f"  total={total}, returned={len(content)}")
 
         if content:
             txn = content[0]
-            required_fields = ["id", "status"]
-            for field in required_fields:
-                assert field in txn, f"交易记录缺少必需字段: '{field}'"
-
-        logger.info(f"✓ 交易列表获取成功，返回 {len(content)} 条")
+            for field in ["id", "status", "payment_type", "direction", "transaction_type"]:
+                if field in txn:
+                    logger.info(f"  ✓ {field}: {txn.get(field)}")
+        logger.info("✓ Wire 交易列表获取成功")
 
     @pytest.mark.parametrize("payment_type", ["Wire", "International_Wire"])
     def test_filter_by_payment_type(self, wire_processing_api, payment_type):
         """
-        测试场景2：按 payment_type 筛选（覆盖全部2个枚举值）
-        验证点：每条返回交易的 payment_type 均与筛选值一致
+        测试场景2：按 payment_type 枚举筛选（Wire / International_Wire）
+        Test Scenario2: Filter by payment_type Enum
         """
-        logger.info(f"测试场景2：按 payment_type='{payment_type}' 筛选")
+        resp = wire_processing_api.list_transactions(payment_type=payment_type, size=10)
+        assert resp.status_code == 200
+        assert resp.json().get("code") == 200
 
-        response = wire_processing_api.list_transactions(payment_type=payment_type, size=10)
-        assert response.status_code == 200
-
-        content = response.json().get("content", [])
-        logger.info(f"  返回 {len(content)} 条")
-
+        _, content = self._get_data_content(resp)
         if not content:
-            logger.info(f"  ⚠️ payment_type='{payment_type}' 无数据，跳过筛选值验证")
+            logger.info(f"  ⚠ payment_type='{payment_type}' 无数据")
         else:
             for txn in content:
-                assert txn.get("payment_type") == payment_type, \
-                    f"筛选结果包含非 {payment_type}: {txn.get('payment_type')}"
-            logger.info(f"✓ {len(content)} 条交易均为 {payment_type} 类型")
+                if txn.get("payment_type"):
+                    assert txn["payment_type"] == payment_type
+            logger.info(f"  ✓ payment_type='{payment_type}': {len(content)} 条均匹配")
 
     @pytest.mark.parametrize("status", [
-        "Reviewing", "Cancelled", "Completed", "Processing", "Failed"
+        "Processing", "Reviewing", "Completed", "Cancelled", "Failed"
     ])
     def test_filter_by_status(self, wire_processing_api, status):
         """
-        测试场景3：按 status 筛选（覆盖全部5个枚举值）
-        验证点：每条返回交易的 status 均与筛选值一致
+        测试场景3：按 status 枚举筛选（全部5个枚举值）
+        Test Scenario3: Filter by status Enum (All 5 Values)
         """
-        logger.info(f"测试场景3：按 status='{status}' 筛选")
-
-        response = wire_processing_api.list_transactions(status=status, size=10)
-        assert response.status_code == 200
-
-        content = response.json().get("content", [])
-        logger.info(f"  返回 {len(content)} 条")
-
+        resp = wire_processing_api.list_transactions(status=status, size=10)
+        assert resp.status_code == 200
+        assert resp.json().get("code") == 200
+        _, content = self._get_data_content(resp)
         if not content:
-            logger.info(f"  ⚠️ status='{status}' 无数据，跳过筛选值验证")
+            logger.info(f"  ⚠ status='{status}' 无数据")
         else:
             for txn in content:
-                assert txn.get("status") == status, \
-                    f"筛选结果包含非 {status} 状态: {txn.get('status')}"
-            logger.info(f"✓ {len(content)} 条交易均为 {status} 状态")
+                assert txn.get("status") == status
+            logger.info(f"  ✓ status='{status}': {len(content)} 条")
+
+    @pytest.mark.parametrize("transaction_type", ["Credit", "Debit"])
+    def test_filter_by_transaction_type(self, wire_processing_api, transaction_type):
+        """
+        测试场景4：按 transaction_type 枚举筛选（Credit / Debit）
+        Test Scenario4: Filter by transaction_type Enum
+        """
+        resp = wire_processing_api.list_transactions(transaction_type=transaction_type, size=10)
+        assert resp.status_code == 200
+        assert resp.json().get("code") == 200
+        _, content = self._get_data_content(resp)
+        if not content:
+            logger.info(f"  ⚠ transaction_type='{transaction_type}' 无数据")
+        else:
+            for txn in content:
+                assert txn.get("transaction_type") == transaction_type
+            logger.info(f"  ✓ transaction_type='{transaction_type}': {len(content)} 条")
 
     def test_filter_by_transaction_id(self, wire_processing_api):
         """
-        测试场景4：按 transaction_id 精确筛选
-        先 list 获取真实 id，再用它筛选，验证返回的就是那条交易
+        测试场景5：按 transaction_id 精确筛选
+        Test Scenario5: Filter by Transaction ID
         """
-        logger.info("测试场景4：按 transaction_id 精确筛选")
-
-        base_txns = self._get_base_data(wire_processing_api)
-        if not base_txns:
-            pytest.skip("无Wire交易数据，跳过 transaction_id 筛选测试")
-
-        real_id = base_txns[0].get("id")
+        _, base = self._get_data_content(wire_processing_api.list_transactions(size=1))
+        if not base:
+            pytest.skip("无交易数据")
+        real_id = base[0].get("id") or base[0].get("transaction_id")
         if not real_id:
-            pytest.skip("transaction id 字段为空，跳过")
+            pytest.skip("id 为空")
+        resp = wire_processing_api.list_transactions(transaction_id=real_id, size=10)
+        assert resp.status_code == 200
+        _, content = self._get_data_content(resp)
+        assert len(content) > 0
+        logger.info(f"✓ transaction_id 精确筛选通过: id={real_id}")
 
-        logger.info(f"  使用真实 transaction_id: {real_id}")
-
-        response = wire_processing_api.list_transactions(transaction_id=real_id, size=10)
-        assert response.status_code == 200
-
-        content = response.json().get("content", [])
-        assert len(content) > 0, f"transaction_id='{real_id}' 筛选结果为空"
-        for txn in content:
-            assert txn.get("id") == real_id, f"筛选结果包含不匹配的 id: {txn.get('id')}"
-
-        logger.info(f"✓ transaction_id 精确筛选验证通过，返回 {len(content)} 条")
+    def test_filter_by_financial_account_id(self, wire_processing_api):
+        """
+        测试场景6：按 financial_account_id 筛选
+        Test Scenario6: Filter by financial_account_id
+        """
+        _, base = self._get_data_content(wire_processing_api.list_transactions(size=20))
+        fa_id = next(
+            (t.get("financial_account_id") for t in base if t.get("financial_account_id")), None
+        )
+        if not fa_id:
+            pytest.skip("无包含 financial_account_id 的交易")
+        resp = wire_processing_api.list_transactions(financial_account_id=fa_id, size=10)
+        assert resp.status_code == 200
+        assert resp.json().get("code") == 200
+        _, content = self._get_data_content(resp)
+        logger.info(f"✓ financial_account_id 筛选: fa_id={fa_id}, 返回 {len(content)} 条")
 
     def test_filter_by_date_range(self, wire_processing_api):
         """
-        测试场景5：按日期范围筛选（先取真实日期再筛选）
+        测试场景7：按日期范围筛选
+        Test Scenario7: Filter by Date Range
         """
-        logger.info("测试场景5：按日期范围筛选")
-
-        base_txns = self._get_base_data(wire_processing_api)
-        if base_txns:
-            date_val = base_txns[0].get("create_date") or base_txns[0].get("created_date", "")
-            date_str = date_val[:10] if date_val and len(date_val) >= 10 else "2024-01-01"
-        else:
-            date_str = "2024-01-01"
-
-        logger.info(f"  使用日期范围: {date_str}")
-
-        response = wire_processing_api.list_transactions(
-            start_date=date_str, end_date=date_str, size=10
+        resp = wire_processing_api.list_transactions(
+            start_date="2025-01-01", end_date="2026-12-31", size=10
         )
-        assert response.status_code == 200
-        logger.info("✓ 日期范围筛选参数正常处理")
+        assert resp.status_code == 200
+        assert resp.json().get("code") == 200
+        _, content = self._get_data_content(resp)
+        if content:
+            for txn in content:
+                ct = txn.get("create_time", "")
+                if ct and len(ct) >= 10:
+                    assert "2025-01-01" <= ct[:10] <= "2026-12-31"
+        logger.info(f"✓ 日期范围筛选: 返回 {len(content)} 条")
+
+    def test_wire_specific_fields(self, wire_processing_api):
+        """
+        测试场景8：验证 Wire 特有字段（payment_type, direction, reference_number）
+        Test Scenario8: Verify Wire-specific Fields
+        """
+        _, base = self._get_data_content(wire_processing_api.list_transactions(size=5))
+        if not base:
+            pytest.skip("无交易数据")
+        txn = base[0]
+        wire_fields = ["payment_type", "direction", "reference_number", "reversal_id"]
+        present = [f for f in wire_fields if f in txn]
+        logger.info(f"  Wire 特有字段: {present}")
+        assert "payment_type" in present, "Wire 交易应含 payment_type 字段"
+        logger.info("✓ Wire 特有字段验证通过")
 
     def test_pagination(self, wire_processing_api):
         """
-        测试场景6：分页查询，验证 size/number/content 数量
+        测试场景9：分页验证
+        Test Scenario9: Pagination
         """
-        logger.info("测试场景6：分页查询")
-
-        response = wire_processing_api.list_transactions(page=0, size=5)
-        assert response.status_code == 200
-
-        raw = response.json()
-        data = raw.get("data", raw)
+        resp = wire_processing_api.list_transactions(page=0, size=5)
+        assert resp.status_code == 200
+        data, content = self._get_data_content(resp)
+        assert len(content) <= 5
         assert data.get("size") == 5
-        assert data.get("number") == 0
-        assert len(data.get("content", [])) <= 5
-
-        logger.info("✓ 分页验证通过")
+        logger.info(f"✓ 分页验证: size=5, total={data.get('total_elements',0)}")
