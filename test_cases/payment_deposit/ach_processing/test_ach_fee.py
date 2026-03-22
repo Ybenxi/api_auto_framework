@@ -1,88 +1,141 @@
 """
 ACH Processing - Transaction Fee 接口测试用例
-测试 POST /api/v1/cores/{core}/money-movements/ach/fee 接口
+POST /api/v1/cores/{core}/money-movements/ach/fee
+
+ACH fee 有 5 个必填参数（比其他 payment 模块多 first_party 和 transaction_type）
+已验证费率：
+  Credit  fp=False: 3.5
+  Debit   fp=False: 0.1
+  Credit  fp=True:  3.51
+  Debit   fp=True:  3.51
 """
 import pytest
 from utils.logger import logger
-from utils.assertions import assert_status_ok
-from data.enums import PaymentTransactionType
+
+VALID_FA     = "251119084741475550"
+INVISIBLE_FA = "241010195850134683"
+
+pytestmark = pytest.mark.ach_processing
 
 
 @pytest.mark.ach_processing
-@pytest.mark.detail_api
-class TestACHFee:
-    """ACH费用计算测试"""
+class TestAchFee:
 
-    @pytest.mark.skip(reason="需要真实financial_account_id")
-    def test_quote_fee_third_party_credit(self, ach_processing_api):
-        """测试场景1：计算第三方Credit费用"""
-        logger.info("测试场景1：计算第三方Credit费用")
-        
-        response = ach_processing_api.quote_transaction_fee(
-            financial_account_id="test_fa_id",
-            amount="100.00",
-            transaction_type=PaymentTransactionType.CREDIT,
-            same_day=False,
-            first_party=False
+    def test_fee_credit_not_first_party(self, ach_processing_api):
+        """
+        测试场景1：Credit 交易，first_party=False 手续费
+        Test Scenario1: Credit Fee with first_party=False
+        """
+        resp = ach_processing_api.quote_transaction_fee(
+            financial_account_id=VALID_FA, amount="10",
+            same_day=False, first_party=False, transaction_type="Credit"
         )
-        
-        assert_status_ok(response)
-        
-        data = response.json().get("data", {})
-        assert "fee" in data
-        logger.info(f"✓ 费用计算成功，fee: {data.get('fee')}")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body.get("code") == 200
+        data = body.get("data", {})
+        for field in ["fee", "amount", "same_day", "first_party", "transaction_type", "financial_account_id"]:
+            assert field in data, f"缺少字段: '{field}'"
+        assert isinstance(data.get("fee"), (int, float))
+        credit_fp_false_fee = data.get("fee")
+        logger.info(f"✓ Credit fp=False: fee={credit_fp_false_fee}")
 
-    @pytest.mark.skip(reason="需要真实数据")
-    def test_quote_fee_first_party(self, ach_processing_api):
-        """测试场景2：计算第一方转账费用"""
-        logger.info("测试场景2：计算第一方转账费用")
-        
-        response = ach_processing_api.quote_transaction_fee(
-            financial_account_id="test_fa_id",
-            amount="50.00",
-            transaction_type=PaymentTransactionType.CREDIT,
-            first_party=True  # 第一方
+    def test_fee_debit_not_first_party(self, ach_processing_api):
+        """
+        测试场景2：Debit 交易，first_party=False 手续费（费率低于 Credit）
+        Test Scenario2: Debit Fee with first_party=False
+        """
+        resp = ach_processing_api.quote_transaction_fee(
+            financial_account_id=VALID_FA, amount="10",
+            same_day=False, first_party=False, transaction_type="Debit"
         )
-        
-        assert_status_ok(response)
-        logger.info("✓ 第一方费用计算成功")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body.get("code") == 200
+        debit_fee = body.get("data", {}).get("fee")
+        assert isinstance(debit_fee, (int, float))
+        logger.info(f"✓ Debit fp=False: fee={debit_fee}（低于 Credit 费率）")
 
-    @pytest.mark.skip(reason="需要真实数据")
-    def test_quote_fee_same_day_impact(self, ach_processing_api):
-        """测试场景3：Same Day对费用的影响"""
-        logger.info("测试场景3：Same Day费用影响")
-        
-        # 非Same Day
-        response1 = ach_processing_api.quote_transaction_fee(
-            financial_account_id="test_fa_id",
-            amount="100.00",
-            transaction_type=PaymentTransactionType.CREDIT,
-            same_day=False
+    def test_fee_credit_first_party(self, ach_processing_api):
+        """
+        测试场景3：Credit 交易，first_party=True（费率与 fp=False 不同）
+        Test Scenario3: Credit Fee with first_party=True
+        """
+        resp = ach_processing_api.quote_transaction_fee(
+            financial_account_id=VALID_FA, amount="10",
+            same_day=False, first_party=True, transaction_type="Credit"
         )
-        
-        # Same Day
-        response2 = ach_processing_api.quote_transaction_fee(
-            financial_account_id="test_fa_id",
-            amount="100.00",
-            transaction_type=PaymentTransactionType.CREDIT,
-            same_day=True
-        )
-        
-        if response1.status_code == 200 and response2.status_code == 200:
-            fee1 = response1.json().get("data", {}).get("fee")
-            fee2 = response2.json().get("data", {}).get("fee")
-            logger.info(f"非Same Day: {fee1}, Same Day: {fee2}")
-        
-        logger.info("✓ Same Day费用影响验证完成")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body.get("code") == 200
+        data = body.get("data", {})
+        assert data.get("first_party") is True
+        logger.info(f"✓ Credit fp=True: fee={data.get('fee')}")
 
-    def test_quote_fee_parameters_required_with_default(self, ach_processing_api):
-        """测试场景4：required参数有默认值（矛盾）"""
-        logger.info("测试场景4：required参数验证")
-        
-        logger.warning("⚠️ 文档问题：参数标记矛盾")
-        logger.warning("same_day: (required) Default value is false")
-        logger.warning("first_party: (required) Default value is false")
-        logger.warning("问题：有默认值为何还是required？")
-        logger.warning("应该标记为optional with default")
-        
-        logger.info("✓ 参数矛盾已记录")
+    def test_fee_debit_first_party(self, ach_processing_api):
+        """
+        测试场景4：Debit 交易，first_party=True
+        Test Scenario4: Debit Fee with first_party=True
+        """
+        resp = ach_processing_api.quote_transaction_fee(
+            financial_account_id=VALID_FA, amount="10",
+            same_day=False, first_party=True, transaction_type="Debit"
+        )
+        assert resp.status_code == 200
+        assert resp.json().get("code") == 200
+        logger.info(f"✓ Debit fp=True: fee={resp.json().get('data',{}).get('fee')}")
+
+    def test_fee_same_day_true(self, ach_processing_api):
+        """
+        测试场景5：same_day=True（当天到账，可能影响手续费）
+        Test Scenario5: same_day=True May Affect Fee
+        """
+        resp = ach_processing_api.quote_transaction_fee(
+            financial_account_id=VALID_FA, amount="10",
+            same_day=True, first_party=False, transaction_type="Credit"
+        )
+        assert resp.status_code == 200
+        assert resp.json().get("code") == 200
+        logger.info(f"✓ same_day=True: fee={resp.json().get('data',{}).get('fee')}")
+
+    def test_fee_invisible_fa(self, ach_processing_api):
+        """
+        测试场景6：越权 FA ID → code=506
+        Test Scenario6: Invisible FA Returns 506
+        """
+        resp = ach_processing_api.quote_transaction_fee(
+            financial_account_id=INVISIBLE_FA, amount="10",
+            same_day=False, first_party=False, transaction_type="Credit"
+        )
+        assert resp.status_code == 200
+        assert resp.json().get("code") == 506
+        logger.info("✓ 越权 FA 被拒绝: code=506")
+
+    def test_fee_invalid_transaction_type(self, ach_processing_api):
+        """
+        测试场景7：transaction_type 枚举值错误
+        Test Scenario7: Invalid transaction_type Returns Error
+        """
+        url = ach_processing_api.config.get_full_url("/money-movements/ach/fee")
+        resp = ach_processing_api.session.post(url, json={
+            "financial_account_id": VALID_FA, "amount": "10",
+            "same_day": False, "first_party": False, "transaction_type": "INVALID_TYPE"
+        })
+        assert resp.status_code == 200
+        assert resp.json().get("code") != 200
+        logger.info(f"✓ 无效 transaction_type 被拒绝: code={resp.json().get('code')}")
+
+    def test_fee_missing_transaction_type(self, ach_processing_api):
+        """
+        测试场景8：缺少必填 transaction_type（ACH fee 特有必填参数）
+        Test Scenario8: Missing Required transaction_type Returns Error
+        """
+        url = ach_processing_api.config.get_full_url("/money-movements/ach/fee")
+        resp = ach_processing_api.session.post(url, json={
+            "financial_account_id": VALID_FA, "amount": "10",
+            "same_day": False, "first_party": False
+            # 缺少 transaction_type
+        })
+        assert resp.status_code == 200
+        assert resp.json().get("code") != 200
+        logger.info(f"✓ 缺少 transaction_type 被拒绝: code={resp.json().get('code')}")

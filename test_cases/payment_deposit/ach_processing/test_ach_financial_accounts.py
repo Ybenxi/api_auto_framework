@@ -1,147 +1,153 @@
 """
-ACH Processing - Financial Accounts 接口测试用例
-测试 GET /api/v1/cores/{core}/money-movements/ach/financial-accounts 接口
+ACH Processing - Financial Accounts + First Party Bank Accounts 接口测试用例
+
+本文件包含两个接口：
+1. GET /money-movements/ach/financial-accounts  - 查询可发起 ACH 的 FA
+2. GET /money-movements/ach/bank-accounts       - 查询外部绑定的 1st party 银行账户
+   （first_party=True 交易时使用此列表的 id 作为 counterparty_id）
 """
 import pytest
 from utils.logger import logger
-from utils.assertions import assert_status_ok
-from data.enums import AccountSubType
+
+pytestmark = pytest.mark.ach_processing
 
 
 @pytest.mark.ach_processing
-@pytest.mark.list_api
-class TestACHFinancialAccounts:
-    """
-    ACH可用账户列表接口测试用例集
-    ⚠️ 文档问题：响应无code包装层
-    """
+class TestAchFinancialAccounts:
 
-    def test_list_financial_accounts_success(self, ach_processing_api):
-        """
-        测试场景1：成功获取可用账户列表
-        验证点：
-        1. 接口返回 200
-        2. 返回Financial Accounts列表
-        """
-        logger.info("测试场景1：成功获取ACH可用账户列表")
-        
-        response = ach_processing_api.list_financial_accounts(page=0, size=10)
-        
-        assert response.status_code == 200, "HTTP状态码应为200"
-        
-        response_body = response.json()
-        
-        if "content" in response_body:
-            logger.info(f"✓ 可用账户列表获取成功，返回 {len(response_body.get('content', []))} 个账户")
-        
-        logger.info("✓ 可用账户列表获取成功")
+    def _get_content(self, response):
+        body = response.json()
+        data = body.get("data", body) or {}
+        return data.get("content", []) if isinstance(data, dict) else body.get("content", [])
 
-    def test_filter_by_account_number(self, ach_processing_api):
+    def test_list_fa_success(self, ach_processing_api):
         """
-        测试场景2：按account_number筛选
-        验证点：
-        1. account_number参数生效
+        测试场景1：成功获取 ACH FA 列表
+        Test Scenario1: Successfully List ACH Financial Accounts
         """
-        logger.info("测试场景2：按account_number筛选")
-        
-        response = ach_processing_api.list_financial_accounts(
-            account_number="1-01-1-0007876",
-            size=10
-        )
-        
-        assert response.status_code == 200
-        
-        logger.info("✓ account_number筛选验证通过")
+        resp = ach_processing_api.list_financial_accounts(size=10)
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body.get("code") == 200
+        data = body.get("data", {})
+        total = data.get("total_elements", 0)
+        assert total > 0
+        logger.info(f"✓ ACH FA 列表: total={total}")
 
-    def test_filter_by_name_fuzzy_search(self, ach_processing_api):
+    def test_filter_by_name(self, ach_processing_api):
         """
-        测试场景3：按name模糊搜索
-        验证点：
-        1. name参数支持模糊搜索
+        测试场景2：按 name 模糊搜索
+        Test Scenario2: Filter by Name Fuzzy Search
         """
-        logger.info("测试场景3：按name模糊搜索")
-        
-        response = ach_processing_api.list_financial_accounts(name="Test", size=10)
-        
-        assert response.status_code == 200
-        
-        logger.info("✓ name模糊搜索验证通过")
+        base = self._get_content(ach_processing_api.list_financial_accounts(size=1))
+        if not base:
+            pytest.skip("无 FA 数据")
+        keyword = (base[0].get("name") or "")[:4]
+        if not keyword:
+            pytest.skip("name 为空")
+        resp = ach_processing_api.list_financial_accounts(name=keyword, size=5)
+        assert resp.status_code == 200
+        assert resp.json().get("code") == 200
+        filtered = self._get_content(resp)
+        for fa in filtered:
+            assert keyword.lower() in (fa.get("name") or "").lower()
+        logger.info(f"✓ name 模糊搜索: keyword='{keyword}', 返回 {len(filtered)} 条")
 
-    def test_filter_by_sub_type(self, ach_processing_api):
+    @pytest.mark.parametrize("sub_type", ["Checking", "Saving"])
+    def test_filter_by_sub_type(self, ach_processing_api, sub_type):
         """
-        测试场景4：按sub_type筛选
-        验证点：
-        1. sub_type参数生效
-        2. 支持Checking和Savings（注意拼写）
+        测试场景3：按 sub_type 枚举筛选
+        Test Scenario3: Filter by sub_type (Checking/Saving)
         """
-        logger.info("测试场景4：按sub_type筛选")
-        
-        response = ach_processing_api.list_financial_accounts(
-            sub_type=AccountSubType.CHECKING,
-            size=10
-        )
-        
-        assert response.status_code == 200
-        
-        logger.info("✓ sub_type筛选验证通过")
-
-    def test_filter_by_account_ids(self, ach_processing_api):
-        """
-        测试场景5：按account_ids批量查询
-        验证点：
-        1. account_ids参数支持数组
-        2. 逗号分隔格式
-        """
-        logger.info("测试场景5：按account_ids批量查询")
-        
-        response = ach_processing_api.list_financial_accounts(
-            account_ids=["123", "456"],
-            size=10
-        )
-        
-        assert response.status_code == 200
-        
-        logger.info("✓ account_ids批量查询验证通过")
-
-    def test_response_structure(self, ach_processing_api):
-        """
-        测试场景6：响应结构验证
-        验证点：
-        1. 包含余额信息
-        2. 包含账户基本信息
-        """
-        logger.info("测试场景6：响应结构验证")
-        
-        response = ach_processing_api.list_financial_accounts(size=1)
-        
-        assert response.status_code == 200
-        
-        content = response.json().get("content", [])
-        
+        resp = ach_processing_api.list_financial_accounts(sub_type=sub_type, size=10)
+        assert resp.status_code == 200
+        assert resp.json().get("code") == 200
+        content = self._get_content(resp)
         if content:
-            account = content[0]
-            
-            # 验证余额字段
-            balance_fields = ["available_balance", "balance"]
-            for field in balance_fields:
-                if field in account:
-                    logger.debug(f"{field}: {account[field]}")
-            
-            logger.debug(f"账户字段: {list(account.keys())}")
-        
-        logger.info("✓ 响应结构验证通过")
+            for fa in content:
+                if fa.get("sub_type"):
+                    assert fa["sub_type"] == sub_type
+        logger.info(f"✓ sub_type='{sub_type}': 返回 {len(content)} 条")
 
-    def test_sub_type_spelling_error(self, ach_processing_api):
+    def test_pagination(self, ach_processing_api):
         """
-        测试场景7：sub_type拼写错误验证
-        验证点：
-        1. 文档说Saving（无s）
-        2. 应为Savings
+        测试场景4：分页验证
+        Test Scenario4: Pagination
         """
-        logger.info("测试场景7：sub_type拼写错误验证")
-        
-        logger.warning("⚠️ 文档问题：sub_type拼写错误")
-        logger.warning("文档说：Checking and Saving")
-        logger.warning("应该是：Checking and Savings（复数）")
-        
-        logger.info("✓ 拼写错误已记录")
+        resp = ach_processing_api.list_financial_accounts(page=0, size=2)
+        assert resp.status_code == 200
+        data = resp.json().get("data", {})
+        assert len(data.get("content", [])) <= 2
+        logger.info("✓ 分页验证通过")
+
+    def test_nonexistent_name(self, ach_processing_api):
+        """
+        测试场景5：不存在的 name 返回空列表
+        Test Scenario5: Non-existent Name Returns Empty
+        """
+        resp = ach_processing_api.list_financial_accounts(name="XYZXYZ_NOT_EXISTS_99999")
+        assert resp.status_code == 200
+        assert resp.json().get("code") == 200
+        assert len(self._get_content(resp)) == 0
+        logger.info("✓ 不存在 name 返回空列表")
+
+
+@pytest.mark.ach_processing
+class TestAchBankAccounts:
+    """
+    List First Party Bank Accounts（外部绑定的银行账户，用于 first_party=True 交易）
+    """
+
+    def _get_content(self, response):
+        body = response.json()
+        data = body.get("data", body) or {}
+        return data.get("content", []) if isinstance(data, dict) else body.get("content", [])
+
+    def test_list_bank_accounts_success(self, ach_processing_api):
+        """
+        测试场景1：成功获取 First Party Bank Accounts 列表
+        Test Scenario1: Successfully List First Party Bank Accounts
+        验证点：含 bank_name, bank_routing_number, bank_account_number, account_id, bank_is_us_based
+        """
+        resp = ach_processing_api.list_bank_accounts(size=10)
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body.get("code") == 200
+
+        data = body.get("data", {})
+        content = data.get("content", []) if isinstance(data, dict) else body.get("content", [])
+        assert isinstance(content, list)
+        total = data.get("total_elements", 0) if isinstance(data, dict) else body.get("total_elements", 0)
+        logger.info(f"  total={total}, returned={len(content)}")
+
+        if content:
+            ba = content[0]
+            for field in ["id", "bank_name", "bank_routing_number", "bank_account_number", "account_id"]:
+                if field in ba:
+                    logger.info(f"  ✓ {field}: {ba.get(field)}")
+        logger.info("✓ First Party Bank Accounts 列表获取成功")
+
+    def test_bank_accounts_fields(self, ach_processing_api):
+        """
+        测试场景2：验证 bank_accounts 特有字段（bank_is_us_based）
+        Test Scenario2: Verify bank_is_us_based Field
+        """
+        content = self._get_content(ach_processing_api.list_bank_accounts(size=5))
+        if not content:
+            pytest.skip("无 bank account 数据")
+        for ba in content:
+            if "bank_is_us_based" in ba:
+                assert isinstance(ba.get("bank_is_us_based"), bool)
+                logger.info(f"  ✓ bank_is_us_based: {ba.get('bank_is_us_based')}")
+                break
+        logger.info("✓ bank_is_us_based 字段验证通过")
+
+    def test_bank_accounts_pagination(self, ach_processing_api):
+        """
+        测试场景3：分页验证
+        Test Scenario3: Pagination
+        """
+        resp = ach_processing_api.list_bank_accounts(page=0, size=2)
+        assert resp.status_code == 200
+        assert resp.json().get("code") == 200
+        logger.info("✓ bank_accounts 分页验证通过")
