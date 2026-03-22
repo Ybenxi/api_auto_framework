@@ -756,11 +756,11 @@
             document.getElementById('pct-failed').innerText = `(${globalStats.total ? Math.round((globalStats.failed/globalStats.total)*100) : 0}%)`;
             document.getElementById('pct-skipped').innerText = `(${globalStats.total ? Math.round((globalStats.skipped/globalStats.total)*100) : 0}%)`;
             
-            // Tab 计数：显示筛选后的当前可见数量
-            document.getElementById('tab-all-count').innerText = visibleTotal;
-            document.getElementById('tab-passed-count').innerText = visibleStats.passed;
-            document.getElementById('tab-failed-count').innerText = visibleStats.failed;
-            document.getElementById('tab-skipped-count').innerText = visibleStats.skipped;
+            // Tab 计数：始终显示全局总数，不随筛选变化（让用户知道每类有多少条）
+            document.getElementById('tab-all-count').innerText = globalStats.total;
+            document.getElementById('tab-passed-count').innerText = globalStats.passed;
+            document.getElementById('tab-failed-count').innerText = globalStats.failed;
+            document.getElementById('tab-skipped-count').innerText = globalStats.skipped;
             
             // Handle empty state (新增：空数据状态)
             const listBody = document.getElementById('case-list');
