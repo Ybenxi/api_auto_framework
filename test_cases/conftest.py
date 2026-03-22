@@ -172,15 +172,21 @@ def extract_docstring_en(item) -> str:
     双行规范：
       第一行：中文描述（如 "测试场景1：成功获取订单列表"）
       第二行：英文描述（如 "Test Scenario1: Successfully Retrieve Order List"）
-    如果没有第二行，fallback 到测试函数名（已是英文命名规范）。
+    如果没有第二行，或第二行仍含中文，fallback 到测试函数名（已是英文命名规范）。
     """
+    def _has_chinese(s: str) -> bool:
+        return any('\u4e00' <= c <= '\u9fff' for c in s)
+
     try:
         func = item.obj if hasattr(item, 'obj') else None
         if func and func.__doc__:
             lines = [l.strip() for l in func.__doc__.strip().split('\n') if l.strip()]
-            # lines[0] = 中文，lines[1] = 英文（如果存在）
+            # lines[0] = 中文，lines[1] = 英文（如果存在且真的是英文）
             if len(lines) >= 2:
-                return lines[1]
+                candidate = lines[1]
+                # 如果第二行仍含中文（如"验证点："），则不使用
+                if candidate and not _has_chinese(candidate):
+                    return candidate
     except Exception:
         pass
     return ""

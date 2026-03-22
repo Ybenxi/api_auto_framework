@@ -15,6 +15,19 @@ from datetime import datetime
 from collections import defaultdict
 from typing import List, Dict
 
+
+def _has_chinese(s: str) -> bool:
+    """检测字符串是否含中文字符"""
+    return any('\u4e00' <= c <= '\u9fff' for c in (s or ''))
+
+
+def _get_en_name(case: dict) -> str:
+    """获取用例的纯英文名称：docstring_summary_en 无中文则用它，否则用 test_func_name"""
+    en = case.get("docstring_summary_en", "")
+    if en and not _has_chinese(en):
+        return en
+    return case.get("test_func_name", "Unknown")
+
 # macOS system font (supports CJK)
 _FONT_PATHS = [
     "/System/Library/Fonts/STHeiti Medium.ttc",
@@ -394,8 +407,7 @@ def generate_pdf_summary(
 
     for idx, case in enumerate(results, 1):
         status = case.get("status", "unknown")
-        name = (case.get("docstring_summary_en")
-                or case.get("test_func_name", ""))
+        name = _get_en_name(case)
         module = case.get("module", "")
         api = case.get("api_path", "") or ""
         dur = float(case.get("duration") or 0)
@@ -433,8 +445,7 @@ def generate_pdf_summary(
         _sec_title(pdf, F, f"Failed Cases Detail  ({len(failed_cases)} cases)")
 
         for i, case in enumerate(failed_cases, 1):
-            name = (case.get("docstring_summary_en")
-                    or case.get("test_func_name", "Unknown"))
+            name = _get_en_name(case)
             module = case.get("module", "")
             api = case.get("api_path", "") or ""
             analysis = case.get("failure_analysis", "") or ""
