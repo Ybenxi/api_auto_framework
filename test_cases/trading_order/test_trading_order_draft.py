@@ -79,6 +79,7 @@ class TestTradingOrderDraft:
     """
 
     @pytest.mark.no_rerun
+    @pytest.mark.skip(reason="无可用 sub_account_id 数据（API 要求必须用 sub，code=300），待补充真实 sub_account 测试数据")
     def test_create_draft_market_order_buy(self, trading_order_api):
         """
         测试场景1：创建市价买单草稿（Market_Order + Buy）
