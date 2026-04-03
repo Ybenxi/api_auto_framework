@@ -8,12 +8,15 @@ first_party 说明（已验证）：
 
 已验证的工作组合：
   Credit fp=True:
-    FA=251212054048210705, SUB=251212054048210868, CP=251212054048237385
+    FA=251212054048470574, SUB=251212054048470660, CP=251212054048237385
     CP 是 bank-account（account_id=251212054048210865，与 FA account_id 匹配）
 
   Debit fp=True（可能因外部余额不足报 600）：
-    FA=251119084741475550, SUB=251119084741475584, CP=251212054048127858
-    CP 是 bank-account（account_id=250918043812871683，与 FA account_id 匹配）
+    FA=251212054048470568, SUB=251212054048470660, CP=251212054048127858
+    CP 是 bank-account（account_id=251212054048470503，与 FA account_id 匹配）
+
+  fp=False 普通 CP：
+    使用 conftest 的 ach_fp_false_ctx（list 动态解析，勿硬编码已清理的 CP）
 
   错误场景：
     fp=True + bank-account account_id 不匹配 FA → code=599 "Counterparty is not assigned to the corresponding account."
@@ -22,20 +25,15 @@ import pytest
 import time
 from utils.logger import logger
 
-# fp=False 数据
-ACH_FA_FP_FALSE  = "251119084741475550"
-ACH_SUB_FP_FALSE = "251119084741475584"
-ACH_CP_FP_FALSE  = "251212054048369793"
-
 # fp=True Credit 数据
-ACH_FA_CREDIT_FP  = "251212054048210705"
-ACH_SUB_CREDIT_FP = "251212054048210868"
+ACH_FA_CREDIT_FP  = "251212054048470574"
+ACH_SUB_CREDIT_FP = "251212054048470660"
 ACH_CP_BANK_CREDIT = "251212054048237385"  # bank-account，account_id=251212054048210865
 
 # fp=True Debit 数据（来自用户提供的示例）
-ACH_FA_DEBIT_FP  = "251119084741475550"
-ACH_SUB_DEBIT_FP = "251119084741475584"
-ACH_CP_BANK_DEBIT = "251212054048127858"   # bank-account，account_id=250918043812871683
+ACH_FA_DEBIT_FP  = "251212054048470568"
+ACH_SUB_DEBIT_FP = "251212054048470660"
+ACH_CP_BANK_DEBIT = "251212054048127858"   # bank-account，account_id=251212054048470503
 
 MEMO_PREFIX = "Auto TestYan ACH FP"
 
@@ -85,15 +83,15 @@ class TestAchFirstPartyLogic:
         logger.info(f"✓ 两个已知 bank-account CP 均在 bank-accounts 列表中")
 
     @pytest.mark.no_rerun
-    def test_credit_fp_false_uses_regular_cp(self, ach_processing_api):
+    def test_credit_fp_false_uses_regular_cp(self, ach_processing_api, ach_fp_false_ctx):
         """
         测试场景3：first_party=False Credit 使用普通 ACH CP 成功
         Test Scenario3: first_party=False Credit Uses Regular ACH CP
         """
         resp = ach_processing_api.initiate_credit(
-            financial_account_id=ACH_FA_FP_FALSE,
-            sub_account_id=ACH_SUB_FP_FALSE,
-            counterparty_id=ACH_CP_FP_FALSE,
+            financial_account_id=ach_fp_false_ctx["fa"],
+            sub_account_id=ach_fp_false_ctx["sub"],
+            counterparty_id=ach_fp_false_ctx["cp"],
             amount="0.01",
             first_party=False,
             same_day=False,

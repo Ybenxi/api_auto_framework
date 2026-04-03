@@ -11,6 +11,10 @@ from utils.assertions import (
     assert_status_ok,
     assert_response_parsed
 )
+from test_cases.test_ids import MAIN_SUB_ID, INVISIBLE_ACCOUNT_ID
+
+# 固定 Sub Account ID（FA1 下，可创建 FBO，使用新测试环境固定 ID）
+FIXED_SUB_ID = MAIN_SUB_ID  # 251212054048470660
 
 
 class TestFboAccountCreate:
@@ -28,23 +32,11 @@ class TestFboAccountCreate:
         """
         # 初始化 API 对象
         fbo_api = FboAccountAPI(session=login_session)
-        sa_api = SubAccountAPI(session=login_session)
-        
-        # 获取 Sub Account ID
-        logger.info("获取 Sub Account ID")
-        sa_response = sa_api.list_sub_accounts(page=0, size=1)
-        assert sa_response.status_code == 200, \
-            f"获取 Sub Accounts 失败: {sa_response.status_code}"
-        
-        sa_parsed = sa_api.parse_list_response(sa_response)
-        sub_accounts = sa_parsed.get("content", [])
-        
-        if len(sub_accounts) == 0:
-            pytest.skip("没有可用的 Sub Account 进行测试")
-        
-        sub_account_id = sub_accounts[0].get("id")
-        logger.info(f"  使用 Sub Account ID: {sub_account_id}")
-        
+
+        # 使用固定 Sub Account ID（Auto testyan FA 1 下的固定 Sub）
+        sub_account_id = FIXED_SUB_ID
+        logger.info(f"  使用固定 Sub Account ID: {sub_account_id}")
+
         # 准备创建数据
         unique_name = f"Auto TestYan FBO Account {uuid.uuid4().hex[:8]}"
         fbo_account_data = {
@@ -175,20 +167,10 @@ class TestFboAccountCreate:
         3. 验证所有字段值与创建时传入的数据一致
         """
         fbo_api = FboAccountAPI(session=login_session)
-        sa_api = SubAccountAPI(session=login_session)
-        
-        # 获取 Sub Account ID
-        logger.info("获取 Sub Account ID")
-        sa_response = sa_api.list_sub_accounts(page=0, size=1)
-        assert_status_ok(sa_response)
-        sa_parsed = sa_api.parse_list_response(sa_response)
-        assert_response_parsed(sa_parsed)
-        
-        sub_accounts = sa_parsed.get("content", [])
-        if len(sub_accounts) == 0:
-            pytest.skip("没有可用的 Sub Account 进行测试")
-        
-        sub_account_id = sub_accounts[0].get("id")
+
+        # 使用固定 Sub Account ID（Auto testyan FA 1 下的固定 Sub）
+        sub_account_id = FIXED_SUB_ID
+        logger.info(f"  使用固定 Sub Account ID: {sub_account_id}")
         
         # 准备创建数据（使用唯一名称避免冲突）
         unique_name = f"Auto TestYan FBO Account Verify {uuid.uuid4().hex[:8]}"
@@ -244,20 +226,10 @@ class TestFboAccountCreate:
         1. 成功创建后返回完整的 FBO Account 信息
         """
         fbo_api = FboAccountAPI(session=login_session)
-        sa_api = SubAccountAPI(session=login_session)
-        
-        # 获取 Sub Account ID
-        logger.info("获取 Sub Account ID")
-        sa_response = sa_api.list_sub_accounts(page=0, size=1)
-        assert sa_response.status_code == 200
-        
-        sa_parsed = sa_api.parse_list_response(sa_response)
-        sub_accounts = sa_parsed.get("content", [])
-        
-        if len(sub_accounts) == 0:
-            pytest.skip("没有可用的 Sub Account 进行测试")
-        
-        sub_account_id = sub_accounts[0].get("id")
+
+        # 使用固定 Sub Account ID（Auto testyan FA 1 下的固定 Sub）
+        sub_account_id = FIXED_SUB_ID
+        logger.info(f"  使用固定 Sub Account ID: {sub_account_id}")
         
         # 创建 FBO Account
         unique_name = f"Auto TestYan FBO Account Structure {uuid.uuid4().hex[:8]}"
@@ -310,17 +282,10 @@ class TestFboAccountCreate:
         4. data 为 None
         """
         fbo_api = FboAccountAPI(session=login_session)
-        sa_api = SubAccountAPI(session=login_session)
 
-        # 获取真实 sub_account_id
-        sa_response = sa_api.list_sub_accounts(page=0, size=1)
-        assert sa_response.status_code == 200
-        sub_accounts = sa_api.parse_list_response(sa_response).get("content", [])
-
-        if not sub_accounts:
-            pytest.skip("没有可用的 Sub Account 进行测试")
-
-        sub_account_id = sub_accounts[0].get("id")
+        # 使用固定 Sub Account ID（Auto testyan FA 1 下的固定 Sub）
+        sub_account_id = FIXED_SUB_ID
+        logger.info(f"  使用固定 Sub Account ID: {sub_account_id}")
 
         # 只传 sub_account_id，不传 name
         fbo_account_data = {

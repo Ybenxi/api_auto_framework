@@ -19,10 +19,6 @@ import pytest
 import time
 from utils.logger import logger
 
-ACH_FA  = "251119084741475550"
-ACH_SUB = "251119084741475584"
-ACH_CP  = "251212054048369793"
-
 MEMO_PREFIX = "Auto TestYan ACH Cancel"
 
 pytestmark = [pytest.mark.ach_processing, pytest.mark.no_rerun]
@@ -32,7 +28,7 @@ pytestmark = [pytest.mark.ach_processing, pytest.mark.no_rerun]
 @pytest.mark.no_rerun
 class TestAchCancel:
 
-    def test_cancel_credit_success(self, ach_processing_api):
+    def test_cancel_credit_success(self, ach_processing_api, ach_fp_false_ctx):
         """
         测试场景1：成功 cancel 一笔 Credit 交易
         Test Scenario1: Successfully Cancel an ACH Credit Transaction
@@ -40,9 +36,9 @@ class TestAchCancel:
         """
         # 先发起 Credit
         resp_c = ach_processing_api.initiate_credit(
-            financial_account_id=ACH_FA,
-            sub_account_id=ACH_SUB,
-            counterparty_id=ACH_CP,
+            financial_account_id=ach_fp_false_ctx["fa"],
+            sub_account_id=ach_fp_false_ctx["sub"],
+            counterparty_id=ach_fp_false_ctx["cp"],
             amount="0.01",
             first_party=False,
             same_day=False,
@@ -61,15 +57,15 @@ class TestAchCancel:
         assert data is not None, "cancel 响应 data 不应为 None"
         logger.info(f"✓ ACH Credit cancel 成功: id={txn_id}, data={str(data)[:60]}")
 
-    def test_cancel_debit_success(self, ach_processing_api):
+    def test_cancel_debit_success(self, ach_processing_api, ach_debit_fp_false_ctx):
         """
         测试场景2：成功 cancel 一笔 Debit 交易
         Test Scenario2: Successfully Cancel an ACH Debit Transaction
         """
         resp_d = ach_processing_api.initiate_debit(
-            financial_account_id=ACH_FA,
-            sub_account_id=ACH_SUB,
-            counterparty_id=ACH_CP,
+            financial_account_id=ach_debit_fp_false_ctx["fa"],
+            sub_account_id=ach_debit_fp_false_ctx["sub"],
+            counterparty_id=ach_debit_fp_false_ctx["cp"],
             amount="0.01",
             first_party=False,
             same_day=False,
@@ -93,16 +89,16 @@ class TestAchCancel:
         assert body.get("code") != 200
         logger.info(f"✓ cancel 无效 ID 被拒绝: code={body.get('code')}, msg={body.get('error_message')}")
 
-    def test_cancel_then_verify_status(self, ach_processing_api):
+    def test_cancel_then_verify_status(self, ach_processing_api, ach_fp_false_ctx):
         """
         测试场景4：cancel 后在 list 中验证状态变为 Cancelled
         Test Scenario4: After Cancel, Status Changes to Cancelled in List
         """
         # 发起 Credit
         resp_c = ach_processing_api.initiate_credit(
-            financial_account_id=ACH_FA,
-            sub_account_id=ACH_SUB,
-            counterparty_id=ACH_CP,
+            financial_account_id=ach_fp_false_ctx["fa"],
+            sub_account_id=ach_fp_false_ctx["sub"],
+            counterparty_id=ach_fp_false_ctx["cp"],
             amount="0.01",
             first_party=False,
             same_day=False,

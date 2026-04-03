@@ -8,16 +8,15 @@ POST /api/v1/cores/{core}/money-movements/wire/request-payment
 响应结构：{"code": 200, "data": {id, status="Not_Sent", ...}}
 
 已验证：
-  WIRE_FA=251119084741475550，WIRE_SUB=251119084741475584
+  WIRE_FA=251212054048470568，WIRE_SUB=251212054048470660
   WIRE_CP=251212054048128208（Wire 类型，用于 request-payment）
 """
 import pytest
 import time
 from utils.logger import logger
 
-WIRE_FA      = "251119084741475550"
-WIRE_SUB     = "251119084741475584"
-WIRE_CP      = "251212054048128208"
+WIRE_FA      = "251212054048470568"
+WIRE_SUB     = "251212054048470660"
 INVISIBLE_FA = "241010195850134683"
 
 MEMO_PREFIX = "Auto TestYan Wire Not_Sent"
@@ -29,7 +28,7 @@ pytestmark = [pytest.mark.wire_processing, pytest.mark.no_rerun]
 @pytest.mark.no_rerun
 class TestWireRequestPayment:
 
-    def test_request_payment_success(self, wire_processing_api):
+    def test_request_payment_success(self, wire_processing_api, wire_cp_id):
         """
         测试场景1：成功发起 Wire 拉款请求（Not_Sent 状态），并立即 cancel
         Test Scenario1: Initiate Wire Request Payment (Not_Sent) and Cancel
@@ -38,7 +37,7 @@ class TestWireRequestPayment:
         memo = f"{MEMO_PREFIX} {time.strftime('%Y-%m-%d %H:%M:%S')}"
         resp = wire_processing_api.request_wire_payment(
             financial_account_id=WIRE_FA,
-            counterparty_id=WIRE_CP,
+            counterparty_id=wire_cp_id,
             amount="0.88",
             sub_account_id=WIRE_SUB,
             memo=memo
@@ -65,14 +64,14 @@ class TestWireRequestPayment:
         else:
             logger.info(f"  ⚠ Not_Sent Wire cancel: code={cancel_code}，msg={cancel_resp.json().get('error_message')}")
 
-    def test_request_payment_response_fields(self, wire_processing_api):
+    def test_request_payment_response_fields(self, wire_processing_api, wire_cp_id):
         """
         测试场景2：验证 Not_Sent 交易响应字段（发起后 cancel）
         Test Scenario2: Verify Not_Sent Transaction Response Fields
         """
         resp = wire_processing_api.request_wire_payment(
             financial_account_id=WIRE_FA,
-            counterparty_id=WIRE_CP,
+            counterparty_id=wire_cp_id,
             amount="0.01",
             sub_account_id=WIRE_SUB,
             memo=f"{MEMO_PREFIX} FieldCheck {int(time.time())}"
@@ -95,14 +94,14 @@ class TestWireRequestPayment:
         )
         logger.info(f"✓ Not_Sent 响应字段验证通过: fields={[f for f in required_fields if f in data]}")
 
-    def test_request_payment_appears_in_list(self, wire_processing_api):
+    def test_request_payment_appears_in_list(self, wire_processing_api, wire_cp_id):
         """
         测试场景3：Not_Sent 交易在 list transactions 中可查到（发起后 cancel）
         Test Scenario3: Not_Sent Transaction Appears in List Transactions
         """
         resp = wire_processing_api.request_wire_payment(
             financial_account_id=WIRE_FA,
-            counterparty_id=WIRE_CP,
+            counterparty_id=wire_cp_id,
             amount="0.01",
             sub_account_id=WIRE_SUB,
             memo=f"{MEMO_PREFIX} ListCheck {int(time.time())}"
@@ -130,14 +129,14 @@ class TestWireRequestPayment:
         )
         logger.info("✓ Not_Sent list 查询验证完成")
 
-    def test_request_payment_missing_sub_account_id(self, wire_processing_api):
+    def test_request_payment_missing_sub_account_id(self, wire_processing_api, wire_cp_id):
         """
         测试场景4：FA 有 sub 但未传 sub_account_id → 被拒绝
         Test Scenario4: FA with Sub but Missing sub_account_id Returns Error
         """
         resp = wire_processing_api.request_wire_payment(
             financial_account_id=WIRE_FA,
-            counterparty_id=WIRE_CP,
+            counterparty_id=wire_cp_id,
             amount="0.01",
             # 故意不传 sub_account_id
         )
@@ -146,21 +145,21 @@ class TestWireRequestPayment:
         assert body.get("code") != 200
         logger.info(f"✓ 缺少 sub_account_id 被拒绝: code={body.get('code')}")
 
-    def test_request_payment_invisible_fa(self, wire_processing_api):
+    def test_request_payment_invisible_fa(self, wire_processing_api, wire_cp_id):
         """
         测试场景5：越权 FA ID → 被拒绝
         Test Scenario5: Invisible FA Returns Error
         """
         resp = wire_processing_api.request_wire_payment(
             financial_account_id=INVISIBLE_FA,
-            counterparty_id=WIRE_CP,
+            counterparty_id=wire_cp_id,
             amount="0.01",
         )
         assert resp.status_code == 200
         assert resp.json().get("code") != 200
         logger.info(f"✓ 越权 FA 被拒绝: code={resp.json().get('code')}")
 
-    def test_request_payment_missing_amount(self, wire_processing_api):
+    def test_request_payment_missing_amount(self, wire_processing_api, wire_cp_id):
         """
         测试场景6：缺少必填 amount
         Test Scenario6: Missing Required amount Returns Error
@@ -169,7 +168,7 @@ class TestWireRequestPayment:
         resp = wire_processing_api.session.post(url, json={
             "financial_account_id": WIRE_FA,
             "sub_account_id": WIRE_SUB,
-            "counterparty_id": WIRE_CP,
+            "counterparty_id": wire_cp_id,
         })
         assert resp.status_code == 200
         assert resp.json().get("code") != 200

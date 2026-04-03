@@ -22,7 +22,7 @@ import time
 from utils.logger import logger
 
 # 已验证的测试账户
-VALID_ACCOUNT_ID   = "250918043812871683"  # WIRE_FA 对应的 account_id
+VALID_ACCOUNT_ID   = "251212054048470503"  # WIRE_FA 对应的 account_id
 INTL_ACCOUNT_ID    = "251212054048267357"  # INTL_FA 对应的 account_id（需确认）
 VALID_ROUTING      = "091918457"
 VALID_SWIFT        = "CRBKUS33XXX"

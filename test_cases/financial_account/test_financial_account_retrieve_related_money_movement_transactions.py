@@ -53,7 +53,7 @@ class TestFinancialAccountRetrieveRelatedMoneyMovementTransactions:
 
         # 直接使用已知有交易数据的 FA ID，避免 _get_fa_id_with_transactions 循环遍历
         # 注：_get_fa_id_with_transactions 会对每个 FA 都发一次请求，FA 多时产生大量 API 调用
-        KNOWN_FA_WITH_TXNS = "251119084741475550"  # 已验证：有 ACH/Wire 等交易记录
+        KNOWN_FA_WITH_TXNS = "251212054048470568"  # 已验证：有 ACH/Wire 等交易记录
         fa_id = KNOWN_FA_WITH_TXNS
 
         logger.info(f"使用有数据的 Financial Account ID: {fa_id}")

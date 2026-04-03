@@ -11,17 +11,16 @@ PATCH /api/v1/cores/{core}/money-movements/wire/:id/cancel    Cancel Wire Transa
 - cancel 只能 cancel wire/international wire 类型，其他类型 code=599
 
 已验证账户数据：
-  WIRE_FA=251119084741475550（有 sub），WIRE_SUB=251119084741475584
-  WIRE_CP=251212054048128208（Wire 类型，assign=['250918043812871683']）
+  WIRE_FA=251212054048470568（有 sub），WIRE_SUB=251212054048470660
+  WIRE_CP=251212054048128208（Wire 类型，assign=['251212054048470503']）
   INTL_CP=251212054048302253（International_Wire 类型，用于错误场景测试）
 """
 import pytest
 import time
 from utils.logger import logger
 
-WIRE_FA      = "251119084741475550"
-WIRE_SUB     = "251119084741475584"
-WIRE_CP      = "251212054048128208"   # Wire 类型 CP，assign 了 WIRE_FA 的 account_id
+WIRE_FA      = "251212054048470568"
+WIRE_SUB     = "251212054048470660"
 INTL_CP      = "251212054048302253"   # International_Wire 类型，用于类型错误测试
 INVISIBLE_FA = "241010195850134683"
 
@@ -34,7 +33,7 @@ pytestmark = [pytest.mark.wire_processing, pytest.mark.no_rerun]
 @pytest.mark.no_rerun
 class TestWireDomesticPayment:
 
-    def test_initiate_wire_payment_success(self, wire_processing_api):
+    def test_initiate_wire_payment_success(self, wire_processing_api, wire_cp_id):
         """
         测试场景1：成功发起国内 Wire 交易，并立即 cancel
         Test Scenario1: Initiate Wire Payment and Cancel Immediately
@@ -43,7 +42,7 @@ class TestWireDomesticPayment:
         memo = f"{MEMO_PREFIX} {time.strftime('%Y-%m-%d %H:%M:%S')}"
         resp = wire_processing_api.initiate_wire_payment(
             financial_account_id=WIRE_FA,
-            counterparty_id=WIRE_CP,
+            counterparty_id=wire_cp_id,
             amount="0.01",
             sub_account_id=WIRE_SUB,
             schedule_date="2026-12-31",
@@ -69,7 +68,7 @@ class TestWireDomesticPayment:
         assert cancel_body.get("code") == 200
         logger.info(f"✓ Wire 发起后立即 cancel 成功: id={txn_id}")
 
-    def test_wire_response_fields(self, wire_processing_api):
+    def test_wire_response_fields(self, wire_processing_api, wire_cp_id):
         """
         测试场景2：验证 Wire 响应字段完整性（发起后立即 cancel）
         Test Scenario2: Verify Wire Response Fields Completeness
@@ -77,7 +76,7 @@ class TestWireDomesticPayment:
         memo = f"{MEMO_PREFIX} FieldCheck {int(time.time())}"
         resp = wire_processing_api.initiate_wire_payment(
             financial_account_id=WIRE_FA,
-            counterparty_id=WIRE_CP,
+            counterparty_id=wire_cp_id,
             amount="0.01",
             sub_account_id=WIRE_SUB,
             memo=memo
@@ -101,14 +100,14 @@ class TestWireDomesticPayment:
         )
         logger.info(f"✓ Wire 响应字段验证通过: {[f for f in required_fields if f in data]}")
 
-    def test_wire_missing_sub_account_id(self, wire_processing_api):
+    def test_wire_missing_sub_account_id(self, wire_processing_api, wire_cp_id):
         """
         测试场景3：FA 有 sub_account 但未传 sub_account_id → code=599
         Test Scenario3: FA with Sub but Missing sub_account_id Returns 599
         """
         resp = wire_processing_api.initiate_wire_payment(
             financial_account_id=WIRE_FA,
-            counterparty_id=WIRE_CP,
+            counterparty_id=wire_cp_id,
             amount="0.01",
             # 故意不传 sub_account_id
         )
@@ -118,7 +117,7 @@ class TestWireDomesticPayment:
             f"缺少 sub_account_id 应返回错误，实际 code={body.get('code')}"
         logger.info(f"✓ 缺少 sub_account_id 被拒绝: code={body.get('code')}, msg={body.get('error_message')}")
 
-    def test_wire_with_international_wire_cp(self, wire_processing_api):
+    def test_wire_with_international_wire_cp(self, wire_processing_api, wire_cp_id):
         """
         测试场景4：使用 International_Wire 类型 CP 发起国内 Wire → code=599
         Test Scenario4: International_Wire CP Used for Domestic Wire Returns 599
@@ -134,21 +133,21 @@ class TestWireDomesticPayment:
         assert body.get("code") != 200
         logger.info(f"✓ International_Wire CP 被拒绝: code={body.get('code')}, msg={body.get('error_message')}")
 
-    def test_wire_invisible_fa(self, wire_processing_api):
+    def test_wire_invisible_fa(self, wire_processing_api, wire_cp_id):
         """
         测试场景5：使用越权 FA ID → 被拒绝
         Test Scenario5: Invisible FA ID Returns Error
         """
         resp = wire_processing_api.initiate_wire_payment(
             financial_account_id=INVISIBLE_FA,
-            counterparty_id=WIRE_CP,
+            counterparty_id=wire_cp_id,
             amount="0.01",
         )
         assert resp.status_code == 200
         assert resp.json().get("code") != 200
         logger.info(f"✓ 越权 FA 被拒绝: code={resp.json().get('code')}")
 
-    def test_wire_missing_counterparty_id(self, wire_processing_api):
+    def test_wire_missing_counterparty_id(self, wire_processing_api, wire_cp_id):
         """
         测试场景6：缺少必填 counterparty_id
         Test Scenario6: Missing Required counterparty_id
@@ -163,14 +162,14 @@ class TestWireDomesticPayment:
         assert resp.json().get("code") != 200
         logger.info(f"✓ 缺少 counterparty_id 被拒绝: code={resp.json().get('code')}")
 
-    def test_wire_negative_amount(self, wire_processing_api):
+    def test_wire_negative_amount(self, wire_processing_api, wire_cp_id):
         """
         测试场景7：金额为负数
         Test Scenario7: Negative Amount Returns Error
         """
         resp = wire_processing_api.initiate_wire_payment(
             financial_account_id=WIRE_FA,
-            counterparty_id=WIRE_CP,
+            counterparty_id=wire_cp_id,
             amount="-10",
             sub_account_id=WIRE_SUB,
         )

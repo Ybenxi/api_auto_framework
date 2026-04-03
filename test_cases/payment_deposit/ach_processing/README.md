@@ -3,6 +3,13 @@
 ## 模块概述
 ACH（Automated Clearing House）是美国电子支付系统，由Federal Reserve Bank运营。支持工资直接存款、账单支付、B2B交易等场景。
 
+## 测试数据与清理脚本（重要）
+
+- **Credit**（及同类 fp=False 付款）：**`ach_fp_false_ctx`** — FA/SUB=`251212054048210705`/`868`，CP 固定 **`251212054048301820`**（用户验证）。勿用 counterparty 列表「第一条」或仅靠 assign 猜测（易选到不适配 ACH 的 CP → 599）。
+- **Debit**（fp=False 拉款）：**`ach_debit_fp_false_ctx`** — FA/SUB=`251119…`/`584`，CP 在列表中选 **`assign_account_ids` 含 profile `250918043812871683` 且 `status=Approved`** 的项。勿与 Credit 共用 210705+301820（易 `code=600` 余额/对手方资金问题）；勿用已清理的 `369793`。
+- **原因**：`cleanup_counterparty.py` 会删 **Auto TestYan** 前缀的 CP → `Counterparty not found.`。
+- **fp=True** 仍用固定 **bank-account** id。
+
 ## API 接口列表（11个）
 
 ### 查询接口（4个）

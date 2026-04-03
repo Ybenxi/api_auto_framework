@@ -153,7 +153,7 @@
                 <span id="gen-time"></span>
             </div>
             <button class="btn" onclick="toggleLanguage()">
-                <span id="lang-toggle">中/En</span>
+                <span id="lang-toggle">中</span>
             </button>
             <button class="btn" onclick="exportExcel()">
                 <span data-lang="zh">导出 Excel</span>
@@ -204,10 +204,24 @@
                     </div>
                     <div class="stat-row" style="border-left-color: #13c2c2;">
                         <div class="stat-label">
-                            <span data-lang="zh">TPS（用例/秒）</span>
-                            <span data-lang="en" style="display:none;">TPS (cases/s)</span>
+                            <span data-lang="zh">QPS（接口/秒）</span>
+                            <span data-lang="en" style="display:none;">QPS (calls/s)</span>
                         </div>
-                        <div class="stat-value" id="tps-value" style="color: #13c2c2;">0.00</div>
+                        <div class="stat-value" id="qps-value" style="color: #13c2c2;">0.00</div>
+                    </div>
+                    <div class="stat-row" style="border-left-color: #389e0d;">
+                        <div class="stat-label">
+                            <span data-lang="zh">TPS（交易/秒）</span>
+                            <span data-lang="en" style="display:none;">TPS (txn/s)</span>
+                        </div>
+                        <div class="stat-value" id="tps-value" style="color: #389e0d;">0.00</div>
+                    </div>
+                    <div class="stat-row" style="border-left-color: #d46b08;">
+                        <div class="stat-label">
+                            <span data-lang="zh">交易接口调用数</span>
+                            <span data-lang="en" style="display:none;">Txn Calls</span>
+                        </div>
+                        <div class="stat-value" id="txn-count" style="color: #d46b08;">0</div>
                     </div>
                 </div>
             </div>
@@ -354,7 +368,7 @@
     <script>
         const testData = {{RESULTS_JSON}};
         const envInfo = {{ENV_JSON}};
-        let currentLang = 'zh';
+        let currentLang = 'en';
         let currentFilter = 'all';
         let currentModuleFilter = 'all';
         let currentSearchText = '';
@@ -519,8 +533,34 @@
                 p95Duration = sorted[Math.max(0, idx)];
             }
 
-            // 5. TPS（每秒完成的测试用例数）
-            const tps = wallTime > 0 ? total / wallTime : 0;
+            // 5. QPS（每秒完成的接口调用数）
+            const qps = wallTime > 0 ? total / wallTime : 0;
+
+            // 6. TPS（每秒完成的交易事务数）
+            // 交易接口识别规则：path 包含 money-movements 的 write 操作
+            const txnPaths = [
+                '/money-movements/ach/credit',
+                '/money-movements/ach/debit',
+                '/money-movements/ach/reversal',
+                '/money-movements/wire/payment',
+                '/money-movements/international-wire/payment',
+                '/money-movements/wire/request-payment',
+                '/money-movements/instant-pay/payment',
+                '/money-movements/instant-pay/request-payment',
+                '/money-movements/instant-pay/return-payment',
+                '/money-movements/account-transfer',
+                '/money-movements/internal-pay/transfer',
+                '/money-movements/checks/deposit',
+                '/money-movements/checks/scan',
+            ];
+            const isTxn = item => {
+                const p = (item.api_path || '').toLowerCase();
+                return txnPaths.some(t => p.includes(t));
+            };
+            const txnItems = testData.filter(isTxn);
+            const txnCount = txnItems.length;
+            const txnDurSum = txnItems.reduce((s, d) => s + (d.duration || 0), 0);
+            const tps = txnDurSum > 0 ? txnCount / txnDurSum : 0;
 
             // 更新 DOM
             document.getElementById('total-duration').innerText = wallTime.toFixed(2) + 's';
@@ -528,7 +568,9 @@
             document.getElementById('min-duration').innerText = minDuration.toFixed(2) + 's';
             document.getElementById('max-duration').innerText = maxDuration.toFixed(2) + 's';
             document.getElementById('p95-duration').innerText = p95Duration.toFixed(2) + 's';
-            document.getElementById('tps-value').innerText   = tps.toFixed(2);
+            document.getElementById('qps-value').innerText = qps.toFixed(2);
+            document.getElementById('tps-value').innerText = tps.toFixed(2);
+            document.getElementById('txn-count').innerText = txnCount;
             
             document.getElementById('tab-all-count').innerText = total;
             document.getElementById('tab-passed-count').innerText = stats.passed;
@@ -561,15 +603,25 @@
         // Language toggle
         function toggleLanguage() {
             currentLang = currentLang === 'zh' ? 'en' : 'zh';
+            applyCurrentLang();
+        }
+
+        function applyCurrentLang() {
             const zhElements = document.querySelectorAll('[data-lang="zh"]');
             const enElements = document.querySelectorAll('[data-lang="en"]');
-            
+
             zhElements.forEach(el => el.style.display = currentLang === 'zh' ? '' : 'none');
             enElements.forEach(el => el.style.display = currentLang === 'en' ? '' : 'none');
-            
+
+            // Update button: show target language label
+            const btn = document.getElementById('lang-toggle');
+            if (btn) btn.innerText = currentLang === 'en' ? '中' : 'EN';
+
             // Update search placeholder
             const searchInput = document.getElementById('search-input');
-            searchInput.placeholder = currentLang === 'zh' ? '搜索用例名称或 API 路径...' : 'Search test name or API path...';
+            if (searchInput) {
+                searchInput.placeholder = currentLang === 'zh' ? '搜索用例名称或 API 路径...' : 'Search test name or API path...';
+            }
             
             // Re-render test case names with new language
             const rows = document.querySelectorAll('.case-row');
@@ -930,8 +982,7 @@
                     extraHtml += `
                     <div class="detail-section" style="border-top: 2px solid #faad14;">
                         <div class="detail-title" style="color: #d46b08;">
-                            <span data-lang="zh">⚡ 问题分析</span>
-                            <span data-lang="en" style="display:none;">⚡ Failure Analysis</span>
+                            ⚡ Failure Analysis
                         </div>
                         <div style="background:#fffbe6; border:1px solid #ffe58f; border-radius:6px;
                                     padding:12px 16px; color:#7c5b00; font-size:14px; line-height:1.7;">
@@ -939,19 +990,7 @@
                         </div>
                     </div>`;
                 }
-
-                if (data.failure_reason) {
-                    extraHtml += `
-                    <div class="detail-section" style="border-top: 2px solid #ff4d4f;">
-                        <div class="detail-title" style="color: var(--error-color);">
-                            <span data-lang="zh">❌ 失败详情</span>
-                            <span data-lang="en" style="display:none;">❌ Failure Detail</span>
-                        </div>
-                        <pre style="background:#fff1f0; border:1px solid #ffa39e; color:#cf1322;
-                                    white-space:pre-wrap; word-break:break-all; border-radius:6px;
-                                    padding:12px; font-size:12px; max-height:320px; overflow-y:auto;
-                                    margin:0;">${escHtml(data.failure_reason)}</pre>
-                    </div>`;
+        // failure_reason section removed
                 }
             }
 
@@ -1062,6 +1101,8 @@
 
         // Initialize on load
         initReport();
+        // Apply default language (English) after DOM is ready
+        applyCurrentLang();
     </script>
 </body>
 </html>

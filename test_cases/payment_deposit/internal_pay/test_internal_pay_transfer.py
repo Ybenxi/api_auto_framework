@@ -13,19 +13,31 @@ POST /api/v1/cores/{core}/money-movements/internal-pay/transfer
   - memo 格式：Auto TestYan Internal Pay {timestamp}
 
 已验证测试账户（dev actc 环境）：
-  PAYER_FA  = "251212054048210705" (有 sub)
-  PAYER_SUB = "251212054048210868"
-  PAYEE_FA  = "250918043814723897" (有 sub)
-  PAYEE_SUB = "250918043814723925"
+  FA1 (有固定 Sub)：
+    PAYER_FA  = "251212054048470568"
+    PAYER_SUB = "251212054048470660"
+  FA3 (无 Sub，不需要 sub_account_id)：
+    PAYER_FA_NO_SUB = "251212054048470609"
+  Payee (外部 FA，有 Sub)：
+    PAYEE_FA  = "250918043814723897"
+    PAYEE_SUB = "250918043814723925"
 """
 import pytest
 import time
 from utils.logger import logger
+from test_cases.test_ids import FA_1_ID, FA_3_ID, MAIN_SUB_ID
 
-PAYER_FA  = "251212054048210705"
-PAYER_SUB = "251212054048210868"
+# FA1 has the fixed Sub — use for sub-based transfers
+PAYER_FA  = FA_1_ID        # "251212054048470568"
+PAYER_SUB = MAIN_SUB_ID    # "251212054048470660"
+
+# FA3 has NO sub accounts — use for FA-only (no sub) transfers
+PAYER_FA_NO_SUB = FA_3_ID  # "251212054048470609"
+
+# Payee: external FA with its own sub
 PAYEE_FA  = "250918043814723897"
 PAYEE_SUB = "250918043814723925"
+
 MEMO_PREFIX = "Auto TestYan Internal Pay"
 
 pytestmark = pytest.mark.internal_pay
@@ -42,7 +54,7 @@ class TestInternalPayTransfer:
     def test_transfer_success(self, internal_pay_api):
         """
         测试场景1：成功发起 Internal Pay 转账（双方均用 sub）
-        Test Scenario1: Successfully Initiate Internal Pay Transfer
+        Test Scenario1: Successfully Initiate Internal Pay Transfer (with sub accounts)
         验证点：
         1. HTTP 200，code=200
         2. status=Completed（实时结算）
@@ -62,17 +74,17 @@ class TestInternalPayTransfer:
         assert resp.status_code == 200
         body = resp.json()
         assert body.get("code") == 200, \
-            f"转账应成功，实际 code={body.get('code')}, err={body.get('error_message')}"
+            f"Transfer should succeed, actual code={body.get('code')}, err={body.get('error_message')}"
 
         data = body.get("data", {})
-        assert data.get("status") == "Completed", f"应为 Completed，实际: {data.get('status')}"
-        assert "direction" not in data, "Internal Pay 不应有 direction 字段"
-        assert data.get("memo") == memo, f"memo 回显不一致: {data.get('memo')}"
+        assert data.get("status") == "Completed", f"Expected Completed, got: {data.get('status')}"
+        assert "direction" not in data, "Internal Pay should not have direction field"
+        assert data.get("memo") == memo, f"memo echo mismatch: {data.get('memo')}"
 
         txn_id = data.get("transaction_id") or data.get("id")
-        logger.info(f"✓ 转账成功: txn_id={txn_id}, memo={memo}")
+        logger.info(f"✓ Transfer succeeded: txn_id={txn_id}, memo={memo}")
 
-        # 验证在 transactions list 可查到
+        # Verify in transactions list
         time.sleep(1)
         list_resp = internal_pay_api.list_transactions(
             payer_financial_account_id=PAYER_FA, size=10
@@ -80,9 +92,34 @@ class TestInternalPayTransfer:
         content = list_resp.json().get("data", {}).get("content", [])
         found = any(t.get("memo") == memo for t in content)
         if found:
-            logger.info(f"✓ 转账记录在 list 中可查到，memo='{memo}'")
+            logger.info(f"✓ Transfer record found in list, memo='{memo}'")
         else:
-            logger.info(f"  ⚠ 未立即在 list 中找到（可能延迟），memo='{memo}'")
+            logger.info(f"  ⚠ Not yet in list (may be delayed), memo='{memo}'")
+
+    @pytest.mark.no_rerun
+    def test_transfer_success_no_sub(self, internal_pay_api):
+        """
+        测试场景1b：成功发起 Internal Pay 转账（payer 使用纯 FA，无 sub）
+        Test Scenario1b: Successfully Initiate Internal Pay Transfer (FA only, no sub)
+        验证点：
+        1. FA3 (no sub accounts) → 无需传 sub_account_id，直接用 FA 发起转账
+        2. HTTP 200，code=200，status=Completed
+        """
+        memo = _memo()
+        resp = internal_pay_api.initiate_transfer(
+            payer_financial_account_id=PAYER_FA_NO_SUB,
+            payee_financial_account_id=PAYEE_FA,
+            payee_sub_account_id=PAYEE_SUB,
+            amount="0.01",
+            memo=memo
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body.get("code") == 200, \
+            f"FA-only transfer should succeed, code={body.get('code')}, err={body.get('error_message')}"
+        data = body.get("data", {})
+        assert data.get("status") == "Completed"
+        logger.info(f"✓ FA-only transfer succeeded: status={data.get('status')}, memo={memo}")
 
     @pytest.mark.no_rerun
     def test_transfer_verify_two_records(self, internal_pay_api):

@@ -4,6 +4,7 @@
 支持从 .env 文件加载配置
 """
 import os
+import base64
 from pathlib import Path
 from dotenv import load_dotenv
 from data.enums import CoreType
@@ -75,12 +76,30 @@ class Config:
     @property
     def auth_data(self):
         """获取认证配置"""
-        return self.current_config["auth"]
+        auth = dict(self.current_config["auth"])
+        # 新模型兼容：account_id/client_id/secret/core/encryption_key
+        account_id = os.getenv("ACCOUNT_ID", auth.get("account_id", auth.get("tenant_id", "")))
+        client_id = os.getenv("CLIENT_ID", auth.get("client_id", ""))
+        client_secret = os.getenv("CLIENT_SECRET", auth.get("secret", ""))
+        encryption_key = os.getenv("ENCRYPTION_KEY", auth.get("encryption_key", ""))
+
+        auth["account_id"] = account_id
+        auth["tenant_id"] = account_id or auth.get("tenant_id", "")
+        auth["client_id"] = client_id
+        auth["secret"] = client_secret
+        auth["encryption_key"] = encryption_key
+
+        basic_auth = os.getenv("BASIC_AUTH", auth.get("basic_auth", ""))
+        if (not basic_auth) and client_id and client_secret:
+            basic_auth = base64.b64encode(f"{client_id}:{client_secret}".encode("utf-8")).decode("utf-8")
+        auth["basic_auth"] = basic_auth
+        auth["user_id"] = os.getenv("USER_ID", auth.get("user_id", ""))
+        return auth
 
     @property
     def core(self):
         """获取当前 Core"""
-        return self.CORE
+        return os.getenv("CORE", self.CORE)
     
     def get_env(self) -> str:
         """获取当前环境标识"""

@@ -10,16 +10,15 @@ POST /api/v1/cores/{core}/money-movements/instant-pay/payment
 - 响应用 transaction_id 字段（不是 id）
 
 已验证账户数据：
-  IP_FA=251119084741475550（有 sub），IP_SUB=251119084741475584
-  IP_CP=251212054048369447（Instant Pay CP，assign=['250918043812871683'] = FA's account_id）
+  IP_FA=251212054048470568（有 sub），IP_SUB=251212054048470660
+  IP_CP=251212054048369447（Instant Pay CP，assign=['251212054048470503'] = FA's account_id）
 """
 import pytest
 import time
 from utils.logger import logger
 
-IP_FA        = "251119084741475550"
-IP_SUB       = "251119084741475584"
-IP_CP        = "251212054048369447"   # assign 了 IP_FA 的 account_id
+IP_FA        = "251212054048470568"
+IP_SUB       = "251212054048470660"
 INVISIBLE_FA = "241010195850134683"
 
 MEMO_PREFIX = "Auto TestYan IP Payment"
@@ -31,7 +30,7 @@ pytestmark = [pytest.mark.instant_pay, pytest.mark.no_rerun]
 @pytest.mark.no_rerun
 class TestInstantPayInitiatePayment:
 
-    def test_initiate_payment_success(self, instant_pay_api):
+    def test_initiate_payment_success(self, instant_pay_api, ip_cp_id):
         """
         测试场景1：成功发起 Instant Pay 支付
         Test Scenario1: Successfully Initiate Instant Pay Payment
@@ -41,7 +40,7 @@ class TestInstantPayInitiatePayment:
         resp = instant_pay_api.initiate_payment(
             financial_account_id=IP_FA,
             sub_account_id=IP_SUB,
-            counterparty_id=IP_CP,
+            counterparty_id=ip_cp_id,
             amount="0.01",
             memo=memo
         )
@@ -59,7 +58,7 @@ class TestInstantPayInitiatePayment:
         assert "transaction_id" in data, "Instant Pay 响应应含 transaction_id 字段"
         logger.info(f"✓ Instant Pay 发起成功: txn_id={txn_id}, status={data.get('status')}")
 
-    def test_payment_response_fields(self, instant_pay_api):
+    def test_payment_response_fields(self, instant_pay_api, ip_cp_id):
         """
         测试场景2：验证 Instant Pay 响应字段完整性
         Test Scenario2: Verify Payment Response Fields Completeness
@@ -67,7 +66,7 @@ class TestInstantPayInitiatePayment:
         resp = instant_pay_api.initiate_payment(
             financial_account_id=IP_FA,
             sub_account_id=IP_SUB,
-            counterparty_id=IP_CP,
+            counterparty_id=ip_cp_id,
             amount="0.01",
             memo=f"{MEMO_PREFIX} FieldCheck {int(time.time())}"
         )
@@ -84,14 +83,14 @@ class TestInstantPayInitiatePayment:
             assert field in data, f"Instant Pay 响应缺少字段: '{field}'"
         logger.info(f"✓ 响应字段完整性验证通过: {[f for f in required_fields if f in data]}")
 
-    def test_payment_missing_sub_account_id(self, instant_pay_api):
+    def test_payment_missing_sub_account_id(self, instant_pay_api, ip_cp_id):
         """
         测试场景3：FA 有 sub 但未传 sub_account_id → code=599
         Test Scenario3: FA with Sub but Missing sub_account_id Returns 599
         """
         resp = instant_pay_api.initiate_payment(
             financial_account_id=IP_FA,
-            counterparty_id=IP_CP,
+            counterparty_id=ip_cp_id,
             amount="0.01",
             # 故意不传 sub_account_id
         )
@@ -101,7 +100,7 @@ class TestInstantPayInitiatePayment:
             f"缺少 sub_account_id 应返回错误，实际 code={body.get('code')}"
         logger.info(f"✓ 缺少 sub_account_id 被拒绝: code={body.get('code')}, msg={body.get('error_message')}")
 
-    def test_payment_insufficient_funds(self, instant_pay_api):
+    def test_payment_insufficient_funds(self, instant_pay_api, ip_cp_id):
         """
         测试场景4：金额超过余额 → code=600 Insufficient available funds
         Test Scenario4: Insufficient Funds Returns 600
@@ -109,7 +108,7 @@ class TestInstantPayInitiatePayment:
         resp = instant_pay_api.initiate_payment(
             financial_account_id=IP_FA,
             sub_account_id=IP_SUB,
-            counterparty_id=IP_CP,
+            counterparty_id=ip_cp_id,
             amount="99999999",  # 超大金额
         )
         assert resp.status_code == 200
@@ -117,21 +116,21 @@ class TestInstantPayInitiatePayment:
         assert body.get("code") != 200
         logger.info(f"✓ 余额不足被拒绝: code={body.get('code')}, msg={body.get('error_message','')[:60]}")
 
-    def test_payment_invisible_fa(self, instant_pay_api):
+    def test_payment_invisible_fa(self, instant_pay_api, ip_cp_id):
         """
         测试场景5：越权 FA ID → 被拒绝
         Test Scenario5: Invisible FA Returns Error
         """
         resp = instant_pay_api.initiate_payment(
             financial_account_id=INVISIBLE_FA,
-            counterparty_id=IP_CP,
+            counterparty_id=ip_cp_id,
             amount="0.01",
         )
         assert resp.status_code == 200
         assert resp.json().get("code") != 200
         logger.info(f"✓ 越权 FA 被拒绝: code={resp.json().get('code')}")
 
-    def test_payment_missing_counterparty_id(self, instant_pay_api):
+    def test_payment_missing_counterparty_id(self, instant_pay_api, ip_cp_id):
         """
         测试场景6：缺少必填 counterparty_id
         Test Scenario6: Missing Required counterparty_id Returns Error
@@ -146,7 +145,7 @@ class TestInstantPayInitiatePayment:
         assert resp.json().get("code") != 200
         logger.info(f"✓ 缺少 counterparty_id 被拒绝: code={resp.json().get('code')}")
 
-    def test_payment_negative_amount(self, instant_pay_api):
+    def test_payment_negative_amount(self, instant_pay_api, ip_cp_id):
         """
         测试场景7：负数金额
         Test Scenario7: Negative Amount Returns Error
@@ -154,14 +153,14 @@ class TestInstantPayInitiatePayment:
         resp = instant_pay_api.initiate_payment(
             financial_account_id=IP_FA,
             sub_account_id=IP_SUB,
-            counterparty_id=IP_CP,
+            counterparty_id=ip_cp_id,
             amount="-1",
         )
         assert resp.status_code == 200
         assert resp.json().get("code") != 200
         logger.info(f"✓ 负数金额被拒绝: code={resp.json().get('code')}")
 
-    def test_payment_appears_in_transactions_list(self, instant_pay_api):
+    def test_payment_appears_in_transactions_list(self, instant_pay_api, ip_cp_id):
         """
         测试场景8：发起后在 transactions list 中可查到
         Test Scenario8: Initiated Payment Appears in Transactions List
@@ -169,7 +168,7 @@ class TestInstantPayInitiatePayment:
         resp = instant_pay_api.initiate_payment(
             financial_account_id=IP_FA,
             sub_account_id=IP_SUB,
-            counterparty_id=IP_CP,
+            counterparty_id=ip_cp_id,
             amount="0.01",
             memo=f"{MEMO_PREFIX} ListCheck {int(time.time())}"
         )

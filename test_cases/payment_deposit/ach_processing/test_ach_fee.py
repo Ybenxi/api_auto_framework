@@ -12,7 +12,7 @@ ACH fee 有 5 个必填参数（比其他 payment 模块多 first_party 和 tran
 import pytest
 from utils.logger import logger
 
-VALID_FA     = "251119084741475550"
+VALID_FA     = "251212054048470568"
 INVISIBLE_FA = "241010195850134683"
 
 pytestmark = pytest.mark.ach_processing

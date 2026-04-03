@@ -1,289 +1,216 @@
 """
-测试数据清理工具
-用于清理测试过程中创建的垃圾数据
+测试数据清理工具 v2
+============================
 
-⚠️ 重要提醒：
-1. 默认 dry_run=True（只模拟，不实际删除）
-2. 只清理名称以 "Auto TestYan" 开头的测试数据
-3. 所有操作都有日志记录
-4. 出错自动回滚
+策略：按固定 FA/Account ID 精确定位，覆盖全部 19 张关联表，5 步由底向上删除。
+
+固定锚点 ID（不会被删除）：
+  - FA 1: 251212054048470568  （有固定 Sub 251212054048470660）
+  - FA 2: 251212054048470574
+  - FA 3: 251212054048470609  （不建 Sub）
+  - Account 1: 251212054048470503
+  - Account 2: 251212054048470507
+  - Account 3: 251212054048470515  （High Risk）
+  - BankInfo:  251212054048471047
+  - Group 归属 accountid: 259124163505469218
 """
-from typing import List, Dict, Optional
+from typing import List, Dict
 from dao.db_manager import DBManager
 from utils.logger import logger
 
 
+# ── 固定测试锚点 ID（不可删除）─────────────────────────────────────────────
+FA_IDS = [
+    "251212054048470568",  # Auto testyan FA 1（有固定 Sub）
+    "251212054048470574",  # Auto testyan FA 2
+    "251212054048470609",  # Auto testyan FA 3（no sub）
+]
+ACCOUNT_IDS = [
+    "251212054048470503",  # Auto testyan account 1
+    "251212054048470507",  # Auto testyan account 2
+    "251212054048470515",  # Auto testyan account 3 (High Risk)
+]
+FIXED_SUB_ID     = "251212054048470660"   # FA1 下固定 Sub，保留不删
+GROUP_ACCOUNT_ID = "259124163505469218"   # Group 数据归属的 accountid
+
+
+def _in(ids: list) -> str:
+    """生成 SQL IN 值串，如 '\'id1\',\'id2\''"""
+    return "', '".join(ids)
+
+
 class DataCleanup:
-    """
-    数据清理器
-    负责清理测试创建的垃圾数据
-    """
-    
-    # 模块清理规则配置（主表 + 关联表）
-    CLEANUP_RULES = {
-        "counterparty": {
-            "main_table": "actc.t_share_recipient",
-            "id_field": "id",
-            "related_tables": [
-                {
-                    "table": "actc.t_share_recipient_account_relation",
-                    "foreign_key": "recipient_id"
-                },
-                {
-                    "table": "actc.t_share_recipient_group_relation",
-                    "foreign_key": "recipient_id"
-                }
-            ],
-            "name_field": "recipient_name"  # 实际字段名是 recipient_name
-        },
-        "contact": {
-            "main_table": "actc.contact",  # ⚠️ 没有 t_ 前缀
-            "id_field": "sfid",  # ⚠️ 使用 sfid 而不是 id
-            "related_tables": [],
-            "name_field": "firstname"  # Salesforce字段名（小写无下划线）
-        },
-        "sub_account": {
-            "main_table": "actc.t_share_sub_account",  # ⚠️ 正确的表名
-            "id_field": "id",
-            "related_tables": [],  # 暂时没有关联表
-            "name_field": "name"
-        },
-        "fbo_account": {
-            "main_table": "actc.t_share_fbo_account",  # ⚠️ 正确的表名
-            "id_field": "id",
-            "related_tables": [],
-            "name_field": "name"
-        },
-        "financial_account": {
-            "main_table": "actc.t_financial_account",
-            "id_field": "id",
-            "related_tables": [
-                {
-                    "table": "actc.t_financial_account_sub_account_relation",
-                    "foreign_key": "financial_account_id"
-                }
-            ],
-            "name_field": "name"
-        },
-        "trading_order": {
-            "main_table": "actc.t_trading_order",
-            "id_field": "id",
-            "related_tables": [],
-            "name_field": None  # 订单没有name字段
-        },
-        "client_list": {
-            "main_table": "actc.t_client_list",
-            "id_field": "id",
-            "related_tables": [],
-            "name_field": "account_name"
-        }
-    }
-    
+    """测试数据清理器 v2"""
+
     def __init__(self, db_manager: DBManager):
-        """
-        初始化清理器
-        
-        Args:
-            db_manager: 数据库管理器实例
-        """
         self.db = db_manager
-        # 跟踪测试创建的ID，用于自动清理（直接存在实例上，避免模块级变量冲突）
-        self._tracked_ids: Dict[str, List[str]] = {module: [] for module in self.CLEANUP_RULES}
+        self._tracked_ids: Dict[str, List[str]] = {}
+
+    # ────────────────────────────────────────────────────────────────────────
+    # 主入口
+    # ────────────────────────────────────────────────────────────────────────
+
+    def cleanup_all_test_data(self, dry_run: bool = True) -> Dict[str, Dict[str, int]]:
+        """
+        主清理入口（v2）。
+        基于固定 FA/Account ID，5 步 19 张表，由底向上删除。
+        dry_run=True 时只统计不实际删除。
+        """
+        return self.cleanup_by_fixed_ids(dry_run=dry_run)
+
+    def cleanup_by_fixed_ids(self, dry_run: bool = True) -> Dict[str, Dict[str, int]]:
+        """
+        按固定锚点 ID 精确清理所有关联表。
+
+        返回 dict（供平台 UI 展示）：
+        {
+          "money_movements": {"actc.t_payment_money_movement": N, ...},
+          "groups":          {"actc.t_share_recipient_group": N, ...},
+          "contacts":        {"actc.contact": N},
+          "counterparties":  {"actc.t_share_recipient": N, ...},
+          "subs":            {"actc.t_share_sub_account": N, ...},
+        }
+        """
+        mode = "[模拟]" if dry_run else "[执行]"
+        logger.info("=" * 60)
+        logger.info(f"{mode} 开始清理测试数据（v2 固定 ID 方案）")
+        logger.info(f"  FA IDs     : {FA_IDS}")
+        logger.info(f"  Account IDs: {ACCOUNT_IDS}")
+        logger.info(f"  保留 Sub   : {FIXED_SUB_ID}")
+        logger.info("=" * 60)
+
+        fa_in   = _in(FA_IDS)
+        acct_in = _in(ACCOUNT_IDS)
+
+        mm_sfid_subq = (
+            f"SELECT sfid FROM actc.t_payment_money_movement "
+            f"WHERE sleeve_account_sfid IN ('{fa_in}')"
+        )
+        new_sub_subq = (
+            f"SELECT id FROM actc.t_share_sub_account "
+            f"WHERE financial_account_id IN ('{fa_in}') "
+            f"AND id != '{FIXED_SUB_ID}'"
+        )
+        group_subq = (
+            f"SELECT id FROM actc.t_share_recipient_group "
+            f"WHERE account_id = '{GROUP_ACCOUNT_ID}'"
+        )
+        recip_subq = (
+            f"SELECT recipient_id FROM actc.t_share_recipient_account_relation "
+            f"WHERE account_id IN ('{acct_in}')"
+        )
+
+        all_stats: Dict[str, Dict[str, int]] = {}
+
+        # ── Step 1: MM 交易数据（11 张表）────────────────────────────────
+        logger.info(f"{mode} Step 1: MM 交易数据")
+        s1: Dict[str, int] = {}
+        s1.update(self._del("actc.t_payment_money_movement_history",
+            f"sleeve_account_sfid IN ('{fa_in}')", dry_run))
+        s1.update(self._del("actc.t_payment_money_movement_reversal_history",
+            f"original_money_movement_sfid IN ({mm_sfid_subq})", dry_run))
+        s1.update(self._del("actc.t_payment_instant_payment_entry",
+            f"money_movement_sfid IN ({mm_sfid_subq})", dry_run))
+        s1.update(self._del("actc.t_payment_instant_payment_entry_log",
+            f"money_movement_sfid IN ({mm_sfid_subq})", dry_run))
+        s1.update(self._del("actc.t_payment_instant_request_for_payment_entry",
+            f"money_movement_sfid IN ({mm_sfid_subq})", dry_run))
+        s1.update(self._del("actc.t_payment_instant_request_for_payment_entry_log",
+            f"money_movement_sfid IN ({mm_sfid_subq})", dry_run))
+        s1.update(self._del("actc.t_share_transaction",
+            f"sfid IN ({mm_sfid_subq})", dry_run))
+        s1.update(self._del("actc.t_payment_bank_wire_transaction",
+            f"financial_account_id IN ('{fa_in}')", dry_run))
+        s1.update(self._del("actc.t_payment_deposit_check_detail",
+            f"sma_sfid IN ('{fa_in}')", dry_run))
+        s1.update(self._del("actc.t_share_financial_account_balance_history",
+            f"financial_account_id IN ('{fa_in}')", dry_run))
+        s1.update(self._del("actc.t_payment_money_movement",
+            f"sleeve_account_sfid IN ('{fa_in}')", dry_run))
+        all_stats["money_movements"] = s1
+
+        # ── Step 2: Group 数据 ───────────────────────────────────────────
+        logger.info(f"{mode} Step 2: Group 数据")
+        s2: Dict[str, int] = {}
+        s2.update(self._del("actc.t_share_recipient_group_relation",
+            f"recipient_group_id IN ({group_subq})", dry_run))
+        s2.update(self._del("actc.t_share_recipient_group",
+            f"account_id = '{GROUP_ACCOUNT_ID}'", dry_run))
+        all_stats["groups"] = s2
+
+        # ── Step 3: Contact 数据 ─────────────────────────────────────────
+        logger.info(f"{mode} Step 3: Contact 数据")
+        s3: Dict[str, int] = {}
+        s3.update(self._del("actc.contact",
+            f"accountid IN ('{acct_in}')", dry_run))
+        all_stats["contacts"] = s3
+
+        # ── Step 4: Counterparty 数据 ────────────────────────────────────
+        logger.info(f"{mode} Step 4: Counterparty 数据")
+        s4: Dict[str, int] = {}
+        s4.update(self._del("actc.t_share_recipient_status_log",
+            f"recipient_id IN ({recip_subq})", dry_run))
+        s4.update(self._del("actc.t_share_recipient",
+            f"id IN ({recip_subq})", dry_run))
+        s4.update(self._del("actc.t_share_recipient_account_relation",
+            f"account_id IN ('{acct_in}')", dry_run))
+        all_stats["counterparties"] = s4
+
+        # ── Step 5: Sub + FBO 数据 ───────────────────────────────────────
+        logger.info(f"{mode} Step 5: Sub + FBO 数据")
+        s5: Dict[str, int] = {}
+        s5.update(self._del("actc.t_share_fbo_account",
+            f"sub_account_id IN ({new_sub_subq})", dry_run))
+        s5.update(self._del("actc.t_share_sub_account",
+            f"financial_account_id IN ('{fa_in}') AND id != '{FIXED_SUB_ID}'",
+            dry_run))
+        all_stats["subs"] = s5
+
+        total = sum(sum(s.values()) for s in all_stats.values())
+        logger.info("=" * 60)
+        logger.info(f"{mode} 全部完成，共 {total} 条。分组统计：")
+        for grp, grp_stats in all_stats.items():
+            grp_total = sum(grp_stats.values())
+            if grp_total:
+                logger.info(f"  {grp}: {grp_total} 条")
+        logger.info("=" * 60)
+        return all_stats
+
+    # ────────────────────────────────────────────────────────────────────────
+    # track（接口保留，auto-cleanup 已禁用）
+    # ────────────────────────────────────────────────────────────────────────
 
     def track(self, module: str, resource_id: str):
-        """
-        跟踪测试创建的ID（测试结束后自动清理）
-
-        Args:
-            module: 模块名称（如 "sub_account", "fbo_account", "contact", "counterparty"）
-            resource_id: 资源ID
-
-        Example:
-            if db_cleanup:
-                db_cleanup.track("sub_account", created_id)
-        """
+        """记录测试创建的 ID（auto-cleanup 已禁用，仅做记录）"""
         if module not in self._tracked_ids:
             self._tracked_ids[module] = []
         if resource_id:
             self._tracked_ids[module].append(str(resource_id))
             logger.debug(f"✓ 已跟踪 {module} ID: {resource_id}")
-    
-    def cleanup_by_ids(self, module: str, ids: List[str], dry_run: bool = True) -> Dict[str, int]:
-        """
-        根据ID列表清理数据
-        
-        Args:
-            module: 模块名称（如 "counterparty"）
-            ids: 要删除的ID列表
-            dry_run: 是否只模拟执行（默认True，不实际删除）⚠️
-        
-        Returns:
-            删除统计 {"main_table": 删除数, "related_table_1": 删除数, ...}
-        """
-        if module not in self.CLEANUP_RULES:
-            logger.error(f"未知模块: {module}")
-            return {}
-        
-        if not ids:
-            logger.warning("ID列表为空，跳过清理")
-            return {}
-        
-        rule = self.CLEANUP_RULES[module]
-        stats = {}
-        
-        logger.info(f"{'[模拟]' if dry_run else '[执行]'} 清理 {module} 模块数据，ID数量: {len(ids)}")
-        logger.info(f"要{'模拟' if dry_run else '实际'}删除的ID: {ids}")
-        
+
+    # ────────────────────────────────────────────────────────────────────────
+    # 内部辅助
+    # ────────────────────────────────────────────────────────────────────────
+
+    def _del(self, table: str, where: str, dry_run: bool) -> Dict[str, int]:
+        """执行一条 DELETE（dry_run 时仅 COUNT）"""
         try:
-            # 1. 先删除关联表数据
-            for related in rule.get("related_tables", []):
-                table = related["table"]
-                fk = related["foreign_key"]
-                
-                # 构建 IN 子句
-                ids_str = "', '".join(ids)
-                sql = f"DELETE FROM {table} WHERE {fk} IN ('{ids_str}')"
-                
-                if dry_run:
-                    # 模拟：只查询会删除多少条
-                    count_sql = f"SELECT COUNT(*) as cnt FROM {table} WHERE {fk} IN ('{ids_str}')"
-                    result = self.db.execute_query(count_sql)
-                    count = result[0]['cnt'] if result else 0
-                    logger.info(f"  [模拟] {table}: 将删除 {count} 条")
-                    stats[table] = count
-                else:
-                    # 实际删除
-                    affected = self.db.execute_update(sql)
-                    logger.info(f"  ✓ {table}: 删除 {affected} 条")
-                    stats[table] = affected
-            
-            # 2. 最后删除主表数据
-            main_table = rule["main_table"]
-            id_field = rule["id_field"]
-            ids_str = "', '".join(ids)
-            sql = f"DELETE FROM {main_table} WHERE {id_field} IN ('{ids_str}')"
-            
             if dry_run:
-                count_sql = f"SELECT COUNT(*) as cnt FROM {main_table} WHERE {id_field} IN ('{ids_str}')"
-                result = self.db.execute_query(count_sql)
-                count = result[0]['cnt'] if result else 0
-                logger.info(f"  [模拟] {main_table}: 将删除 {count} 条")
-                stats[main_table] = count
+                result = self.db.execute_query(
+                    f"SELECT COUNT(*) AS cnt FROM {table} WHERE {where}"
+                )
+                cnt = int((result[0]["cnt"] if result else 0) or 0)
+                if cnt:
+                    logger.info(f"  [模拟] {table}: 将删除 {cnt} 条")
+                return {table: cnt}
             else:
-                affected = self.db.execute_update(sql)
-                logger.info(f"  ✓ {main_table}: 删除 {affected} 条")
-                stats[main_table] = affected
-            
-            logger.info(f"{'[模拟]' if dry_run else '[完成]'} 清理统计: {stats}")
-            return stats
-        
+                affected = self.db.execute_update(
+                    f"DELETE FROM {table} WHERE {where}"
+                )
+                affected = int(affected or 0)
+                if affected:
+                    logger.info(f"  ✓ {table}: 删除 {affected} 条")
+                return {table: affected}
         except Exception as e:
-            logger.error(f"清理失败: {e}", exc_info=True)
-            raise
-    
-    def cleanup_by_name_prefix(self, module: str, prefix: str = "Auto TestYan", dry_run: bool = True) -> Dict[str, int]:
-        """
-        根据名称前缀查找并清理数据（安全模式：只删除测试数据）
-        
-        Args:
-            module: 模块名称
-            prefix: 名称前缀（默认 "Auto TestYan"）⚠️
-            dry_run: 是否只模拟执行（默认True）
-        
-        Returns:
-            删除统计
-        """
-        if module not in self.CLEANUP_RULES:
-            logger.error(f"未知模块: {module}")
-            return {}
-        
-        rule = self.CLEANUP_RULES[module]
-        name_field = rule.get("name_field")
-        
-        if not name_field:
-            logger.warning(f"{module} 模块没有name_field，无法按名称清理")
-            return {}
-        
-        # 1. 先查找匹配的ID
-        main_table = rule["main_table"]
-        id_field = rule["id_field"]
-        
-        find_sql = f"SELECT {id_field} FROM {main_table} WHERE {name_field} LIKE '{prefix}%'"
-        
-        try:
-            results = self.db.execute_query(find_sql)
-            ids = [str(row[id_field]) for row in results]
-            
-            if not ids:
-                logger.info(f"未找到前缀为 '{prefix}' 的 {module} 数据")
-                return {}
-            
-            logger.info(f"找到 {len(ids)} 条前缀为 '{prefix}' 的 {module} 数据")
-            
-            # 2. 调用ID清理方法
-            return self.cleanup_by_ids(module, ids, dry_run=dry_run)
-        
-        except Exception as e:
-            logger.error(f"按名称前缀清理失败: {e}", exc_info=True)
-            raise
-    
-    def cleanup_all_test_data(self, dry_run: bool = True) -> Dict[str, Dict[str, int]]:
-        """
-        清理所有模块的测试数据（前缀为 "Auto TestYan"）
-        
-        Args:
-            dry_run: 是否只模拟执行（默认True）⚠️
-        
-        Returns:
-            每个模块的删除统计
-        """
-        all_stats = {}
-        
-        logger.info("=" * 60)
-        logger.info(f"{'[模拟]' if dry_run else '[执行]'} 清理所有测试数据...")
-        logger.info("=" * 60)
-        
-        for module in self.CLEANUP_RULES.keys():
-            try:
-                stats = self.cleanup_by_name_prefix(module, prefix="Auto TestYan", dry_run=dry_run)
-                if stats:
-                    all_stats[module] = stats
-            except Exception as e:
-                logger.error(f"清理 {module} 失败: {e}")
-                continue
-        
-        logger.info("=" * 60)
-        logger.info(f"{'[模拟]' if dry_run else '[完成]'} 全部清理统计: {all_stats}")
-        logger.info("=" * 60)
-        return all_stats
-
-
-# 便捷函数
-def cleanup_counterparty_by_id(counterparty_id: str, dry_run: bool = True):
-    """
-    快速清理单个Counterparty（便捷函数）
-    
-    Args:
-        counterparty_id: Counterparty ID
-        dry_run: 是否只模拟执行（默认True）⚠️
-    
-    Example:
-        # 先模拟看看
-        cleanup_counterparty_by_id("251212054047057329", dry_run=True)
-        # 确认无误后实际执行
-        cleanup_counterparty_by_id("251212054047057329", dry_run=False)
-    """
-    from config.config import config
-    
-    db_config = {
-        "host": config.get_db_config("DB_HOST"),
-        "port": int(config.get_db_config("DB_PORT", "5432")),
-        "user": config.get_db_config("DB_USER"),
-        "password": config.get_db_config("DB_PASSWORD"),
-        "database": config.get_db_config("DB_NAME")
-    }
-    
-    db = DBManager(db_config)
-    cleaner = DataCleanup(db)
-    
-    return cleaner.cleanup_by_ids("counterparty", [counterparty_id], dry_run=dry_run)
+            logger.error(f"  ✗ {table} 操作失败: {e}")
+            return {table: 0}

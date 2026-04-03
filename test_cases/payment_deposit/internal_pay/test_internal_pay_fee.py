@@ -5,13 +5,13 @@ POST /api/v1/cores/{core}/money-movements/internal-pay/fee
 响应结构：{"code": 200, "data": {financial_account_id, fee, amount, same_day}}
 
 已验证测试账户（dev actc）：
-  PAYER_FA = "251212054048210705"（有 sub，fee=3.51/10元）
+  PAYER_FA = "251212054048470574"（有 sub，fee=3.51/10元）
   INVISIBLE_FA = "241010195850134683"（越权，code=506）
 """
 import pytest
 from utils.logger import logger
 
-PAYER_FA     = "251212054048210705"
+PAYER_FA     = "251212054048470574"
 INVISIBLE_FA = "241010195850134683"
 
 pytestmark = pytest.mark.internal_pay

@@ -10,7 +10,7 @@ from utils.logger import logger
 
 
 # 所有 update 测试公用同一个 Contact（由 module-level fixture 创建）
-FIXED_ACCOUNT_ID = "251212054045554351"
+FIXED_ACCOUNT_ID = "251212054048470503"  # Auto testyan account 1
 
 
 def _create_own_contact(contact_api: ContactAPI, db_cleanup) -> Optional[str]:

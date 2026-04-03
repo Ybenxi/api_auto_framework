@@ -16,7 +16,17 @@ from utils.data_cleanup import DataCleanup
 # 用于存储所有测试结果和捕获的流量
 test_results = []
 
-# 用于跟踪测试创建的ID（自动清理用）
+
+def pytest_collection_modifyitems(items):
+    """
+    将 @pytest.mark.no_rerun 映射为 pytest-rerunfailures 识别的
+    @pytest.mark.flaky(reruns=0)，使重试全局配置（reruns=2）对该测试无效。
+    """
+    for item in items:
+        if item.get_closest_marker("no_rerun"):
+            item.add_marker(pytest.mark.flaky(reruns=0), append=False)
+
+# 用于跟踪测试创建的ID（手动清理辅助）
 test_created_ids = {
     "counterparty": [],
     "counterparty_group": [],
@@ -589,18 +599,18 @@ def db_session():
 def db_cleanup():
     """
     数据库清理器 fixture（session级别）
-    用于自动清理测试过程中创建的垃圾数据
+    用于手动清理测试过程中创建的垃圾数据
     
     ⚠️ 重要：
-    1. 测试结束后自动清理跟踪的ID
-    2. 只删除名称以 "Auto TestYan" 开头的数据
-    3. 默认先模拟，确认无误后再实际删除
+    1. 当前已关闭“测试结束自动清理”
+    2. 测试中可继续 track 创建的ID，便于后续手动清理
+    3. 只删除名称以 "Auto TestYan" 开头的数据（用于手动批量清理）
     
     使用方法：
         def test_create_something(api, db_cleanup):
             response = api.create(...)
             created_id = response.json()["data"]["id"]
-            track_created_id("counterparty", created_id)  # 自动清理
+            track_created_id("counterparty", created_id)  # 记录ID供手动清理
     """
     db_manager = None
     cleaner = None
@@ -620,42 +630,14 @@ def db_cleanup():
         
         logger.info("=" * 60)
         logger.info("数据清理器已就绪")
-        logger.info("⚠️  测试结束后将自动清理跟踪的测试数据")
+        logger.info("⚠️  已关闭自动清理：测试结束后不会自动删除跟踪数据")
         logger.info("=" * 60)
         
         yield cleaner
-        
-        # 测试结束后清理
-        logger.info("")
-        logger.info("=" * 60)
-        logger.info("测试会话结束，开始清理数据...")
-        logger.info("=" * 60)
-        
-        total_cleaned = 0
-        # 优先使用 cleaner 实例上跟踪的 ID（避免模块级变量多实例问题）
+        # 自动清理已禁用（保留 tracked 信息用于人工核查/手动清理）
         tracked = cleaner._tracked_ids if cleaner else {}
-        for module, ids in tracked.items():
-            if ids:
-                logger.info(f"\n清理 {module}: {len(ids)} 条记录")
-                logger.debug(f"ID列表: {ids}")
-                
-                try:
-                    # 实际执行清理（dry_run=False）
-                    stats = cleaner.cleanup_by_ids(module, ids, dry_run=False)
-                    
-                    # 统计总删除数
-                    module_total = sum(stats.values())
-                    total_cleaned += module_total
-                    
-                    logger.info(f"✓ {module} 清理完成: {stats}")
-                    
-                except Exception as e:
-                    logger.error(f"✗ {module} 清理失败: {e}", exc_info=True)
-        
-        logger.info("")
-        logger.info("=" * 60)
-        logger.info(f"数据清理完成！共清理 {total_cleaned} 条记录")
-        logger.info("=" * 60)
+        tracked_total = sum(len(v) for v in tracked.values()) if tracked else 0
+        logger.info(f"测试会话结束：自动清理已禁用，当前 tracked ID 数量: {tracked_total}")
         
     except Exception as e:
         logger.error(f"数据库清理器初始化失败: {e}", exc_info=True)
@@ -668,7 +650,7 @@ def db_cleanup():
 
 def track_created_id(module: str, resource_id: str):
     """
-    跟踪测试创建的ID（用于测试结束后自动清理）
+    跟踪测试创建的ID（用于后续手动清理）
     
     Args:
         module: 模块名称（如 "counterparty", "contact", "sub_account"）
@@ -679,8 +661,7 @@ def track_created_id(module: str, resource_id: str):
         response = counterparty_api.create_counterparty(...)
         created_id = response.json()["data"]["id"]
         track_created_id("counterparty", created_id)
-        
-        # 测试结束后会自动清理
+        # 后续可通过手动清理入口统一清理
     """
     if module in test_created_ids:
         test_created_ids[module].append(str(resource_id))
@@ -704,22 +685,21 @@ def get_tracked_ids(module: str) -> list:
 
 def _analyze_failure(longrepr: str, extra_data: dict) -> str:
     """
-    根据 pytest 的 longrepr（失败信息）和接口流量数据，自动分析失败原因，
-    返回简明扼要的中文分析结论。
+    Analyze failure reason from pytest longrepr and captured traffic.
+    Returns a concise English summary.
     """
     text = longrepr or ""
     lines = text.splitlines()
 
-    # ── 提取 AssertionError 信息 ──────────────────────────────────
+    # ── Extract AssertionError message ────────────────────────────
     assert_lines = [l.strip() for l in lines if l.strip().startswith("AssertionError")]
     assert_msg = assert_lines[0] if assert_lines else ""
 
-    # ── 提取最后一条 assert 语句（E  assert ... 行）────────────────
+    # ── Extract last assert line (E  assert ... lines) ─────────────
     e_lines = [l.strip() for l in lines if l.strip().startswith("E ") or l.strip().startswith("E\t")]
     e_msg = " | ".join(e_lines[:5]) if e_lines else ""
 
-    # ── 提取接口响应信息 ──────────────────────────────────────────
-    # extra_data 现在是数组，取最后一条（最关键的 API 调用）
+    # ── Extract API response info ─────────────────────────────────
     if isinstance(extra_data, list):
         last_extra = extra_data[-1] if extra_data else {}
     else:
@@ -731,62 +711,56 @@ def _analyze_failure(longrepr: str, extra_data: dict) -> str:
     resp_err  = resp.get("error_message") if isinstance(resp, dict) else None
     http_code = last_extra.get("response", {}).get("status_code") if last_extra else None
 
-    # ── 规则匹配，输出简明结论 ─────────────────────────────────────
+    # ── Rule-based matching ────────────────────────────────────────
 
-    # 1. pytest.skip 被触发
-    if "Skipped" in text or "skip" in text.lower() and "pytest.skip" in text:
-        return "测试被 pytest.skip 跳过，不计入失败"
+    # 1. pytest.skip triggered
+    if "Skipped" in text or ("skip" in text.lower() and "pytest.skip" in text):
+        return "Test was skipped via pytest.skip"
 
-    # 2. HTTP 连接 / 超时
+    # 2. Network / timeout errors
     if any(k in text for k in ["ConnectionError", "ConnectTimeout", "ReadTimeout", "MaxRetryError"]):
-        return "网络连接失败或请求超时，可能是环境不可达或网络不稳定"
+        return "Network connection failed or request timed out — environment may be unreachable"
 
-    # 3. 接口返回非预期业务 code
+    # 3. API business code error
     if resp_code is not None and resp_code != 200:
-        err_hint = f"，错误信息：「{resp_err}」" if resp_err else ""
-        return f"API 业务层返回错误 code={resp_code}{err_hint}"
+        err_hint = f': "{resp_err}"' if resp_err else ""
+        return f"API returned business error code={resp_code}{err_hint}"
 
-    # 4. HTTP 状态码非 200
+    # 4. Non-200 HTTP status
     if http_code and http_code != 200:
-        return f"HTTP 请求失败，状态码 {http_code}（期望 200）"
+        return f"HTTP request failed with status {http_code} (expected 200)"
 
-    # 5. 字段缺失断言
-    if "缺少必需字段" in text or "missing" in text.lower() or "not in" in e_msg.lower():
+    # 5. Missing field assertion
+    if "not in" in e_msg.lower() or "missing" in text.lower():
         field_match = re.search(r"['\"]([a-z_]+)['\"]", e_msg or text)
-        field_hint = f"（字段：{field_match.group(1)}）" if field_match else ""
-        return f"响应中缺少预期字段{field_hint}"
+        field_hint = f" (field: '{field_match.group(1)}')" if field_match else ""
+        return f"Response missing expected field{field_hint}"
 
-    # 6. 值不匹配（期望 vs 实际）
-    if "期望" in text and "实际" in text:
-        # 优先匹配「期望 XXX，实际 YYY」或「期望「XXX」，实际「YYY」」两种常见格式
-        m = re.search(r"期望\s*「([^」]{1,80})」[，,]?\s*实际\s*「([^」]{1,80})」", text)
-        if not m:
-            m = re.search(r"期望\s+'([^']{1,80})'\s*[，,]?\s*实际\s+'([^']{1,80})'", text)
-        if not m:
-            # 无引号：期望后取到逗号/换行，实际后取到逗号/换行/句末
-            m = re.search(r"期望\s+([^\n，,。]{1,60})[，,]\s*实际\s+([^\n，,。]{1,60})", text)
-        if m:
-            return f"字段值不匹配：期望「{m.group(1).strip()}」，实际「{m.group(2).strip()}」"
-        return "字段值与预期不一致"
+    # 6. Value mismatch — various formats
+    # English: "expected X, got Y" / "should be X, actual Y"
+    m = re.search(r"(?:expected|expect)\s+['\"]?([^'\"\n,]{1,80})['\"]?[,\s]+(?:but\s+)?(?:got|actual|got|received)\s+['\"]?([^'\"\n,]{1,80})['\"]?", text, re.IGNORECASE)
+    if not m:
+        m = re.search(r"assert\s+([^\n]{1,60})\s*==\s*([^\n]{1,60})", e_msg or text)
+    if m:
+        return f"Value mismatch: expected '{m.group(1).strip()}', got '{m.group(2).strip()}'"
 
-    # 7. assert False / assert x == y
+    # 7. assert expression shortcut
     if e_msg:
-        # 截取关键部分，避免太长
         short = e_msg[:200].replace("\n", " ").strip()
-        return f"断言失败：{short}"
+        return f"Assertion failed: {short}"
 
-    # 8. AssertionError 兜底
+    # 8. AssertionError fallback
     if assert_msg:
         return assert_msg[:200]
 
-    # 9. 异常类型兜底
+    # 9. Exception type fallback
     exc_match = re.search(r"([\w.]+Error|[\w.]+Exception)[:\s]+(.*)", text)
     if exc_match:
-        return f"{exc_match.group(1)}：{exc_match.group(2)[:150].strip()}"
+        return f"{exc_match.group(1)}: {exc_match.group(2)[:150].strip()}"
 
-    # 10. 完全兜底
+    # 10. Last line fallback
     last_lines = [l.strip() for l in lines if l.strip()]
-    return last_lines[-1][:200] if last_lines else "未知失败原因，请查看失败详情"
+    return last_lines[-1][:200] if last_lines else "Unknown failure — check failure detail"
 
 
 # --- 流量捕获逻辑（增强版 - 防止重复记录）---
@@ -823,10 +797,28 @@ def pytest_runtest_makereport(item, call):
             test_func_name_en = item.nodeid.split("::")[-1]
             docstring_summary_en = test_func_name_en
         
-        # 提取 API 路径（优先从方法 docstring，其次从模块 docstring）
+        # 提取 API 路径（优先从方法 docstring，其次从模块 docstring，最后从捕获流量）
         api_path = extract_api_path_from_docstring(full_docstring)
         if not api_path:
             api_path = extract_api_path_from_docstring(module_docstring)
+        # Fallback: extract /api/v1/... path from captured traffic URLs
+        if not api_path and extra_data:
+            traffic_list = extra_data if isinstance(extra_data, list) else [extra_data]
+            for call in traffic_list:
+                url = (call.get("request") or {}).get("url", "")
+                if "/api/v1/" in url:
+                    # Extract the path portion after the domain
+                    try:
+                        from urllib.parse import urlparse
+                        parsed = urlparse(url)
+                        # Strip query string, keep only path
+                        path = parsed.path
+                        if path:
+                            # Generalise: replace any :id-like segments to keep it reusable
+                            api_path = re.sub(r'/[0-9]{15,}', '/:id', path)
+                            break
+                    except Exception:
+                        pass
         
         # 提取测试函数名（用于显示）
         test_func_name = item.nodeid.split("::")[-1]
@@ -1049,6 +1041,22 @@ def pytest_sessionfinish(session, exitstatus):
             f.write(final_html)
         logger.info(f"最新报告已更新: {latest_report_path}")
         
+        # ── 生成 Pro 版报告（新 UI 样式）──────────────────────────────
+        pro_template_path = os.path.join(os.path.dirname(__file__), "..", "assets", "report_template_pro.html")
+        if os.path.exists(pro_template_path):
+            try:
+                with open(pro_template_path, 'r', encoding='utf-8') as f:
+                    pro_template = f.read()
+                pro_html = pro_template.replace("{{RESULTS_JSON}}", results_json)
+                pro_html = pro_html.replace("{{ENV_JSON}}", env_json)
+                pro_filename = f"benxi_report_pro_{timestamp}.html"
+                pro_path = os.path.join(os.path.dirname(__file__), "..", "reports", pro_filename)
+                with open(pro_path, 'w', encoding='utf-8') as f:
+                    f.write(pro_html)
+                logger.info(f"Pro 报告已生成: {pro_path}")
+            except Exception as e:
+                logger.warning(f"Pro 报告生成失败（不影响其他报告）: {e}")
+        
         # 报告永久保留，不再自动清理（可在测试平台手动删除）
 
         # 自动生成 Excel 测试用例清单（带时间戳，与 HTML 报告命名一致）
@@ -1088,6 +1096,9 @@ def capture_traffic(request):
     import requests as _requests
 
     original_method = _requests.Session.request
+
+    # 每次测试运行（含重试）都重置 extra_data，避免多次重试的流量记录叠加
+    request.node.extra_data = []
 
     def patched_request(self_session, method, url, **kwargs):
         response = original_method(self_session, method, url, **kwargs)

@@ -55,7 +55,7 @@ class TestCheckDeposit:
         Test Scenario2: FA with sub_account is Rejected (Business Restriction)
         文档说明：仅可使用没有 sub account 的 FA
         """
-        fa_with_sub = "251212054048210705"  # 已知有 sub_account 的 FA
+        fa_with_sub = "251212054048470574"  # 已知有 sub_account 的 FA
         url = remote_deposit_check_api.config.get_full_url("/money-movements/checks/deposit")
         resp = remote_deposit_check_api.session.post(url, json={
             "financial_account_id": fa_with_sub,

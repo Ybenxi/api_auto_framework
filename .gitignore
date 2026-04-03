@@ -1,13 +1,24 @@
 # 环境配置
 .env
 
+# 登录 & 凭据配置（含敏感信息，不上传 GitHub）
+auth_config.yaml
+api_credentials.json
+
 # 日志文件
 logs/
 *.log
 
-# 测试报告
+# 测试报告（生成文件，不上传）
 reports/*.html
+reports/*.pdf
+reports/*.xlsx
+reports/*.json
+reports/*.log
 !reports/.gitkeep
+
+# 平台缓存
+test_platform/.cache/
 
 # Python
 __pycache__/

@@ -11,7 +11,7 @@ from utils.logger import logger
 # ==================== 测试数据常量 ====================
 
 # 固定的 Account ID（所有 Contact 均在此 Account 下创建）
-FIXED_ACCOUNT_ID = "251212054045554351"
+FIXED_ACCOUNT_ID = "251212054048470503"  # Auto testyan account 1
 
 
 @pytest.mark.contact

@@ -6,31 +6,21 @@ ACH Debit = 向外部账户发起拉款（pull 资金进来，Money来自 counte
 
 已验证数据：
   first_party=False:
-    ACH_FA=251119084741475550, ACH_SUB=251119084741475584, ACH_CP=251212054048369793
+    使用 conftest 的 ach_debit_fp_false_ctx：FA=251119…，CP 从列表中选 Approved assign 到 profile 251212054048470503
+    （勿与 Credit 共用 210705+301820：Debit 拉款易 code=600；勿用已清理的 369793）
   first_party=True（使用 bank-account 作为 CP）:
-    ACH_FA=251119084741475550, ACH_SUB=251119084741475584, ACH_CP_FP=251212054048127858
-    （bank-account，account_id=250918043812871683，与 FA 的 account_id 一致）
+    ACH_FA=251212054048470568, ACH_SUB=251212054048470660, ACH_CP_FP=251212054048127858
+    （bank-account，account_id=251212054048470503，与 FA 的 account_id 一致）
     ⚠ 注意：Debit fp=True 可能因外部账户余额不足而报 code=600
-
-用于 fp=False 的备用组合：
-  ACH_FA2=251212054048210705, ACH_SUB2=251212054048210868, ACH_CP2=251212054048301820
 """
 import pytest
 import time
 from utils.logger import logger
 
-# primary - fp=False
-ACH_FA       = "251119084741475550"
-ACH_SUB      = "251119084741475584"
-ACH_CP       = "251212054048369793"   # 普通 ACH CP，fp=False
-
-# fp=True data (from user examples)
-ACH_CP_FP    = "251212054048127858"   # bank-account CP，account_id=250918043812871683
-
-# secondary FA
-ACH_FA2      = "251212054048210705"
-ACH_SUB2     = "251212054048210868"
-ACH_CP2      = "251212054048301820"
+# fp=True Debit（与 FA 251119 的 account_id 绑定的 bank-account）
+ACH_FA_FP_TRUE = "251212054048470568"
+ACH_SUB_FP_TRUE = "251212054048470660"
+ACH_CP_FP    = "251212054048127858"   # bank-account CP，account_id=251212054048470503
 
 INVISIBLE_FA = "241010195850134683"
 MEMO_PREFIX  = "Auto TestYan ACH Debit"
@@ -42,7 +32,7 @@ pytestmark = [pytest.mark.ach_processing, pytest.mark.no_rerun]
 @pytest.mark.no_rerun
 class TestAchDebit:
 
-    def test_debit_fp_false_success_and_cancel(self, ach_processing_api):
+    def test_debit_fp_false_success_and_cancel(self, ach_processing_api, ach_debit_fp_false_ctx):
         """
         测试场景1：first_party=False Debit 成功发起并 cancel
         Test Scenario1: Initiate ACH Debit (first_party=False) and Cancel
@@ -50,9 +40,9 @@ class TestAchDebit:
         """
         memo = f"{MEMO_PREFIX} fp=False {time.strftime('%Y-%m-%d %H:%M:%S')}"
         resp = ach_processing_api.initiate_debit(
-            financial_account_id=ACH_FA,
-            sub_account_id=ACH_SUB,
-            counterparty_id=ACH_CP,
+            financial_account_id=ach_debit_fp_false_ctx["fa"],
+            sub_account_id=ach_debit_fp_false_ctx["sub"],
+            counterparty_id=ach_debit_fp_false_ctx["cp"],
             amount="0.01",
             first_party=False,
             same_day=False,
@@ -84,8 +74,8 @@ class TestAchDebit:
         """
         memo = f"{MEMO_PREFIX} fp=True {time.strftime('%Y-%m-%d %H:%M:%S')}"
         resp = ach_processing_api.initiate_debit(
-            financial_account_id=ACH_FA,
-            sub_account_id=ACH_SUB,
+            financial_account_id=ACH_FA_FP_TRUE,
+            sub_account_id=ACH_SUB_FP_TRUE,
             counterparty_id=ACH_CP_FP,
             amount="0.01",
             first_party=True,
@@ -109,15 +99,15 @@ class TestAchDebit:
         else:
             assert False, f"ACH Debit fp=True 返回意外 code={body.get('code')}, err={body.get('error_message')}"
 
-    def test_debit_appears_in_list(self, ach_processing_api):
+    def test_debit_appears_in_list(self, ach_processing_api, ach_debit_fp_false_ctx):
         """
         测试场景3：Debit 发起后在 transactions list 中可查到
         Test Scenario3: Debit Appears in Transactions List
         """
         resp = ach_processing_api.initiate_debit(
-            financial_account_id=ACH_FA,
-            sub_account_id=ACH_SUB,
-            counterparty_id=ACH_CP,
+            financial_account_id=ach_debit_fp_false_ctx["fa"],
+            sub_account_id=ach_debit_fp_false_ctx["sub"],
+            counterparty_id=ach_debit_fp_false_ctx["cp"],
             amount="0.01",
             first_party=False,
             same_day=False,
@@ -130,7 +120,7 @@ class TestAchDebit:
         txn_id = data.get("id")
 
         list_resp = ach_processing_api.list_transactions(
-            financial_account_id=ACH_FA, size=10
+            financial_account_id=ach_debit_fp_false_ctx["fa"], size=10
         )
         assert list_resp.status_code == 200
         txns = list_resp.json().get("data", {}).get("content", [])
@@ -143,15 +133,15 @@ class TestAchDebit:
         ach_processing_api.cancel_transaction(txn_id)
         logger.info("✓ Debit list 查询验证完成")
 
-    def test_debit_with_schedule_date(self, ach_processing_api):
+    def test_debit_with_schedule_date(self, ach_processing_api, ach_debit_fp_false_ctx):
         """
         测试场景4：传入未来 schedule_date 的 Debit
         Test Scenario4: Debit with Future schedule_date
         """
         resp = ach_processing_api.initiate_debit(
-            financial_account_id=ACH_FA,
-            sub_account_id=ACH_SUB,
-            counterparty_id=ACH_CP,
+            financial_account_id=ach_debit_fp_false_ctx["fa"],
+            sub_account_id=ach_debit_fp_false_ctx["sub"],
+            counterparty_id=ach_debit_fp_false_ctx["cp"],
             amount="0.01",
             first_party=False,
             same_day=False,
@@ -165,14 +155,14 @@ class TestAchDebit:
         ach_processing_api.cancel_transaction(txn_id)
         logger.info(f"✓ schedule_date Debit 发起成功: id={txn_id}")
 
-    def test_debit_missing_sub_account_id(self, ach_processing_api):
+    def test_debit_missing_sub_account_id(self, ach_processing_api, ach_debit_fp_false_ctx):
         """
         测试场景5：FA 有 sub 但未传 sub_account_id → 被拒绝
         Test Scenario5: Missing sub_account_id Returns Error
         """
         resp = ach_processing_api.initiate_debit(
-            financial_account_id=ACH_FA,
-            counterparty_id=ACH_CP,
+            financial_account_id=ach_debit_fp_false_ctx["fa"],
+            counterparty_id=ach_debit_fp_false_ctx["cp"],
             amount="0.01",
             first_party=False,
             same_day=False,
@@ -181,14 +171,14 @@ class TestAchDebit:
         assert resp.json().get("code") != 200
         logger.info(f"✓ 缺少 sub_account_id 被拒绝: code={resp.json().get('code')}")
 
-    def test_debit_invisible_fa(self, ach_processing_api):
+    def test_debit_invisible_fa(self, ach_processing_api, ach_debit_fp_false_ctx):
         """
         测试场景6：越权 FA → 被拒绝
         Test Scenario6: Invisible FA Returns Error
         """
         resp = ach_processing_api.initiate_debit(
             financial_account_id=INVISIBLE_FA,
-            counterparty_id=ACH_CP,
+            counterparty_id=ach_debit_fp_false_ctx["cp"],
             amount="0.01",
             first_party=False,
             same_day=False,
@@ -197,15 +187,15 @@ class TestAchDebit:
         assert resp.json().get("code") != 200
         logger.info(f"✓ 越权 FA 被拒绝: code={resp.json().get('code')}")
 
-    def test_debit_negative_amount(self, ach_processing_api):
+    def test_debit_negative_amount(self, ach_processing_api, ach_debit_fp_false_ctx):
         """
         测试场景7：负数金额
         Test Scenario7: Negative Amount Returns Error
         """
         resp = ach_processing_api.initiate_debit(
-            financial_account_id=ACH_FA,
-            sub_account_id=ACH_SUB,
-            counterparty_id=ACH_CP,
+            financial_account_id=ach_debit_fp_false_ctx["fa"],
+            sub_account_id=ach_debit_fp_false_ctx["sub"],
+            counterparty_id=ach_debit_fp_false_ctx["cp"],
             amount="-1",
             first_party=False,
             same_day=False,

@@ -1,132 +1,200 @@
 """
-PDF Test Report Generator
-Generates a professional PDF report from test_results data.
-All content is in English.
+PDF Test Report Generator v2 — HTML → PDF via Playwright / Chromium
+Renders a full-fidelity HTML report matching the reference design:
+  - DM Sans + JetBrains Mono fonts
+  - Gradient header, grand-totals bar, metric cards with color stripes
+  - Status badges, bar charts per module, failed-case cards
 
-Structure:
-  Page 1: Cover - Banner metrics (6 indicators) + Donut chart + Progress bar
-  Page 2: Module Statistics table
-  Page 3+: All Test Cases (passed/failed/skipped)
-  Last: Failed Cases with analysis
+Falls back to fpdf2 plain-text if Playwright is unavailable.
 """
 import math
+import html as _html_lib
 from pathlib import Path
 from datetime import datetime
 from collections import defaultdict
 from typing import List, Dict
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Helper utilities
+# ──────────────────────────────────────────────────────────────────────────────
+
 def _has_chinese(s: str) -> bool:
-    """检测字符串是否含中文字符"""
     return any('\u4e00' <= c <= '\u9fff' for c in (s or ''))
 
 
 def _get_en_name(case: dict) -> str:
-    """获取用例的纯英文名称：docstring_summary_en 无中文则用它，否则用 test_func_name"""
     en = case.get("docstring_summary_en", "")
     if en and not _has_chinese(en):
         return en
     return case.get("test_func_name", "Unknown")
 
-# macOS system font (supports CJK)
-_FONT_PATHS = [
-    "/System/Library/Fonts/STHeiti Medium.ttc",
-    "/System/Library/Fonts/STHeiti Light.ttc",
-]
+
+def _esc(text: str) -> str:
+    """HTML-escape a plain-text string."""
+    return _html_lib.escape(str(text or ""))
 
 
-def _load_font(pdf):
-    import os
-    for path in _FONT_PATHS:
-        if os.path.exists(path):
-            pdf.add_font("CJK", fname=path)
-            return "CJK"
-    return "Helvetica"
-
-
-def _draw_donut(pdf, cx, cy, r, passed, failed, skipped, total):
-    """
-    Draw a simple donut/pie chart using small arc segments.
-    Uses filled triangles to approximate a pie chart.
-    """
-    import math as _m
-
+def _pct(numerator: int, total: int, decimals: int = 1) -> float:
     if total == 0:
-        pdf.set_fill_color(200, 200, 200)
-        # full circle fallback
-        pdf.ellipse(cx - r, cy - r, r * 2, r * 2, "F")
-        return
+        return 0.0
+    return round(numerator / total * 100, decimals)
 
-    slices = [
-        (passed, (82, 196, 26)),
-        (failed, (245, 34, 45)),
-        (skipped, (250, 173, 20)),
-    ]
 
-    angle = -90.0  # start from top
-    ri = r * 0.45  # inner radius (donut hole)
+# ── Transaction API patterns（TPS 专用，每次命中 = 一笔交易事务）──────────────
+_TXN_PATHS = (
+    "/money-movements/ach/credit",
+    "/money-movements/ach/debit",
+    "/money-movements/ach/reversal",
+    "/money-movements/wire/payment",
+    "/money-movements/international-wire/payment",
+    "/money-movements/wire/request-payment",
+    "/money-movements/instant-pay/payment",
+    "/money-movements/instant-pay/request-payment",
+    "/money-movements/instant-pay/return-payment",
+    "/money-movements/account-transfer",
+    "/money-movements/internal-pay/transfer",
+    "/money-movements/checks/deposit",
+    "/money-movements/checks/scan",
+)
 
-    for count, color in slices:
-        if count == 0:
-            continue
-        sweep = 360.0 * count / total
-        steps = max(8, int(sweep / 3))
-        a_start = _m.radians(angle)
-        a_end = _m.radians(angle + sweep)
 
-        pdf.set_fill_color(*color)
+def _is_txn_api(api_path: str) -> bool:
+    p = (api_path or "").lower()
+    return any(pat in p for pat in _TXN_PATHS)
 
-        # Draw outer arc segments as small polygons
-        da = (a_end - a_start) / steps
-        for s in range(steps):
-            a1 = a_start + s * da
-            a2 = a_start + (s + 1) * da
-            # outer points
-            x1o = cx + r * _m.cos(a1)
-            y1o = cy + r * _m.sin(a1)
-            x2o = cx + r * _m.cos(a2)
-            y2o = cy + r * _m.sin(a2)
-            # inner points
-            x1i = cx + ri * _m.cos(a1)
-            y1i = cy + ri * _m.sin(a1)
-            x2i = cx + ri * _m.cos(a2)
-            y2i = cy + ri * _m.sin(a2)
 
-            # Draw quadrilateral as two triangles using polygon approximation
-            # fpdf2 does not have polygon; draw a filled rectangle-like shape
-            # Use line + fill hack: draw outer triangle
-            pdf.set_draw_color(*color)
-            pdf.set_line_width(0.01)
-            # approximate with two triangles
-            pdf.polygon([(x1i, y1i), (x1o, y1o), (x2o, y2o), (x2i, y2i)], style="F")
+# ──────────────────────────────────────────────────────────────────────────────
+# Build HTML sections
+# ──────────────────────────────────────────────────────────────────────────────
 
-        angle += sweep
+def _build_module_rows(module_stats: dict, total: int) -> str:
+    rows = []
+    for module in sorted(module_stats):
+        st = module_stats[module]
+        m_total = st["passed"] + st["failed"] + st["skipped"]
+        rate = _pct(st["passed"], m_total)
+        rate_badge = (
+            f'<span class="badge badge-passed">{rate}%</span>'
+            if rate >= 80
+            else f'<span class="badge badge-failed">{rate}%</span>'
+        )
+        failed_cell = (
+            f'<span style="color:#b91c1c;font-weight:700">{st["failed"]}</span>'
+            if st["failed"] > 0
+            else str(st["failed"])
+        )
+        row_cls = "row-failed" if st["failed"] > 0 else ""
+        rows.append(f"""
+          <tr class="{row_cls}">
+            <td><div class="stripe-tag" style="--stripe:{'#dc2626' if st['failed'] > 0 else '#16a34a'}">{_esc(module)}</div></td>
+            <td class="center">{st['passed']}</td>
+            <td class="center">{failed_cell}</td>
+            <td class="center">{st['skipped']}</td>
+            <td class="center">{m_total}</td>
+            <td class="center">{rate_badge}</td>
+          </tr>""")
+    return "\n".join(rows)
 
-    # White donut hole
-    pdf.set_fill_color(255, 255, 255)
-    pdf.ellipse(cx - ri, cy - ri, ri * 2, ri * 2, "F")
 
+def _build_case_rows(results: List[dict]) -> str:
+    rows = []
+    for idx, case in enumerate(results, 1):
+        status = case.get("status", "unknown")
+        name = _get_en_name(case)
+        module = case.get("module", "")
+        dur = float(case.get("duration") or 0)
+        row_cls = f"row-{status}" if status in ("passed", "failed", "skipped") else ""
+        badge_cls = f"badge-{status}" if status in ("passed", "failed", "skipped") else ""
+        rows.append(f"""
+          <tr class="{row_cls}">
+            <td class="center" style="color:#aaa;font-family:'JetBrains Mono',monospace;font-size:11px">{idx}</td>
+            <td style="max-width:360px;word-break:break-word">{_esc(name)}</td>
+            <td style="color:#555;font-size:11px">{_esc(module)}</td>
+            <td><span class="badge {badge_cls}">{_esc(status.upper())}</span></td>
+            <td class="center" style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#888">{dur:.2f}s</td>
+          </tr>""")
+    return "\n".join(rows)
+
+
+def _strip_chinese_from_analysis(text: str) -> str:
+    """
+    Remove Chinese UI labels from failure_reason/failure_analysis and keep
+    the meaningful parts (API business errors, assertion messages, etc.).
+    Common patterns:
+      - 'API 业务层返回错误 code=599，错误信息：「...」' -> '→ API business error code=599: ...'
+      - '测试场景X:' prefixes
+      - Module/Chinese labels
+    """
+    import re
+    if not text:
+        return text
+    # Convert common Chinese error patterns to English
+    text = re.sub(r'API\s*业务层返回错误\s*', 'API business error ', text)
+    text = re.sub(r'错误信息：?[「""]?', 'error message: "', text)
+    text = re.sub(r'[」""]', '"', text)
+    text = re.sub(r'，', ', ', text)
+    text = re.sub(r'：', ': ', text)
+    # Strip remaining Chinese chars (labels, etc.)
+    text = re.sub(r'[\u4e00-\u9fff]+', '', text)
+    # Clean up extra whitespace
+    text = re.sub(r'\s{2,}', ' ', text).strip()
+    return text
+
+
+def _build_failed_section(failed_cases: List[dict]) -> str:
+    if not failed_cases:
+        return ""
+    cards = []
+    for i, case in enumerate(failed_cases, 1):
+        name = _get_en_name(case)
+        module = case.get("module", "")
+        api = case.get("api_path", "") or ""
+        analysis = case.get("failure_analysis", "") or case.get("failure_reason", "") or ""
+        # Translate Chinese content and trim
+        analysis = _strip_chinese_from_analysis(analysis)
+        if len(analysis) > 400:
+            analysis = analysis[:397] + "..."
+        analysis_block = (
+            f'<div class="failed-card-analysis">→ {_esc(analysis)}</div>'
+            if analysis else ""
+        )
+        api_block = f"  API: {_esc(api)}" if api else ""
+        cards.append(f"""
+          <div class="failed-card">
+            <div class="failed-card-title">{i}. {_esc(name)}</div>
+            <div class="failed-card-meta">Module: {_esc(module)}{api_block}</div>
+            {analysis_block}
+          </div>""")
+    return f"""
+      <div class="page-break"></div>
+      <div class="section-wrap">
+        <div class="section-title">Failed Cases Detail ({len(failed_cases)} cases)</div>
+        {''.join(cards)}
+      </div>"""
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Main generator
+# ──────────────────────────────────────────────────────────────────────────────
 
 def generate_pdf_summary(
     results: List[Dict],
     output_path: str,
     env: str = "DEV",
-    core: str = "actc"
+    core: str = "actc",
 ) -> bool:
-    try:
-        from fpdf import FPDF
-        from fpdf.enums import XPos, YPos
-    except ImportError:
-        raise ImportError("Please install fpdf2: pip install fpdf2")
-
+    """
+    Render a full-fidelity PDF report via Playwright (Chromium headless).
+    Returns True on success.
+    """
     # ── Statistics ───────────────────────────────────────────────────
-    total = len(results)
-    passed = sum(1 for r in results if r.get("status") == "passed")
-    failed = sum(1 for r in results if r.get("status") == "failed")
+    total   = len(results)
+    passed  = sum(1 for r in results if r.get("status") == "passed")
+    failed  = sum(1 for r in results if r.get("status") == "failed")
     skipped = sum(1 for r in results if r.get("status") == "skipped")
-    pass_rate = round(passed / total * 100, 1) if total > 0 else 0
+    pass_rate = _pct(passed, total)
 
-    # Wall time
     durations = [float(r.get("duration") or 0) for r in results]
     start_times, max_t_item = [], None
     for r in results:
@@ -148,15 +216,20 @@ def generate_pdf_summary(
         if max_t_item:
             wall_time += float(max_t_item.get("duration") or 0)
 
-    avg_dur = sum(durations) / len(durations) if durations else 0
-    sorted_durs = sorted(durations)
-    p95_idx = max(0, math.ceil(len(sorted_durs) * 0.95) - 1)
-    p95_dur = sorted_durs[p95_idx] if sorted_durs else 0
-    min_dur = min(durations) if durations else 0
-    max_dur = max(durations) if durations else 0
-    tps = round(total / wall_time, 2) if wall_time > 0 else 0
+    avg_dur  = sum(durations) / len(durations) if durations else 0
+    sorted_d = sorted(durations)
+    p95_idx  = max(0, math.ceil(len(sorted_d) * 0.95) - 1)
+    p95_dur  = sorted_d[p95_idx] if sorted_d else 0
 
-    # Module stats
+    # ── QPS = total / wall_time（每秒完成多少个接口调用）────────────────
+    qps = round(total / wall_time, 2) if wall_time > 0 else 0
+
+    # ── TPS = 交易接口数 / 交易接口总耗时（每秒完成多少笔交易事务）──────
+    txn_results   = [r for r in results if _is_txn_api(r.get("api_path", ""))]
+    txn_count     = len(txn_results)
+    txn_dur_sum   = sum(float(r.get("duration") or 0) for r in txn_results)
+    tps           = round(txn_count / txn_dur_sum, 2) if txn_dur_sum > 0 else 0
+
     module_stats: Dict[str, Dict] = defaultdict(
         lambda: {"passed": 0, "failed": 0, "skipped": 0})
     for r in results:
@@ -165,377 +238,100 @@ def generate_pdf_summary(
         if s in ("passed", "failed", "skipped"):
             module_stats[m][s] += 1
 
-    failed_cases = [r for r in results if r.get("status") == "failed"]
-    report_time = datetime.now().strftime("%Y-%m-%d %H:%M")
+    failed_cases  = [r for r in results if r.get("status") == "failed"]
+    report_time   = datetime.now().strftime("%Y-%m-%d %H:%M")
+    passed_pct    = _pct(passed,  total)
+    failed_pct    = _pct(failed,  total)
+    skipped_pct   = _pct(skipped, total)
 
-    # ── Init PDF ─────────────────────────────────────────────────────
-    pdf = FPDF()
-    pdf.set_auto_page_break(auto=True, margin=15)
-    F = _load_font(pdf)
+    # ── Load template ────────────────────────────────────────────────
+    tpl_path = Path(__file__).parent.parent / "assets" / "pdf_report_template.html"
+    template  = tpl_path.read_text(encoding="utf-8")
 
-    def setfont(sz):
-        pdf.set_font(F, size=sz)
+    # ── Render dynamic sections ──────────────────────────────────────
+    module_rows  = _build_module_rows(module_stats, total)
+    case_rows    = _build_case_rows(results)
+    failed_sec   = _build_failed_section(failed_cases)
 
-    # ════════════════════════════════════════════════════════════════
-    # PAGE 1: Cover
-    # ════════════════════════════════════════════════════════════════
-    pdf.add_page()
+    # ── Replace placeholders ─────────────────────────────────────────
+    html_content = (
+        template
+        .replace("{{ENV}}",          _esc(env.upper()))
+        .replace("{{CORE}}",         _esc(core))
+        .replace("{{REPORT_TIME}}",  _esc(report_time))
+        .replace("{{TOTAL}}",        str(total))
+        .replace("{{PASSED}}",       str(passed))
+        .replace("{{FAILED}}",       str(failed))
+        .replace("{{SKIPPED}}",      str(skipped))
+        .replace("{{PASS_RATE}}",    str(pass_rate))
+        .replace("{{PASSED_PCT}}",   str(passed_pct))
+        .replace("{{FAILED_PCT}}",   str(failed_pct))
+        .replace("{{SKIPPED_PCT}}",  str(skipped_pct))
+        .replace("{{WALL_TIME}}",    f"{wall_time:.2f}")
+        .replace("{{AVG_DUR}}",      f"{avg_dur:.2f}")
+        .replace("{{P95_DUR}}",      f"{p95_dur:.2f}")
+        .replace("{{QPS}}",          str(qps))
+        .replace("{{TPS}}",          str(tps))
+        .replace("{{TXN_COUNT}}",    str(txn_count))
+        .replace("{{MODULE_COUNT}}", str(len(module_stats)))
+        .replace("{{MODULE_ROWS}}",  module_rows)
+        .replace("{{CASE_ROWS}}",    case_rows)
+        .replace("{{FAILED_SECTION}}", failed_sec)
+    )
 
-    # Top banner
-    pdf.set_fill_color(22, 40, 120)
-    pdf.rect(0, 0, 210, 42, "F")
-    setfont(20)
-    pdf.set_text_color(255, 255, 255)
-    pdf.set_xy(0, 9)
-    pdf.cell(210, 12, "API Automation Test Report",
-             align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-    setfont(10)
-    pdf.set_xy(0, 26)
-    pdf.cell(210, 8,
-             f"Env: {env.upper()}   |   Core: {core}   |   Generated: {report_time}",
-             align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    # ── Write temp HTML ──────────────────────────────────────────────
+    out_path  = Path(output_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_html  = out_path.with_suffix(".tmp.html")
+    tmp_html.write_text(html_content, encoding="utf-8")
 
-    # ── 6 Banner-style metric cards (2 rows × 3 cols) ──────────────
-    banner_metrics = [
-        ("Wall Time",  f"{wall_time:.2f}s",   (22, 40, 120)),
-        ("Avg Duration", f"{avg_dur:.2f}s",   (47, 84, 235)),
-        ("Min Duration", f"{min_dur:.2f}s",   (82, 196, 26)),
-        ("Max Duration", f"{max_dur:.2f}s",   (245, 34, 45)),
-        ("P95 Duration", f"{p95_dur:.2f}s",   (114, 46, 209)),
-        ("TPS (cases/s)", f"{tps}",           (19, 194, 194)),
-    ]
+    # ── Render HTML → PDF via Playwright ────────────────────────────
+    try:
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            page    = browser.new_page()
+            page.goto(f"file://{tmp_html.resolve()}", wait_until="networkidle", timeout=30000)
+            page.pdf(
+                path=str(out_path),
+                format="A4",
+                print_background=True,
+                margin={"top": "0", "bottom": "0", "left": "0", "right": "0"},
+            )
+            browser.close()
+        tmp_html.unlink(missing_ok=True)
+        return True
 
-    card_start_y = 50
-    card_w = 61
-    card_h = 22
-    card_gap = 2.5
-    card_start_x = 11
-
-    for idx, (label, value, color) in enumerate(banner_metrics):
-        row = idx // 3
-        col = idx % 3
-        x = card_start_x + col * (card_w + card_gap)
-        y = card_start_y + row * (card_h + card_gap)
-
-        # Card background (light tint of color)
-        r_bg = min(255, color[0] + 210)
-        g_bg = min(255, color[1] + 210)
-        b_bg = min(255, color[2] + 210)
-        pdf.set_fill_color(r_bg, g_bg, b_bg)
-        pdf.rect(x, y, card_w, card_h, "F")
-
-        # Left color stripe
-        pdf.set_fill_color(*color)
-        pdf.rect(x, y, 3, card_h, "F")
-
-        # Value (large)
-        setfont(14)
-        pdf.set_text_color(*color)
-        pdf.set_xy(x + 5, y + 2)
-        pdf.cell(card_w - 7, 10, value, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-
-        # Label (small)
-        setfont(8)
-        pdf.set_text_color(80, 80, 80)
-        pdf.set_xy(x + 5, y + 13)
-        pdf.cell(card_w - 7, 6, label, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-
-    # ── Donut chart (right side) + Legend (center-left area) ────────
-    chart_y_start = card_start_y + 2 * (card_h + card_gap) + 10
-    chart_cx = 168    # center x of donut - moved right to avoid overlap
-    chart_cy = chart_y_start + 30
-    chart_r = 25
-
-    _draw_donut(pdf, chart_cx, chart_cy, chart_r, passed, failed, skipped, total)
-
-    # Center text inside donut
-    setfont(11)
-    pdf.set_text_color(40, 40, 40)
-    pdf.set_xy(chart_cx - 15, chart_cy - 6)
-    pdf.cell(30, 6, f"{pass_rate}%", align="C",
-             new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-    setfont(7)
-    pdf.set_text_color(100, 100, 100)
-    pdf.set_xy(chart_cx - 15, chart_cy + 1)
-    pdf.cell(30, 5, "Pass Rate", align="C",
-             new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-
-    # Stats panel (left of chart) - narrowed to avoid overlapping donut
-    panel_x = 11
-    panel_y = chart_y_start
-    panel_w = 118   # reduced from 130 to give chart room (chart left edge at 143)
-    panel_h = 62
-
-    pdf.set_fill_color(248, 249, 252)
-    pdf.set_draw_color(220, 225, 240)
-    pdf.rect(panel_x, panel_y, panel_w, panel_h, "FD")
-
-    # Title
-    setfont(9)
-    pdf.set_text_color(22, 40, 120)
-    pdf.set_xy(panel_x + 4, panel_y + 3)
-    pdf.cell(panel_w - 8, 7, "Execution Summary",
-             new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-
-    # Divider
-    pdf.set_draw_color(200, 210, 240)
-    pdf.line(panel_x + 4, panel_y + 11, panel_x + panel_w - 4, panel_y + 11)
-
-    # 2-col stat grid inside panel
-    stats_items = [
-        ("Total Cases", str(total),    (22, 40, 120)),
-        ("Passed",      str(passed),   (82, 196, 26)),
-        ("Failed",      str(failed),   (245, 34, 45) if failed > 0 else (82, 196, 26)),
-        ("Skipped",     str(skipped),  (250, 173, 20)),
-        ("Pass Rate",   f"{pass_rate}%",
-         (82, 196, 26) if pass_rate >= 80 else (245, 34, 45)),
-        ("Fail Rate",   f"{round(failed/total*100,1) if total else 0}%",
-         (245, 34, 45) if failed > 0 else (82, 196, 26)),
-    ]
-    grid_x = panel_x + 4
-    grid_y = panel_y + 14
-    col_w2 = (panel_w - 8) / 2
-    for i, (lbl, val, color) in enumerate(stats_items):
-        col = i % 2
-        row = i // 2
-        sx = grid_x + col * col_w2
-        sy = grid_y + row * 14
-
-        # small color dot
-        pdf.set_fill_color(*color)
-        pdf.rect(sx, sy + 2, 2.5, 2.5, "F")
-
-        setfont(8)
-        pdf.set_text_color(80, 80, 80)
-        pdf.set_xy(sx + 5, sy)
-        pdf.cell(col_w2 - 5, 5, lbl, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-
-        setfont(11)
-        pdf.set_text_color(*color)
-        pdf.set_xy(sx + 5, sy + 5)
-        pdf.cell(col_w2 - 5, 7, val, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-
-    # ── Progress bar ─────────────────────────────────────────────────
-    bar_y = chart_cy + chart_r + 10
-    bar_x = 11
-    bar_w = 188
-    bar_h = 7
-
-    pdf.set_fill_color(225, 225, 225)
-    pdf.rect(bar_x, bar_y, bar_w, bar_h, "F")
-    if total > 0:
-        x = bar_x
-        for count, color in [(passed, (82, 196, 26)),
-                              (failed, (245, 34, 45)),
-                              (skipped, (250, 173, 20))]:
-            if count > 0:
-                w = bar_w * count / total
-                pdf.set_fill_color(*color)
-                pdf.rect(x, bar_y, w, bar_h, "F")
-                x += w
-
-    setfont(7)
-    pdf.set_text_color(80, 80, 80)
-    pdf.set_xy(bar_x, bar_y + 8)
-    fail_rate = round(failed / total * 100, 1) if total else 0
-    skip_rate = round(skipped / total * 100, 1) if total else 0
-    pdf.cell(bar_w, 5,
-             f"■ Passed {pass_rate}%   ■ Failed {fail_rate}%   ■ Skipped {skip_rate}%",
-             align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-
-    # ════════════════════════════════════════════════════════════════
-    # PAGE 2: Module Statistics
-    # ════════════════════════════════════════════════════════════════
-    pdf.add_page()
-    _sec_title(pdf, F, "Test Results by Module")
-
-    col_w = [83, 22, 22, 22, 22, 17]
-    hdrs = ["Module", "Passed", "Failed", "Skipped", "Total", "Rate"]
-    _tbl_hdr(pdf, F, hdrs, col_w)
-
-    for module, stats in sorted(module_stats.items()):
-        m_total = stats["passed"] + stats["failed"] + stats["skipped"]
-        m_rate = f"{round(stats['passed']/m_total*100)}%" if m_total > 0 else "-"
-
-        pdf.set_fill_color(255, 255, 255)
-        if stats["failed"] > 0:
-            pdf.set_fill_color(255, 244, 244)
-        elif stats["skipped"] > m_total * 0.3:
-            pdf.set_fill_color(255, 251, 235)
-        else:
-            pdf.set_fill_color(248, 252, 248)
-
-        row = [
-            module[:40] if len(module) > 40 else module,
-            str(stats["passed"]), str(stats["failed"]),
-            str(stats["skipped"]), str(m_total), m_rate,
-        ]
-        setfont(9)
-        for j, (cell_txt, cw) in enumerate(zip(row, col_w)):
-            align = "L" if j == 0 else "C"
-            if j == 2 and stats["failed"] > 0:
-                pdf.set_text_color(200, 0, 0)
-            elif j == 5 and cell_txt != "-":
-                rv = int(cell_txt.rstrip("%"))
-                pdf.set_text_color(0, 150, 0) if rv >= 80 else pdf.set_text_color(200, 0, 0)
-            else:
-                pdf.set_text_color(0, 0, 0)
-            pdf.cell(cw, 7, cell_txt, border=1, align=align, fill=True,
-                     new_x=XPos.RIGHT, new_y=YPos.TOP)
-        pdf.ln(7)
-
-    # ════════════════════════════════════════════════════════════════
-    # PAGE 3+: All Test Cases
-    # ════════════════════════════════════════════════════════════════
-    pdf.add_page()
-    _sec_title(pdf, F, f"All Test Cases  ({total} total)")
-
-    case_col_w = [8, 70, 50, 25, 15, 20]
-    case_hdrs = ["#", "Test Case", "Module", "API Path", "Status", "Duration"]
-    _tbl_hdr(pdf, F, case_hdrs, case_col_w)
-
-    STATUS_COLORS = {
-        "passed": (82, 196, 26),
-        "failed": (245, 34, 45),
-        "skipped": (250, 173, 20),
-    }
-    STATUS_BG = {
-        "passed": (240, 255, 240),
-        "failed": (255, 240, 240),
-        "skipped": (255, 251, 230),
-    }
-
-    for idx, case in enumerate(results, 1):
-        status = case.get("status", "unknown")
-        name = _get_en_name(case)
-        module = case.get("module", "")
-        api = case.get("api_path", "") or ""
-        dur = float(case.get("duration") or 0)
-
-        # Auto page break check
-        if pdf.get_y() > 272:
-            pdf.add_page()
-            _sec_title(pdf, F, "All Test Cases (continued)")
-            _tbl_hdr(pdf, F, case_hdrs, case_col_w)
-
-        bg = STATUS_BG.get(status, (255, 255, 255))
-        fg = STATUS_COLORS.get(status, (100, 100, 100))
-
-        pdf.set_fill_color(*bg)
-        row_data = [
-            (str(idx),                                   case_col_w[0], "C", (100, 100, 100)),
-            (name[:36] if len(name) > 36 else name,     case_col_w[1], "L", (0, 0, 0)),
-            (module[:25] if len(module) > 25 else module, case_col_w[2], "L", (60, 60, 60)),
-            (api[-22:] if len(api) > 22 else api,       case_col_w[3], "L", (80, 80, 180)),
-            (status.upper()[:4],                        case_col_w[4], "C", fg),
-            (f"{dur:.2f}s",                             case_col_w[5], "C", (100, 100, 100)),
-        ]
-        setfont(7)
-        for cell_txt, cw, align, color in row_data:
-            pdf.set_text_color(*color)
-            pdf.cell(cw, 6, cell_txt, border=1, align=align, fill=True,
-                     new_x=XPos.RIGHT, new_y=YPos.TOP)
-        pdf.ln(6)
-
-    # ════════════════════════════════════════════════════════════════
-    # Last section: Failed Cases with analysis
-    # ════════════════════════════════════════════════════════════════
-    if failed_cases:
-        pdf.add_page()
-        _sec_title(pdf, F, f"Failed Cases Detail  ({len(failed_cases)} cases)")
-
-        for i, case in enumerate(failed_cases, 1):
-            name = _get_en_name(case)
-            module = case.get("module", "")
-            api = case.get("api_path", "") or ""
-            analysis = case.get("failure_analysis", "") or ""
-
-            if pdf.get_y() > 265:
-                pdf.add_page()
-                _sec_title(pdf, F, "Failed Cases Detail (continued)")
-
-            # Case title
-            setfont(9)
-            pdf.set_text_color(180, 0, 0)
-            line = f"{i}. {name}"
-            if len(line) > 92:
-                line = line[:89] + "..."
-            pdf.cell(0, 6, line, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-
-            # Module + API
-            setfont(8)
-            pdf.set_text_color(100, 100, 100)
-            info = f"   Module: {module}"
-            if api:
-                info += f"   API: {api}"
-            pdf.cell(0, 5, info, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-
-            # Analysis
-            if analysis:
-                setfont(8)
-                pdf.set_text_color(140, 70, 0)
-                a_line = f"   → {analysis}"
-                if len(a_line) > 102:
-                    a_line = a_line[:99] + "..."
-                pdf.cell(0, 5, a_line, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-
-            pdf.ln(1)
-
-    # ════════════════════════════════════════════════════════════════
-    # Footer on every page
-    # ════════════════════════════════════════════════════════════════
-    total_pages = pdf.page
-    for p in range(1, total_pages + 1):
-        pdf.page = p
-        pdf.set_xy(0, 289)
-        setfont(7)
-        pdf.set_text_color(160, 160, 160)
-        pdf.cell(0, 5,
-                 f"Page {p} / {total_pages}   |   Generated: {report_time}   |   Confidential",
-                 align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-
-    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-    pdf.output(output_path)
-    return True
+    except Exception as e:
+        # ── Fallback: keep HTML, skip PDF if Playwright fails ────────
+        tmp_html.rename(out_path.with_suffix(".html"))
+        raise RuntimeError(
+            f"Playwright PDF render failed: {e}\n"
+            f"HTML saved to: {out_path.with_suffix('.html')}"
+        ) from e
 
 
-def _sec_title(pdf, font, title: str):
-    from fpdf.enums import XPos, YPos
-    pdf.set_fill_color(22, 40, 120)
-    pdf.set_text_color(255, 255, 255)
-    pdf.set_font(font, size=10)
-    pdf.cell(0, 8, f"  {title}", fill=True,
-             new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-    pdf.ln(2)
-    pdf.set_text_color(0, 0, 0)
-
-
-def _tbl_hdr(pdf, font, headers, col_widths):
-    from fpdf.enums import XPos, YPos
-    pdf.set_fill_color(210, 220, 255)
-    pdf.set_font(font, size=8)
-    pdf.set_text_color(22, 40, 120)
-    for h, w in zip(headers, col_widths):
-        align = "L" if headers.index(h) == 0 else "C"
-        pdf.cell(w, 7, h, border=1, align=align, fill=True,
-                 new_x=XPos.RIGHT, new_y=YPos.TOP)
-    pdf.ln(7)
-    pdf.set_text_color(0, 0, 0)
-
+# ──────────────────────────────────────────────────────────────────────────────
+# CLI entry point for manual preview
+# ──────────────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     import json, re, sys
+
     script_dir = Path(__file__).parent.parent
-    html_path = script_dir / "reports" / "final_report.html"
+    html_path  = script_dir / "reports" / "final_report.html"
     if not html_path.exists():
-        print("❌ final_report.html not found, please run tests first")
+        print("❌ final_report.html not found. Run tests first.")
         sys.exit(1)
+
     content = html_path.read_text(encoding="utf-8")
     m = re.search(r"const testData = (\[.*?\]);", content, re.DOTALL)
     if not m:
-        print("❌ Cannot extract testData from HTML")
+        print("❌ Cannot extract testData from final_report.html")
         sys.exit(1)
+
     results = json.loads(m.group(1).replace("<\\/", "</"))
-    out = script_dir / "reports" / "test_pdf_preview.pdf"
+    out     = script_dir / "reports" / "test_pdf_preview.pdf"
+    print(f"Rendering {len(results)} cases → {out}")
     ok = generate_pdf_summary(results, str(out))
-    print(f"{'✓' if ok else '✗'} PDF: {out}")
+    print(f"{'✓ Done' if ok else '✗ Failed'}  →  {out}")

@@ -1,0 +1,60 @@
+{
+  "environments": {
+    "DEV ACTC": {
+      "accounts": [
+        {
+          "name": "Auto testyan account 1",
+          "id": "251212054048470503",
+          "memo": "Primary test account"
+        },
+        {
+          "name": "Auto testyan account 2",
+          "id": "251212054048470507",
+          "memo": "Auxiliary account (child of account 1)"
+        },
+        {
+          "name": "Auto testyan account 3 (High Risk)",
+          "id": "251212054048470515",
+          "memo": "High Risk child account (child of account 1)"
+        }
+      ],
+      "financial_accounts": [
+        {
+          "name": "Auto testyan FA 1",
+          "id": "251212054048470568",
+          "memo": "Managed FA — has Fixed Sub 251212054048470660"
+        },
+        {
+          "name": "Auto testyan FA 2",
+          "id": "251212054048470574",
+          "memo": "Managed FA — no fixed Sub"
+        },
+        {
+          "name": "Auto testyan FA 3",
+          "id": "251212054048470609",
+          "memo": "Managed FA — do NOT create Sub under this FA"
+        }
+      ],
+      "sub_accounts": [
+        {
+          "name": "Fixed Sub (FA 1)",
+          "id": "251212054048470660",
+          "memo": "Fixed Sub under FA 1 — DO NOT DELETE"
+        }
+      ],
+      "bank_infos": [
+        {
+          "name": "Auto testyan bankinfo 1",
+          "id": "251212054048471047",
+          "memo": "Used for ACH first_party transactions"
+        }
+      ]
+    },
+    "UAT ACTC": {
+      "accounts": [],
+      "financial_accounts": [],
+      "sub_accounts": [],
+      "bank_infos": []
+    }
+  }
+}

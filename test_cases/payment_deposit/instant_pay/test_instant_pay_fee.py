@@ -3,12 +3,12 @@ Instant Pay - Transaction Fee 接口测试用例
 POST /api/v1/cores/{core}/money-movements/instant-pay/fee
 
 响应结构：{"code": 200, "data": {financial_account_id, fee, amount, same_day}}
-已验证：FA=251212054048210705 fee=3.51, invisible FA → code=506
+已验证：FA=251212054048470574 fee=3.51, invisible FA → code=506
 """
 import pytest
 from utils.logger import logger
 
-VALID_FA     = "251119084741475550"
+VALID_FA     = "251212054048470568"
 INVISIBLE_FA = "241010195850134683"
 
 pytestmark = pytest.mark.instant_pay

@@ -13,6 +13,11 @@ from typing import Optional
 from api.sub_account_api import SubAccountAPI
 from api.financial_account_api import FinancialAccountAPI
 from utils.logger import logger
+from test_cases.test_ids import FA_1_ID, FA_2_ID, INVISIBLE_ACCOUNT_ID
+
+# 使用固定的 Managed FA 来创建 Sub Account
+MANAGED_FA_ID     = FA_1_ID   # Auto testyan FA 1（Managed）
+ALT_MANAGED_FA_ID = FA_2_ID   # Auto testyan FA 2（Managed，备用）
 
 
 EXPECTED_SOURCE_ERROR_MSG = (
@@ -82,10 +87,7 @@ class TestSubAccountCreateASubAccount:
         fa_api = FinancialAccountAPI(session=login_session)
 
         logger.info("获取 source='Managed' 的 Financial Account ID")
-        managed_fa_id = _get_managed_fa_id(fa_api)
-
-        if not managed_fa_id:
-            pytest.skip("未找到 source='Managed' 的 Financial Account，跳过正向测试")
+        managed_fa_id = MANAGED_FA_ID  # 固定 FA1
 
         logger.info(f"  使用 Managed FA ID: {managed_fa_id}")
 
@@ -253,10 +255,7 @@ class TestSubAccountCreateASubAccount:
         fa_api = FinancialAccountAPI(session=login_session)
 
         logger.info("获取 source='Managed' 的 Financial Account ID")
-        managed_fa_id = _get_managed_fa_id(fa_api)
-
-        if not managed_fa_id:
-            pytest.skip("未找到 source='Managed' 的 Financial Account")
+        managed_fa_id = MANAGED_FA_ID  # 固定 FA1
 
         # 只传 financial_account_id，不传 name
         sub_account_data = {
@@ -290,9 +289,7 @@ class TestSubAccountCreateASubAccount:
         sa_api = SubAccountAPI(session=login_session)
         fa_api = FinancialAccountAPI(session=login_session)
 
-        managed_fa_id = _get_managed_fa_id(fa_api)
-        if not managed_fa_id:
-            pytest.skip("未找到 source='Managed' 的 Financial Account")
+        managed_fa_id = MANAGED_FA_ID  # 固定 FA1
 
         unique_name = f"Auto TestYan Sub Account {uuid.uuid4().hex[:8]}"
         sub_account_data = {
@@ -336,9 +333,7 @@ class TestSubAccountCreateASubAccount:
         sa_api = SubAccountAPI(session=login_session)
         fa_api = FinancialAccountAPI(session=login_session)
 
-        managed_fa_id = _get_managed_fa_id(fa_api)
-        if not managed_fa_id:
-            pytest.skip("未找到 source='Managed' 的 Financial Account")
+        managed_fa_id = MANAGED_FA_ID  # 固定 FA1
 
         unique_name = f"Auto TestYan Sub Account Verify {uuid.uuid4().hex[:8]}"
         sub_account_data = {
@@ -391,9 +386,7 @@ class TestSubAccountCreateASubAccount:
         sa_api = SubAccountAPI(session=login_session)
         fa_api = FinancialAccountAPI(session=login_session)
 
-        managed_fa_id = _get_managed_fa_id(fa_api)
-        if not managed_fa_id:
-            pytest.skip("未找到 source='Managed' 的 Financial Account")
+        managed_fa_id = MANAGED_FA_ID  # 固定 FA1
 
         unique_name = f"Auto TestYan Sub Account InitBal0 {uuid.uuid4().hex[:8]}"
         sub_account_data = {
@@ -440,9 +433,7 @@ class TestSubAccountCreateASubAccount:
         sa_api = SubAccountAPI(session=login_session)
         fa_api = FinancialAccountAPI(session=login_session)
 
-        managed_fa_id = _get_managed_fa_id(fa_api)
-        if not managed_fa_id:
-            pytest.skip("未找到 source='Managed' 的 Financial Account")
+        managed_fa_id = MANAGED_FA_ID  # 固定 FA1
 
         unique_name = f"Auto TestYan Sub Account OverBalance {uuid.uuid4().hex[:8]}"
         sub_account_data = {

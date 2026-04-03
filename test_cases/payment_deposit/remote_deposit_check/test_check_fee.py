@@ -5,12 +5,12 @@ POST /api/v1/cores/{core}/money-movements/checks/fee
 响应结构：{"code": 200, "data": {financial_account_id, fee, amount, same_day}}
 特有参数：same_day（布尔，默认 false，是否影响手续费）
 
-已验证：FA=251212054048210705, amount=10 → fee=2.0（same_day=false/true 费用相同）
+已验证：FA=251212054048470574, amount=10 → fee=2.0（same_day=false/true 费用相同）
 """
 import pytest
 from utils.logger import logger
 
-VALID_FA   = "251212054048210705"
+VALID_FA   = "251212054048470574"
 INVISIBLE_FA = "241010195850134683"
 
 pytestmark = pytest.mark.remote_deposit_check

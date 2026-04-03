@@ -315,7 +315,7 @@ class TestContactList:
         contact_api = ContactAPI(session=login_session)
 
         # 1. 创建 Contact（包含多个可选字段，便于验证）
-        FIXED_ACCOUNT_ID = "251212054045554351"
+        FIXED_ACCOUNT_ID = "251212054048470503"  # Auto testyan account 1
         unique_email = f"auto_list_match_{int(time_module.time())}@example.com"
         contact_data = {
             "account_id": FIXED_ACCOUNT_ID,

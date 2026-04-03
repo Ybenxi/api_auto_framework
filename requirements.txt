@@ -27,4 +27,8 @@ xlrd>=2.0.0
 
 # Test Management Platform
 streamlit>=1.31.0  # 测试管理平台Web框架
+streamlit-authenticator>=0.3.3  # 平台登录认证
+pyyaml>=6.0  # 解析 auth_config.yaml
+bcrypt>=4.0.0  # 密码 hash
 fpdf2>=2.8.0
+playwright>=1.40.0

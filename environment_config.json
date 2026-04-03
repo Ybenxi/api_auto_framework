@@ -1,0 +1,20 @@
+{
+  "environments": [
+    {
+      "name": "DEV ACTC",
+      "base_url": "https://api-dev.accelerationcloud.info",
+      "core": "actc"
+    },
+    {
+      "name": "UAT ACTC",
+      "base_url": "https://api-uat.accelerationcloud.com",
+      "core": "actc"
+    },
+    {
+      "name": "UAT FTA",
+      "base_url": "https://api-uat.accelerationcloud.com",
+      "core": "fta"
+    }
+  ],
+  "active_env": "UAT ACTC"
+}

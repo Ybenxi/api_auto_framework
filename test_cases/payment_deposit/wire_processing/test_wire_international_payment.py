@@ -8,7 +8,7 @@ POST /api/v1/cores/{core}/money-movements/international-wire/payment
 - counterparty assign_account_ids 必须包含 FA 对应的 account_id
 
 已验证账户数据：
-  INTL_FA=251212054048210705，INTL_SUB=251212054048210868
+  INTL_FA=251212054048470574，INTL_SUB=251212054048470660
   INTL_CP=251212054048302253（International_Wire 类型）
   WIRE_CP=251212054048128208（Wire 类型，用于错误场景）
 """
@@ -16,9 +16,8 @@ import pytest
 import time
 from utils.logger import logger
 
-INTL_FA      = "251212054048210705"
-INTL_SUB     = "251212054048210868"
-INTL_CP      = "251212054048302253"   # International_Wire 类型 CP
+INTL_FA      = "251212054048470574"
+INTL_SUB     = "251212054048470660"
 WIRE_CP      = "251212054048128208"   # Wire 类型，用于错误场景
 INVISIBLE_FA = "241010195850134683"
 
@@ -31,7 +30,7 @@ pytestmark = [pytest.mark.wire_processing, pytest.mark.no_rerun]
 @pytest.mark.no_rerun
 class TestInternationalWirePayment:
 
-    def test_initiate_intl_wire_success(self, wire_processing_api):
+    def test_initiate_intl_wire_success(self, wire_processing_api, intl_wire_cp_id):
         """
         测试场景1：成功发起国际 Wire 交易，并立即 cancel
         Test Scenario1: Initiate International Wire Payment and Cancel Immediately
@@ -40,7 +39,7 @@ class TestInternationalWirePayment:
         memo = f"{MEMO_PREFIX} {time.strftime('%Y-%m-%d %H:%M:%S')}"
         resp = wire_processing_api.initiate_international_wire_payment(
             financial_account_id=INTL_FA,
-            counterparty_id=INTL_CP,
+            counterparty_id=intl_wire_cp_id,
             amount="0.01",
             sub_account_id=INTL_SUB,
             schedule_date="2026-12-28",
@@ -68,7 +67,7 @@ class TestInternationalWirePayment:
         else:
             logger.info(f"  ⚠ 国际 Wire cancel 返回: code={cancel_code}（国际 Wire 可能不支持 cancel）")
 
-    def test_intl_wire_with_wire_cp_rejected(self, wire_processing_api):
+    def test_intl_wire_with_wire_cp_rejected(self, wire_processing_api, intl_wire_cp_id):
         """
         测试场景2：使用 Wire 类型 CP 发起国际 Wire → 被拒绝
         Test Scenario2: Domestic Wire CP Used for International Wire Returns Error
@@ -84,14 +83,14 @@ class TestInternationalWirePayment:
         assert body.get("code") != 200
         logger.info(f"✓ Wire 类型 CP 被拒绝于国际 Wire: code={body.get('code')}, msg={body.get('error_message')}")
 
-    def test_intl_wire_missing_sub_account_id(self, wire_processing_api):
+    def test_intl_wire_missing_sub_account_id(self, wire_processing_api, intl_wire_cp_id):
         """
         测试场景3：FA 有 sub 但未传 sub_account_id → code=599
         Test Scenario3: FA with Sub but Missing sub_account_id Returns 599
         """
         resp = wire_processing_api.initiate_international_wire_payment(
             financial_account_id=INTL_FA,
-            counterparty_id=INTL_CP,
+            counterparty_id=intl_wire_cp_id,
             amount="0.01",
             # 故意不传 sub_account_id
         )
@@ -100,21 +99,21 @@ class TestInternationalWirePayment:
         assert body.get("code") != 200
         logger.info(f"✓ 缺少 sub_account_id 被拒绝: code={body.get('code')}")
 
-    def test_intl_wire_invisible_fa(self, wire_processing_api):
+    def test_intl_wire_invisible_fa(self, wire_processing_api, intl_wire_cp_id):
         """
         测试场景4：使用越权 FA ID
         Test Scenario4: Invisible FA ID Returns Error
         """
         resp = wire_processing_api.initiate_international_wire_payment(
             financial_account_id=INVISIBLE_FA,
-            counterparty_id=INTL_CP,
+            counterparty_id=intl_wire_cp_id,
             amount="0.01",
         )
         assert resp.status_code == 200
         assert resp.json().get("code") != 200
         logger.info(f"✓ 越权 FA 被拒绝: code={resp.json().get('code')}")
 
-    def test_intl_wire_missing_required_params(self, wire_processing_api):
+    def test_intl_wire_missing_required_params(self, wire_processing_api, intl_wire_cp_id):
         """
         测试场景5：缺少必填参数 counterparty_id
         Test Scenario5: Missing Required counterparty_id Returns Error
@@ -129,14 +128,14 @@ class TestInternationalWirePayment:
         assert resp.json().get("code") != 200
         logger.info(f"✓ 缺少 counterparty_id 被拒绝: code={resp.json().get('code')}")
 
-    def test_intl_wire_negative_amount(self, wire_processing_api):
+    def test_intl_wire_negative_amount(self, wire_processing_api, intl_wire_cp_id):
         """
         测试场景6：金额为负数
         Test Scenario6: Negative Amount Returns Error
         """
         resp = wire_processing_api.initiate_international_wire_payment(
             financial_account_id=INTL_FA,
-            counterparty_id=INTL_CP,
+            counterparty_id=intl_wire_cp_id,
             amount="-5",
             sub_account_id=INTL_SUB,
         )

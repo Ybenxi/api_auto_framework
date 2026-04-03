@@ -12,7 +12,7 @@ POST /api/v1/cores/{core}/money-movements/wire/fee
 import pytest
 from utils.logger import logger
 
-VALID_FA     = "251119084741475550"
+VALID_FA     = "251212054048470568"
 INVISIBLE_FA = "241010195850134683"
 
 pytestmark = pytest.mark.wire_processing
