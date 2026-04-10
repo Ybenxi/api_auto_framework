@@ -5,7 +5,7 @@
 ## 项目概览
 
 - 当前项目已从基础脚手架演进为完整的 API 自动化测试平台，不再使用 Allure。
-- 测试规模约为 `850+` 场景、`140+` 接口、`130+` 个测试文件。
+- 当前 `pytest --collect-only` 可收集 `1176` 个测试，业务场景总数已过 `1000`，测试文件规模为 `130+`。
 - 代码层采用 `API Object` 模式，测试层基于 `pytest` 组织，报告层支持 `HTML Classic / HTML Pro / Excel / PDF`。
 - 平台层基于 `Streamlit`，支持登录、语言切换、运行测试、查看历史报告、配置凭据和测试数据。
 
@@ -26,8 +26,8 @@
 - `18` 个 `test_cases` 顶层模块目录
 - `Payment & Deposit` 已拆分为 6 个子模块
 - `Card` 已拆分为 4 个子模块
-- 自动生成经典版和 Pro 版 HTML 报告
-- 自动生成 Excel 用例清单和 PDF 摘要报告
+- 支持生成经典版和 Pro 版 HTML 报告
+- 支持生成 Excel 用例清单和 PDF 摘要报告
 - 支持失败重试；带 `@pytest.mark.no_rerun` 的测试会自动禁用重试
 - 支持固定测试 ID 管理和 v2 精确脏数据清理
 
@@ -155,7 +155,9 @@ pytest test_cases/ -v -s
 
 ## 报告系统
 
-每次测试结束后，框架会自动生成以下报告文件：
+每次测试结束后，框架会按当前环境和依赖情况生成报告产物。
+
+固定生成或高概率生成的主要文件如下：
 
 - 经典 HTML 报告：`reports/benxi_report_YYYYMMDD_HHMMSS.html`
 - 最新经典 HTML 副本：`reports/final_report.html`
@@ -164,12 +166,20 @@ pytest test_cases/ -v -s
 - PDF 摘要报告：`reports/summary_report_YYYYMMDD_HHMMSS.pdf`
 - 最新 PDF 副本：`reports/final_summary.pdf`
 
+说明：
+
+- 经典 HTML 报告和 `final_report.html` 由 `test_cases/conftest.py` 固定生成。
+- Pro HTML 报告在 `assets/report_template_pro.html` 存在时生成。
+- Excel 用例清单会尝试生成，但取决于本地依赖和执行是否成功。
+- PDF 摘要报告会尝试生成；若 PDF 生成失败，则不会得到 `final_summary.pdf`。
+- 当前代码不会为 Pro HTML 额外生成固定副本。
+
 报告特性：
 
 - 经典版和 Pro 版 HTML 报告同时生成
 - 支持模块分组、文件分组、失败分析、QPS/TPS 指标
-- 报告中的开始时间会根据浏览器本地时区动态展示
-- 自动清理旧 HTML 报告，仅保留最近 5 次时间戳报告和固定副本
+- 报告时间基于测试实际运行开始时间，并按浏览器本地时区展示
+- 当前代码已关闭自动清理历史报告，清理操作改由测试平台手动执行
 
 ## 测试管理平台
 
