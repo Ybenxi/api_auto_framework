@@ -196,25 +196,36 @@ def generate_pdf_summary(
     pass_rate = _pct(passed, total)
 
     durations = [float(r.get("duration") or 0) for r in results]
-    start_times, max_t_item = [], None
+    # Wall time：优先 start_epoch（与 HTML 一致）；旧数据回退解析 start_time 字符串
+    epoch_list = []
+    max_epoch_item = None
+    max_epoch = None
     for r in results:
+        ep = r.get("start_epoch")
+        if ep is not None and isinstance(ep, (int, float)) and float(ep) > 0:
+            fv = float(ep)
+            epoch_list.append(fv)
+            if max_epoch is None or fv > max_epoch:
+                max_epoch = fv
+                max_epoch_item = r
+            continue
         t = r.get("start_time", "")
         if t:
             try:
                 dt = datetime.strptime(t, "%Y-%m-%d %H:%M:%S")
-                start_times.append(dt)
-                if max_t_item is None or dt > datetime.strptime(
-                        max_t_item.get("start_time", "1970-01-01 00:00:00"),
-                        "%Y-%m-%d %H:%M:%S"):
-                    max_t_item = r
+                epoch_list.append(dt.timestamp())
+                fts = dt.timestamp()
+                if max_epoch is None or fts > max_epoch:
+                    max_epoch = fts
+                    max_epoch_item = r
             except Exception:
                 pass
 
     wall_time = 0.0
-    if start_times:
-        wall_time = (max(start_times) - min(start_times)).total_seconds()
-        if max_t_item:
-            wall_time += float(max_t_item.get("duration") or 0)
+    if epoch_list:
+        wall_time = max(epoch_list) - min(epoch_list)
+        if max_epoch_item:
+            wall_time += float(max_epoch_item.get("duration") or 0)
 
     avg_dur  = sum(durations) / len(durations) if durations else 0
     sorted_d = sorted(durations)

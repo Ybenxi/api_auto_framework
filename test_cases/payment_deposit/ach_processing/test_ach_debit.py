@@ -8,19 +8,12 @@ ACH Debit = 向外部账户发起拉款（pull 资金进来，Money来自 counte
   first_party=False:
     使用 conftest 的 ach_debit_fp_false_ctx：FA=251119…，CP 从列表中选 Approved assign 到 profile 251212054048470503
     （勿与 Credit 共用 210705+301820：Debit 拉款易 code=600；勿用已清理的 369793）
-  first_party=True（使用 bank-account 作为 CP）:
-    ACH_FA=251212054048470568, ACH_SUB=251212054048470660, ACH_CP_FP=251212054048127858
-    （bank-account，account_id=251212054048470503，与 FA 的 account_id 一致）
+  first_party=True：fixture ach_fp_true_debit_ctx（FA1 + 动态匹配 bank-account id）
     ⚠ 注意：Debit fp=True 可能因外部账户余额不足而报 code=600
 """
 import pytest
 import time
 from utils.logger import logger
-
-# fp=True Debit（与 FA 251119 的 account_id 绑定的 bank-account）
-ACH_FA_FP_TRUE = "251212054048470568"
-ACH_SUB_FP_TRUE = "251212054048470660"
-ACH_CP_FP    = "251212054048127858"   # bank-account CP，account_id=251212054048470503
 
 INVISIBLE_FA = "241010195850134683"
 MEMO_PREFIX  = "Auto TestYan ACH Debit"
@@ -65,7 +58,7 @@ class TestAchDebit:
         assert cancel_resp.json().get("code") == 200
         logger.info(f"✓ ACH Debit fp=False cancel 成功")
 
-    def test_debit_fp_true_success_and_cancel(self, ach_processing_api):
+    def test_debit_fp_true_success_and_cancel(self, ach_processing_api, ach_fp_true_debit_ctx):
         """
         测试场景2：first_party=True Debit 发起（使用 bank-account CP）
         Test Scenario2: Initiate ACH Debit (first_party=True) with bank-account CP
@@ -73,10 +66,11 @@ class TestAchDebit:
         ⚠ 注意：外部账户余额不足时可能报 code=600，属正常业务拦截
         """
         memo = f"{MEMO_PREFIX} fp=True {time.strftime('%Y-%m-%d %H:%M:%S')}"
+        ctx = ach_fp_true_debit_ctx
         resp = ach_processing_api.initiate_debit(
-            financial_account_id=ACH_FA_FP_TRUE,
-            sub_account_id=ACH_SUB_FP_TRUE,
-            counterparty_id=ACH_CP_FP,
+            financial_account_id=ctx["fa"],
+            sub_account_id=ctx["sub"],
+            counterparty_id=ctx["bank_cp_id"],
             amount="0.01",
             first_party=True,
             same_day=False,

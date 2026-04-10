@@ -86,6 +86,8 @@
         .case-row.passed td:first-child { border-left-color: var(--success-color); }
         .case-row.failed td:first-child { border-left-color: var(--error-color); }
         .case-row.skipped td:first-child { border-left-color: var(--warning-color); }
+        .status-error { background: #fff1f0; color: var(--error-color); border: 1px solid #ffa39e; }
+        .case-row.error td:first-child { border-left-color: var(--error-color); }
 
         /* Module Badge */
         .module-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; background: #e6f7ff; color: #1890ff; margin-right: 8px; }
@@ -149,7 +151,7 @@
                 <strong id="env-tag">DEV</strong>
             </div>
             <div class="time-badge">
-                <span data-lang="zh">报告生成时间</span><span data-lang="en" style="display:none;">Report Time</span>: 
+                <span data-lang="zh">运行开始时间</span><span data-lang="en" style="display:none;">Run started</span>: 
                 <span id="gen-time"></span>
             </div>
             <button class="btn" onclick="toggleLanguage()">
@@ -338,8 +340,8 @@
                         <span data-lang="en" style="display:none;">API Path</span>
                     </th>
                     <th width="15%">
-                        <span data-lang="zh">执行时间</span>
-                        <span data-lang="en" style="display:none;">Execution Time</span>
+                        <span data-lang="zh" id="th-exec-zh">开始时间</span>
+                        <span data-lang="en" style="display:none;" id="th-exec-en">Start Time</span>
                     </th>
                     <th width="10%">
                         <span data-lang="zh">耗时</span>
@@ -375,12 +377,78 @@
         // 全局总计（固定不变，不随筛选更新）
         let globalStats = { passed: 0, failed: 0, skipped: 0, total: 0 };
 
+        function bucketStatus(s) {
+            if (s === 'passed') return 'passed';
+            if (s === 'skipped') return 'skipped';
+            return 'failed';
+        }
+        function safeDuration(d) {
+            const n = Number(d);
+            return Number.isFinite(n) ? n : 0;
+        }
+
+        function browserIanaTimeZone() {
+            try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { return ''; }
+        }
+        function browserTimeZoneShortLabel() {
+            try {
+                const parts = new Intl.DateTimeFormat(undefined, { timeZoneName: 'short' }).formatToParts(new Date());
+                return parts.find(p => p.type === 'timeZoneName')?.value || browserIanaTimeZone();
+            } catch (e) { return browserIanaTimeZone(); }
+        }
+        function formatLocalFromEpoch(epochSec) {
+            if (epochSec == null || !Number.isFinite(Number(epochSec)) || Number(epochSec) <= 0) return '';
+            const d = new Date(Number(epochSec) * 1000);
+            return d.toLocaleString(undefined, {
+                year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+            });
+        }
+        function displayStartCell(item) {
+            if (item.start_epoch != null && Number.isFinite(Number(item.start_epoch)) && Number(item.start_epoch) > 0) {
+                return formatLocalFromEpoch(item.start_epoch);
+            }
+            if (item.start_time) {
+                const p = Date.parse(String(item.start_time).replace(' ', 'T'));
+                if (!isNaN(p)) {
+                    return new Date(p).toLocaleString(undefined, {
+                        year: 'numeric', month: '2-digit', day: '2-digit',
+                        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+                    });
+                }
+                return item.start_time;
+            }
+            return '—';
+        }
+        function formatRunStartedHeader() {
+            const e = envInfo.run_started_epoch;
+            if (e == null || !Number.isFinite(Number(e)) || Number(e) <= 0) return '—';
+            const local = formatLocalFromEpoch(Number(e));
+            const tz = browserTimeZoneShortLabel() || browserIanaTimeZone();
+            return tz ? (local + ' · ' + tz) : local;
+        }
+        function startEpochMs(d) {
+            if (d.start_epoch != null && Number.isFinite(Number(d.start_epoch)) && Number(d.start_epoch) > 0) {
+                return Number(d.start_epoch) * 1000;
+            }
+            if (d.start_time) {
+                const p = Date.parse(String(d.start_time).replace(' ', 'T'));
+                if (!isNaN(p)) return p;
+            }
+            return null;
+        }
+        function updateStartColumnHeaders() {
+            const tz = browserTimeZoneShortLabel() || browserIanaTimeZone() || '';
+            const zhEl = document.getElementById('th-exec-zh');
+            const enEl = document.getElementById('th-exec-en');
+            if (zhEl) zhEl.textContent = tz ? ('开始时间 · ' + tz) : '开始时间';
+            if (enEl) enEl.textContent = tz ? ('Start Time (' + tz + ')') : 'Start Time';
+        }
+
         // Initialize report
         function initReport() {
-            // Set environment and time
-            const now = new Date();
-            const timeStr = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')} (UTC+8)`;
-            document.getElementById('gen-time').innerText = timeStr;
+            updateStartColumnHeaders();
+            document.getElementById('gen-time').innerText = formatRunStartedHeader();
             document.getElementById('env-tag').innerText = envInfo.env || 'DEV';
 
             // Calculate statistics
@@ -391,8 +459,9 @@
             // Group data by module and test file
             const groupedData = {};
             testData.forEach((item, index) => {
-                stats[item.status]++;
-                stats.totalDuration += item.duration;
+                const st = bucketStatus(item.status);
+                stats[st] = (stats[st] || 0) + 1;
+                stats.totalDuration += safeDuration(item.duration);
                 
                 const module = item.module || 'Unknown';
                 const testFile = item.test_file || 'unknown';
@@ -452,8 +521,9 @@
                     // Test case rows (already sorted)
                     sortedTestCases.forEach(item => {
                         const row = document.createElement('tr');
-                        row.className = `case-row ${item.status}`;
-                        row.setAttribute('data-status', item.status);
+                        const st = bucketStatus(item.status);
+                        row.className = item.status === 'error' ? 'case-row error' : `case-row ${st}`;
+                        row.setAttribute('data-status', st);
                         row.setAttribute('data-module', module);
                         row.setAttribute('data-markers', JSON.stringify(item.markers || []));
                         row.setAttribute('data-test-file', testFile);
@@ -466,8 +536,11 @@
                         const statusText = {
                             'passed': '<span data-lang="zh">通过</span><span data-lang="en" style="display:none;">PASSED</span>',
                             'failed': '<span data-lang="zh">失败</span><span data-lang="en" style="display:none;">FAILED</span>',
-                            'skipped': '<span data-lang="zh">跳过</span><span data-lang="en" style="display:none;">SKIPPED</span>'
+                            'skipped': '<span data-lang="zh">跳过</span><span data-lang="en" style="display:none;">SKIPPED</span>',
+                            'error': '<span data-lang="zh">错误</span><span data-lang="en" style="display:none;">ERROR</span>'
                         };
+                        const tagClass = item.status === 'error' ? 'error' : st;
+                        const tagInner = statusText[item.status] || statusText[st] || item.status.toUpperCase();
                         
                         // Display test name: use bilingual docstring based on current language
                         const displayName = currentLang === 'zh' 
@@ -476,12 +549,12 @@
                         const apiPathDisplay = item.api_path ? `<span class="api-path">${item.api_path}</span>` : '<span style="color: #bfbfbf;">-</span>';
                         
                         row.innerHTML = `
-                            <td><span class="status-tag status-${item.status}">${statusText[item.status] || item.status.toUpperCase()}</span></td>
+                            <td><span class="status-tag status-${tagClass}">${tagInner}</span></td>
                             <td style="padding-left: 48px;"><span class="module-badge">${module}</span></td>
                             <td style="font-weight: 500;">${displayName}</td>
                             <td>${apiPathDisplay}</td>
-                            <td style="color: #8c8c8c; font-size: 13px;">${item.start_time}</td>
-                            <td style="font-weight: 600;">${item.duration.toFixed(3)}s</td>
+                            <td style="color: #8c8c8c; font-size: 13px;">${displayStartCell(item)}</td>
+                            <td style="font-weight: 600;">${safeDuration(item.duration).toFixed(3)}s</td>
                         `;
                         listBody.appendChild(row);
                         globalIndex++;
@@ -503,17 +576,17 @@
             
             // ── 性能指标计算 ──────────────────────────────────────────
             // 1. 实际总耗时（wall time）：用 start_time 最大最小差 + 最后一条用例的 duration
-            const allDurations = testData.map(d => d.duration).filter(d => typeof d === 'number');
-            const startTimes = testData
-                .map(d => d.start_time ? new Date(d.start_time).getTime() : null)
-                .filter(t => t !== null && !isNaN(t));
+            const allDurations = testData.map(d => safeDuration(d.duration)).filter(d => d >= 0);
+            const startTimes = testData.map(d => startEpochMs(d)).filter(t => t !== null && !isNaN(t));
 
             let wallTime = 0;
             if (startTimes.length > 0) {
                 const minStart = Math.min(...startTimes);
                 const maxStart = Math.max(...startTimes);
-                // wall time = 最后一个测试的开始时间 - 最早开始时间 + 最后一个测试的 duration
-                const lastDuration = testData.find(d => d.start_time && new Date(d.start_time).getTime() === maxStart)?.duration || 0;
+                const lastDuration = safeDuration(testData.find(d => {
+                    const ms = startEpochMs(d);
+                    return ms !== null && ms === maxStart;
+                })?.duration);
                 wallTime = (maxStart - minStart) / 1000 + lastDuration;
             }
             if (wallTime <= 0) wallTime = stats.totalDuration; // 兜底
@@ -622,7 +695,9 @@
             if (searchInput) {
                 searchInput.placeholder = currentLang === 'zh' ? '搜索用例名称或 API 路径...' : 'Search test name or API path...';
             }
-            
+
+            updateStartColumnHeaders();
+
             // Re-render test case names with new language
             const rows = document.querySelectorAll('.case-row');
             rows.forEach(row => {
@@ -637,6 +712,9 @@
                     const cells = row.querySelectorAll('td');
                     if (cells.length > 2) {
                         cells[2].innerHTML = `<span style="font-weight: 500;">${displayName}</span>`;
+                    }
+                    if (cells.length > 4) {
+                        cells[4].textContent = displayStartCell(item);
                     }
                 }
             });
@@ -974,8 +1052,8 @@
                 </div>`;
             }
 
-            // 失败原因 + 智能分析（仅 failed 用例，追加在已有内容后）
-            if (data.status === 'failed') {
+            // 失败原因 + 智能分析（failed / error 用例）
+            if (data.status === 'failed' || data.status === 'error') {
                 const escHtml = s => (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
                 if (data.failure_analysis) {
@@ -989,8 +1067,6 @@
                             ${escHtml(data.failure_analysis)}
                         </div>
                     </div>`;
-                }
-        // failure_reason section removed
                 }
             }
 
@@ -1027,8 +1103,8 @@
                     'Test Case': item.docstring_summary_en || item.test_func_name || '',
                     'API Path': item.api_path || '',
                     'Status': item.status.toUpperCase(),
-                    'Duration (s)': parseFloat(item.duration.toFixed(3)),
-                    'Execution Time': item.start_time,
+                    'Duration (s)': parseFloat(safeDuration(item.duration).toFixed(3)),
+                    'Execution Time': displayStartCell(item),
                     'API Calls Count': extraList.length,
                     'All Request URLs': allUrls,
                     'Last Request Method': lastExtra.request?.method || '',

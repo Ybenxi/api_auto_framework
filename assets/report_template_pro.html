@@ -267,6 +267,7 @@
         .case-row.passed td:first-child { border-left: 3px solid #15803d; }
         .case-row.failed td:first-child { border-left: 3px solid #dc2626; }
         .case-row.skipped td:first-child { border-left: 3px solid #d97706; }
+        .case-row.error td:first-child { border-left: 3px solid #dc2626; }
 
         /* Status badges */
         .badge { display: inline-block; padding: 2px 10px; border-radius: 4px; font-size: 11px; font-weight: 700; font-family: 'JetBrains Mono', monospace; letter-spacing: 0.3px; }
@@ -300,7 +301,7 @@
         .mod-card-stats { font-size: 11px; color: #888; font-weight: 400; font-family: 'JetBrains Mono', monospace; }
         .mod-bars { padding: 12px 16px; }
         .bar-row2 { display: flex; align-items: center; margin-bottom: 6px; gap: 8px; }
-        .bar-lbl2 { font-size: 11px; color: #555; width: 52px; flex-shrink: 0; text-transform: uppercase; letter-spacing: 0.3px; }
+        .bar-lbl2 { font-size: 11px; color: #555; width: 64px; flex-shrink: 0; letter-spacing: 0.2px; }
         .bar-wrap { flex: 1; height: 14px; background: #f4f4f8; border-radius: 3px; overflow: hidden; }
         .bar-fill2 { height: 100%; border-radius: 3px; }
         .fill-p { background: linear-gradient(90deg, #15803d, #4ade80); }
@@ -465,7 +466,7 @@
                     <th style="width:26%">
                         <span>API Path</span>
                     </th>
-                    <th style="width:12%">
+                    <th style="width:12%" id="th-start-time-pro">
                         <span>Start Time</span>
                     </th>
                     <th style="width:8%">
@@ -502,16 +503,81 @@
     let currentSearchText = '';
     let globalStats = { passed: 0, failed: 0, skipped: 0, total: 0 };
 
+    function bucketStatus(s) {
+        if (s === 'passed') return 'passed';
+        if (s === 'skipped') return 'skipped';
+        return 'failed';
+    }
+    function safeDuration(d) {
+        const n = Number(d);
+        return Number.isFinite(n) ? n : 0;
+    }
+
+    function browserIanaTimeZone() {
+        try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { return ''; }
+    }
+    function browserTimeZoneShortLabel() {
+        try {
+            const parts = new Intl.DateTimeFormat(undefined, { timeZoneName: 'short' }).formatToParts(new Date());
+            return parts.find(p => p.type === 'timeZoneName')?.value || browserIanaTimeZone();
+        } catch (e) { return browserIanaTimeZone(); }
+    }
+    function formatLocalFromEpoch(epochSec) {
+        if (epochSec == null || !Number.isFinite(Number(epochSec)) || Number(epochSec) <= 0) return '';
+        const d = new Date(Number(epochSec) * 1000);
+        return d.toLocaleString(undefined, {
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+        });
+    }
+    function displayStartCell(item) {
+        if (item.start_epoch != null && Number.isFinite(Number(item.start_epoch)) && Number(item.start_epoch) > 0) {
+            return formatLocalFromEpoch(item.start_epoch);
+        }
+        if (item.start_time) {
+            const p = Date.parse(String(item.start_time).replace(' ', 'T'));
+            if (!isNaN(p)) {
+                return new Date(p).toLocaleString(undefined, {
+                    year: 'numeric', month: '2-digit', day: '2-digit',
+                    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+                });
+            }
+            return item.start_time;
+        }
+        return '—';
+    }
+    function formatRunStartedHeader() {
+        const e = envInfo.run_started_epoch;
+        if (e == null || !Number.isFinite(Number(e)) || Number(e) <= 0) return '—';
+        const local = formatLocalFromEpoch(Number(e));
+        const tz = browserTimeZoneShortLabel() || browserIanaTimeZone();
+        return tz ? (local + ' · ' + tz) : local;
+    }
+    function startEpochMs(d) {
+        if (d.start_epoch != null && Number.isFinite(Number(d.start_epoch)) && Number(d.start_epoch) > 0) {
+            return Number(d.start_epoch) * 1000;
+        }
+        if (d.start_time) {
+            const p = Date.parse(String(d.start_time).replace(' ', 'T'));
+            if (!isNaN(p)) return p;
+        }
+        return null;
+    }
+
     // ── Init ──────────────────────────────────────────────────────────
     function initReport() {
-        const now = new Date();
-        const ts = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')} (UTC+8)`;
-        document.getElementById('gen-time').innerText = ts;
-        document.getElementById('footer-time').innerText = ts;
+        const tzPro = browserTimeZoneShortLabel() || browserIanaTimeZone();
+        const thp = document.getElementById('th-start-time-pro');
+        if (thp) {
+            thp.innerHTML = '<span>Start Time' + (tzPro ? (' (' + tzPro + ')') : '') + '</span>';
+        }
+        const runStr = formatRunStartedHeader();
+        document.getElementById('gen-time').innerText = runStr;
+        document.getElementById('footer-time').innerText = runStr;
         const envLabel = envInfo.env || 'DEV';
         document.getElementById('env-tag').innerText = envLabel;
         document.getElementById('footer-env').innerText = envLabel;
-        document.getElementById('header-subtitle').innerText = `${envLabel} · ${envInfo.core || 'actc'} · ${ts}`;
+        document.getElementById('header-subtitle').innerText = `${envLabel} · ${envInfo.core || 'actc'} · ${runStr}`;
 
         const stats = { passed: 0, failed: 0, skipped: 0, totalDuration: 0 };
         const listBody = document.getElementById('case-list');
@@ -520,13 +586,14 @@
         const groupedData = {};
 
         testData.forEach((item, index) => {
-            stats[item.status]++;
-            stats.totalDuration += item.duration;
+            const st = bucketStatus(item.status);
+            stats[st] = (stats[st] || 0) + 1;
+            stats.totalDuration += safeDuration(item.duration);
             const module = item.module || 'Unknown';
             const testFile = item.test_file || 'unknown';
             modules.add(module);
             if (!moduleStats[module]) moduleStats[module] = { passed:0, failed:0, skipped:0 };
-            moduleStats[module][item.status] = (moduleStats[module][item.status] || 0) + 1;
+            moduleStats[module][st] = (moduleStats[module][st] || 0) + 1;
             if (!groupedData[module]) groupedData[module] = {};
             if (!groupedData[module][testFile]) groupedData[module][testFile] = [];
             groupedData[module][testFile].push({ ...item, originalIndex: index });
@@ -560,12 +627,15 @@
         document.getElementById('tab-skipped-count').innerText = stats.skipped;
 
         // Metrics
-        const allDurations = testData.map(d => d.duration).filter(d => typeof d === 'number');
-        const startTimes = testData.map(d => d.start_time ? new Date(d.start_time).getTime() : null).filter(t => t && !isNaN(t));
+        const allDurations = testData.map(d => safeDuration(d.duration)).filter(d => d >= 0);
+        const startTimes = testData.map(d => startEpochMs(d)).filter(t => t != null && !isNaN(t));
         let wallTime = 0;
         if (startTimes.length > 0) {
             const minS = Math.min(...startTimes), maxS = Math.max(...startTimes);
-            const lastDur = testData.find(d => d.start_time && new Date(d.start_time).getTime() === maxS)?.duration || 0;
+            const lastDur = safeDuration(testData.find(d => {
+                const ms = startEpochMs(d);
+                return ms != null && ms === maxS;
+            })?.duration);
             wallTime = (maxS - minS) / 1000 + lastDur;
         }
         if (wallTime <= 0) wallTime = stats.totalDuration;
@@ -596,7 +666,7 @@
                     <span class="mod-card-stats">${mt} cases · <span style="color:${rateColor};font-weight:700;">${pPct.toFixed(0)}%</span></span>
                 </div>
                 <div class="mod-bars">
-                    <div class="bar-row2"><span class="bar-lbl2">P</span><div class="bar-wrap"><div class="bar-fill2 fill-p" style="width:${pPct}%"></div></div><span class="bar-v">${ms.passed||0}</span></div>
+                    <div class="bar-row2"><span class="bar-lbl2">Passed</span><div class="bar-wrap"><div class="bar-fill2 fill-p" style="width:${pPct}%"></div></div><span class="bar-v">${ms.passed||0}</span></div>
                     <div class="bar-row2"><span class="bar-lbl2">Failed</span><div class="bar-wrap"><div class="bar-fill2 fill-f" style="width:${fPct}%"></div></div><span class="bar-v">${ms.failed||0}</span></div>
                     <div class="bar-row2"><span class="bar-lbl2">Skipped</span><div class="bar-wrap"><div class="bar-fill2 fill-s" style="width:${sPct}%"></div></div><span class="bar-v">${ms.skipped||0}</span></div>
                 </div>
@@ -624,8 +694,10 @@
 
                 sorted.forEach(item => {
                     const row = document.createElement('tr');
-                    row.className = `case-row ${item.status}`;
-                    row.setAttribute('data-status', item.status);
+                    const st = bucketStatus(item.status);
+                    const rowClass = item.status === 'error' ? 'case-row error' : `case-row ${st}`;
+                    row.className = rowClass;
+                    row.setAttribute('data-status', st);
                     row.setAttribute('data-module', module);
                     row.setAttribute('data-markers', JSON.stringify(item.markers || []));
                     row.setAttribute('data-test-file', testFile);
@@ -636,14 +708,17 @@
                     row.onclick = () => showDetail(item.originalIndex);
                     const displayName = item.docstring_summary_en || item.test_func_name;
                     const apiDisplay = item.api_path ? `<span class="api-path">${item.api_path}</span>` : '<span style="color:#ccc">—</span>';
-                    const statusBadge = `<span class="badge badge-${item.status}">${item.status.toUpperCase()}</span>`;
+                    const badgeKind = st === 'failed' && item.status === 'error' ? 'failed' : st;
+                    const badgeText = item.status === 'error' ? 'ERROR' : st.toUpperCase();
+                    const statusBadge = `<span class="badge badge-${badgeKind}">${badgeText}</span>`;
+                    const durStr = safeDuration(item.duration).toFixed(3);
                     row.innerHTML = `
                         <td style="padding-left:18px;">${statusBadge}</td>
                         <td style="padding-left:32px;"><span class="module-tag">${module}</span></td>
                         <td style="font-weight:500;">${displayName}</td>
                         <td>${apiDisplay}</td>
-                        <td style="font-size:11px;color:#888;font-family:'JetBrains Mono',monospace;">${item.start_time}</td>
-                        <td style="font-weight:600;font-family:'JetBrains Mono',monospace;">${item.duration.toFixed(3)}s</td>`;
+                        <td style="font-size:11px;color:#888;font-family:'JetBrains Mono',monospace;">${displayStartCell(item)}</td>
+                        <td style="font-weight:600;font-family:'JetBrains Mono',monospace;">${durStr}s</td>`;
                     listBody.appendChild(row);
                 });
             });
@@ -656,12 +731,7 @@
         });
     }
 
-    
-
-    function applyCurrentLang() { /* EN only, no toggle */ }</span>`;
-            }
-        });
-    }
+    function applyCurrentLang() { /* Pro report: English only */ }
 
     // ── Collapse ──────────────────────────────────────────────────────
     function toggleModuleCollapse(mod) {
@@ -792,7 +862,7 @@
         } else {
             html = `<div style="text-align:center;color:#aaa;padding:40px;"><span>No API traffic captured</span></div>`;
         }
-        if (data.status === 'failed') {
+        if (data.status === 'failed' || data.status === 'error') {
             const esc = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
             if (data.failure_analysis) html += `<div class="detail-section" style="border-top:2px solid #fbbf24;"><div class="detail-title" style="color:#d97706;"><span>⚡ Failure Analysis</span></div><div style="background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:12px 16px;font-size:13px;color:#92400e;">${esc(data.failure_analysis)}</div></div>`;
         // failure_reason section removed
@@ -816,7 +886,7 @@
                     'Module': item.module||'', 'Test File': item.test_file||'',
                     'Test Case': item.docstring_summary_en||item.test_func_name||'',
                     'API Path': item.api_path||'', 'Status': item.status.toUpperCase(),
-                    'Duration (s)': parseFloat(item.duration.toFixed(3)), 'Execution Time': item.start_time,
+                    'Duration (s)': parseFloat(safeDuration(item.duration).toFixed(3)), 'Execution Time': displayStartCell(item),
                     'API Calls': el.length, 'Last URL': last.request?.url||'',
                     'Last Method': last.request?.method||'', 'Last Response': last.response?.status_code||'',
                     'Failure Analysis': item.failure_analysis||'', 'Failure Detail': item.failure_reason||''

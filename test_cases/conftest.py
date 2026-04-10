@@ -5,7 +5,7 @@ import sys
 import json
 import re
 import inspect
-from datetime import datetime
+from datetime import datetime, timezone
 from urllib.parse import urlparse, parse_qs
 from api.auth_api import auth_api
 from config.config import config
@@ -554,9 +554,13 @@ def login_session():
         response = requests.post(url, params=params, headers=headers)
         
         if response.status_code == 200:
-            res_json = response.json()
+            res_json = response.json() or {}
             # 兼容性处理：Token 可能在根目录，也可能在 data 目录下
-            token = res_json.get("access_token") or res_json.get("data", {}).get("access_token")
+            # ⚠️ 若响应为 {"data": null}，dict.get("data", {}) 会返回 None（不会用默认值 {}），不可链式 .get
+            nested = res_json.get("data")
+            if not isinstance(nested, dict):
+                nested = {}
+            token = res_json.get("access_token") or nested.get("access_token")
             if token:
                 session.headers.update({"Authorization": f"Bearer {token}"})
                 logger.info(f"登录成功，获取 Token: {token[:10]}...")
@@ -833,12 +837,19 @@ def pytest_runtest_makereport(item, call):
             failure_reason = str(report.longrepr)
             failure_analysis = _analyze_failure(failure_reason, extra_data)
 
-        # 构建测试结果数据
+        start_ts = float(getattr(report, "start", 0) or 0)
+        start_time_utc = (
+            datetime.fromtimestamp(start_ts, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+            if start_ts > 0
+            else ""
+        )
+        # 构建测试结果数据（start_epoch 供 HTML/JS 按浏览器时区展示；start_time_utc 供 Excel/PDF）
         test_data = {
             "nodeid": item.nodeid,
             "status": report.outcome,
             "duration": report.duration,
-            "start_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "start_epoch": start_ts if start_ts > 0 else None,
+            "start_time_utc": start_time_utc,
             "markers": markers,
             "module": module_name,
             "test_file": test_file,
@@ -867,6 +878,15 @@ def pytest_runtest_makereport(item, call):
         else:
             # 如果不存在，追加新记录
             test_results.append(test_data)
+
+
+def _excel_start_time_cell(item: dict) -> str:
+    """Excel 中 Start Time：优先 UTC ISO（与 runner 时区无关）；旧数据仅有 start_time 字符串时沿用。"""
+    ep = item.get("start_epoch")
+    if ep is not None and isinstance(ep, (int, float)) and float(ep) > 0:
+        return datetime.fromtimestamp(float(ep), tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    legacy = item.get("start_time") or item.get("start_time_utc") or ""
+    return str(legacy) if legacy is not None else ""
 
 
 def _generate_excel_from_results(results: list, output_path: str):
@@ -914,7 +934,7 @@ def _generate_excel_from_results(results: list, output_path: str):
             "API Path":          _safe_str(item.get("api_path", "")),
             "Status":            _safe_str((item.get("status") or "").upper()),
             "Duration (s)":      round(float(item.get("duration") or 0), 3),
-            "Start Time":        _safe_str(item.get("start_time", "")),
+            "Start Time":        _excel_start_time_cell(item),
             "Request Method":    _safe_str(req.get("method", "")),
             "Request URL":       _safe_str(req.get("url", "")),
             "Request Body":      _safe_str(_json.dumps(req_body, ensure_ascii=False) if req_body else ""),
@@ -1022,9 +1042,17 @@ def pytest_sessionfinish(session, exitstatus):
         # 注入数据
         # 注意：json.dumps 后需要将 </ 转义为 <\/，防止响应体中的 </script> 等 HTML 标签
         # 破坏 <script> 块结构（RFC 4627 / HTML5 规范允许此转义）
+        _epochs = [
+            float(r["start_epoch"])
+            for r in sorted_results
+            if r.get("start_epoch") is not None
+            and isinstance(r.get("start_epoch"), (int, float))
+            and float(r["start_epoch"]) > 0
+        ]
         env_info = {
             "env": os.getenv("ENV", "DEV"),
-            "core": config.core
+            "core": config.core,
+            "run_started_epoch": min(_epochs) if _epochs else None,
         }
         results_json = json.dumps(sorted_results, ensure_ascii=False).replace("</", "<\\/")
         env_json = json.dumps(env_info, ensure_ascii=False).replace("</", "<\\/")

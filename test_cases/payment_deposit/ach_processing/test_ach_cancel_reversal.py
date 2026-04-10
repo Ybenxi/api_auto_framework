@@ -17,6 +17,7 @@ Upload ACH Batch：依赖文件上传，无法自动化，跳过
 """
 import pytest
 import time
+from test_cases.payment_deposit.ach_processing.ach_test_helpers import ach_fp_false_credit_kwargs
 from utils.logger import logger
 
 MEMO_PREFIX = "Auto TestYan ACH Cancel"
@@ -36,13 +37,11 @@ class TestAchCancel:
         """
         # 先发起 Credit
         resp_c = ach_processing_api.initiate_credit(
-            financial_account_id=ach_fp_false_ctx["fa"],
-            sub_account_id=ach_fp_false_ctx["sub"],
-            counterparty_id=ach_fp_false_ctx["cp"],
-            amount="0.01",
-            first_party=False,
-            same_day=False,
-            memo=f"{MEMO_PREFIX} {int(time.time())}"
+            **ach_fp_false_credit_kwargs(
+                ach_fp_false_ctx,
+                amount="0.01",
+                memo=f"{MEMO_PREFIX} {int(time.time())}",
+            )
         )
         assert resp_c.json().get("code") == 200, \
             f"Credit 发起失败: {resp_c.json().get('error_message')}"
@@ -96,13 +95,11 @@ class TestAchCancel:
         """
         # 发起 Credit
         resp_c = ach_processing_api.initiate_credit(
-            financial_account_id=ach_fp_false_ctx["fa"],
-            sub_account_id=ach_fp_false_ctx["sub"],
-            counterparty_id=ach_fp_false_ctx["cp"],
-            amount="0.01",
-            first_party=False,
-            same_day=False,
-            memo=f"{MEMO_PREFIX} StatusCheck {int(time.time())}"
+            **ach_fp_false_credit_kwargs(
+                ach_fp_false_ctx,
+                amount="0.01",
+                memo=f"{MEMO_PREFIX} StatusCheck {int(time.time())}",
+            )
         )
         assert resp_c.json().get("code") == 200
         txn_id = (resp_c.json().get("data") or resp_c.json()).get("id")
