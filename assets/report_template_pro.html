@@ -512,6 +512,11 @@
         const n = Number(d);
         return Number.isFinite(n) ? n : 0;
     }
+    function prettyTestName(name) {
+        const raw = String(name || '').trim();
+        if (!raw) return 'Unknown';
+        return raw.replace(/^test_/, '').replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
+    }
 
     function browserIanaTimeZone() {
         try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { return ''; }
@@ -702,11 +707,11 @@
                     row.setAttribute('data-markers', JSON.stringify(item.markers || []));
                     row.setAttribute('data-test-file', testFile);
                     row.setAttribute('data-api-path', item.api_path || '');
-                    row.setAttribute('data-test-name', item.test_func_name || '');
+                    row.setAttribute('data-test-name', item.display_name_en || item.docstring_summary_en || prettyTestName(item.test_func_name) || '');
                     row.setAttribute('data-docstring', item.docstring_summary_zh || item.docstring_summary || '');
                     row.setAttribute('data-original-index', item.originalIndex);
                     row.onclick = () => showDetail(item.originalIndex);
-                    const displayName = item.docstring_summary_en || item.test_func_name;
+                    const displayName = item.display_name_en || item.docstring_summary_en || prettyTestName(item.test_func_name);
                     const apiDisplay = item.api_path ? `<span class="api-path">${item.api_path}</span>` : '<span style="color:#ccc">—</span>';
                     const badgeKind = st === 'failed' && item.status === 'error' ? 'failed' : st;
                     const badgeText = item.status === 'error' ? 'ERROR' : st.toUpperCase();
@@ -827,8 +832,8 @@
         const modal = document.getElementById('detailModal');
         const body  = document.getElementById('modal-body');
         const titleText = currentLang === 'zh'
-            ? (data.docstring_summary_zh || data.docstring_summary || data.test_func_name)
-            : (data.docstring_summary_en || data.test_func_name);
+            ? (data.display_name_zh || data.docstring_summary_zh || data.docstring_summary || prettyTestName(data.test_func_name))
+            : (data.display_name_en || data.docstring_summary_en || prettyTestName(data.test_func_name));
         document.getElementById('modal-title').textContent = titleText;
         const extraList = Array.isArray(data.extra) ? data.extra : (data.extra?.request ? [data.extra] : []);
         let html = '';
@@ -884,7 +889,7 @@
                 const last = el.length > 0 ? el[el.length-1] : {};
                 return {
                     'Module': item.module||'', 'Test File': item.test_file||'',
-                    'Test Case': item.docstring_summary_en||item.test_func_name||'',
+                    'Test Case': item.display_name_en||item.docstring_summary_en||prettyTestName(item.test_func_name)||'',
                     'API Path': item.api_path||'', 'Status': item.status.toUpperCase(),
                     'Duration (s)': parseFloat(safeDuration(item.duration).toFixed(3)), 'Execution Time': displayStartCell(item),
                     'API Calls': el.length, 'Last URL': last.request?.url||'',

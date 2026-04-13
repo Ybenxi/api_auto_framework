@@ -380,10 +380,10 @@ else:
 
             for idx, item in enumerate(parsed_methods, 1):
                 method_name = item.get("method_name", "")
-                scenario_desc = item.get("scenario_desc", method_name or t("cases_no_desc"))
+                scenario_desc = item.get("scenario_desc", _method_to_title(method_name) or t("cases_no_desc"))
                 validation_points = item.get("validation_points", [])
                 with st.expander(
-                    t("cases_scenario_with_desc", i=idx, name=method_name, desc=scenario_desc),
+                    t("cases_scenario", i=idx, name=scenario_desc),
                     expanded=expanded,
                 ):
                     st.markdown(f"**{scenario_desc}**")

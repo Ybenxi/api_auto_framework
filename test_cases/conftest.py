@@ -202,6 +202,37 @@ def extract_docstring_en(item) -> str:
     return ""
 
 
+def strip_scenario_prefix(text: str) -> str:
+    """
+    去掉场景编号前缀，只保留真正的场景名称。
+    例如：
+    - 测试场景6：使用无效的 phone 格式 -> 使用无效的 phone 格式
+    - Test Scenario6: Use invalid phone -> Use invalid phone
+    """
+    if not text:
+        return ""
+    result = text.strip()
+    result = re.sub(r'^测试场景\s*\d+\s*[：:]\s*', '', result)
+    result = re.sub(r'^Test Scenario\s*\d+\s*[：:]\s*', '', result, flags=re.IGNORECASE)
+    result = re.sub(r'^Scenario\s*\d+\s*[：:]\s*', '', result, flags=re.IGNORECASE)
+    return result.strip()
+
+
+def prettify_test_func_name(name: str) -> str:
+    """
+    将测试函数名转为更可读的标题，避免在报告中直接出现 test_xxx_xxx。
+    """
+    if not name:
+        return ""
+    result = name.strip()
+    result = re.sub(r'^test_', '', result)
+    result = result.replace("_", " ").strip()
+    result = re.sub(r"\s+", " ", result)
+    if not result:
+        return name
+    return result[:1].upper() + result[1:]
+
+
 def get_full_docstring(item) -> str:
     """
     获取测试用例的完整 docstring
@@ -261,6 +292,46 @@ def translate_docstring_to_english(zh_text: str) -> str:
     # 中英文映射表（完整版 v2.0 - 扩充50+词汇）
     translations = {
         # 完整短语（优先匹配）
+        "使用必需字段创建 Contact": "Create Contact with required fields",
+        "使用所有字段创建 Contact（包括可选字段，不含 ssn_tin）": "Create Contact with all fields (including optional fields, excluding ssn_tin)",
+        "创建 Contact（不含 SSN，验证基础字段 + email 唯一性）": "Create Contact ( Without SSN, Verify Basic Fields + Email Uniqueness )",
+        "缺少必需字段（如 first_name）": "Create Contact with missing required fields (e.g. first_name)",
+        "使用无效的 email 格式": "Use invalid email format",
+        "使用无效的 phone 格式（非 E.164 格式）": "Use invalid phone ( E.164 )",
+        "创建 Contact 后立即查询详情，验证数据一致性": "Query detail immediately after creating Contact to verify data consistency",
+        "使用不在当前用户 visible 范围内的 Account ID": "Use an Account ID outside the current user's visible range",
+        "提交格式错误的 birth_date": "Submit invalid birth_date format",
+        "permanent_country 不符合 ISO 3166 标准": "permanent_country is not compliant with ISO 3166",
+        "phone 不符合 E.164 格式": "phone is not compliant with E.164 format",
+        "government_document_type 和 gender 超出枚举范围": "government_document_type and gender are outside allowed enum values",
+        "成功获取 Contacts 列表": "Successfully retrieve Contacts list",
+        "使用 status 筛选 Contacts（覆盖全部枚举值）": "Filter Contacts by status (cover all enum values)",
+        "使用 name 模糊筛选 Contacts": "Filter Contacts by name fuzzy match",
+        "使用 email 模糊筛选 Contacts": "Filter Contacts by email fuzzy match",
+        "验证分页功能": "Verify pagination",
+        "List 返回字段与创建时传入字段一一匹配": "Verify List returned fields match the fields submitted during creation",
+        "成功获取 Contact 详情": "Successfully retrieve Contact detail",
+        "获取 Contact 详情，验证所有字段": "Retrieve Contact detail and verify all fields",
+        "使用无效的 Contact ID": "Use invalid Contact ID",
+        "验证响应数据结构": "Verify response data structure",
+        "验证 ssn_tin 字段": "Verify ssn_tin field",
+        "使用不在当前用户 visible 范围内的 Contact ID 查询详情": "Query detail with a Contact ID outside the current user's visible range",
+        "Detail 返回字段与创建时传入字段一一匹配": "Verify Detail returned fields match the fields submitted during creation",
+        "验证 SSN 接口连通性": "Verify SSN API connectivity",
+        "使用 Dummy Secret 调用 SSN 接口": "Call SSN API with dummy secret",
+        "使用无效的 Contact ID 查询 SSN": "Query SSN with invalid Contact ID",
+        "缺少 secret 参数": "Missing secret parameter",
+        "验证 SSN 接口响应数据结构": "Verify SSN API response data structure",
+        "更新 Contact 的 first_name": "Update Contact first_name",
+        "更新 Contact 的 phone（使用自己创建的 Contact）": "Update Contact phone (using self-created Contact)",
+        "同时更新多个字段（使用自己创建的 Contact）": "Update multiple fields (using self-created Contact)",
+        "更新地址相关字段（使用自己创建的 Contact）": "Update address-related fields (using self-created Contact)",
+        "使用无效的 Contact ID 更新": "Update with invalid Contact ID",
+        "更新 phone 时使用非 E.164 格式（使用自己创建的 Contact）": "Update phone with non-E.164 format (using self-created Contact)",
+        "使用空数据更新（使用自己创建的 Contact）": "Update with empty payload (using self-created Contact)",
+        "使用越权 Contact ID 更新": "Update with unauthorized Contact ID",
+        "更新 country 时使用非 ISO 3166 标准代码（使用自己创建的 Contact）": "Update country with non-ISO 3166 code (using self-created Contact)",
+        "更新 government_document_type 和 gender 超出枚举范围（使用自己创建的 Contact）": "Update government_document_type and gender with out-of-range enum values (using self-created Contact)",
         "排序功能验证 - 按姓名排序": "Sorting Verification - Sort by Name",
         "排序功能验证 - 按账户名称排序": "Sorting Verification - Sort by Account Name",
         "创建后立即查询详情，验证数据一致性": "Create then Query Detail Immediately to Verify Data Consistency",
@@ -519,6 +590,13 @@ def translate_docstring_to_english(zh_text: str) -> str:
     for zh, en in sorted(translations.items(), key=lambda x: len(x[0]), reverse=True):
         result = result.replace(zh, en)
     
+    # 清理残留中文，避免英文报告中出现中英混杂
+    result = re.sub(r'[\u4e00-\u9fff]+', ' ', result)
+    result = re.sub(r'\s+,', ',', result)
+    result = re.sub(r'\(\s+', '(', result)
+    result = re.sub(r'\s+\)', ')', result)
+    result = re.sub(r',\s*\)', ')', result)
+
     # 清理多余空格
     result = re.sub(r'\s+', ' ', result).strip()
     
@@ -792,14 +870,30 @@ def pytest_runtest_makereport(item, call):
         full_docstring = get_full_docstring(item)
         module_docstring = get_module_docstring(item)
         
-        # 生成英文版本的 docstring（优先读第二行，fallback 到函数名）
+        # 生成英文版本的 docstring（优先读第二行；否则翻译中文场景名；最后才 fallback 到函数名）
         docstring_en_from_line2 = extract_docstring_en(item)
         if docstring_en_from_line2:
-            docstring_summary_en = docstring_en_from_line2
+            docstring_summary_en = strip_scenario_prefix(docstring_en_from_line2)
         else:
-            # 没有第二行时 fallback：用函数名（已是英文），比词典替换更干净
-            test_func_name_en = item.nodeid.split("::")[-1]
-            docstring_summary_en = test_func_name_en
+            translated_from_zh = strip_scenario_prefix(
+                translate_docstring_to_english(strip_scenario_prefix(docstring_summary_zh))
+            )
+            if translated_from_zh:
+                docstring_summary_en = translated_from_zh
+            else:
+                test_func_name_en = item.nodeid.split("::")[-1]
+                docstring_summary_en = prettify_test_func_name(test_func_name_en)
+
+        display_name_zh = (
+            strip_scenario_prefix(docstring_summary_zh)
+            or docstring_summary_zh
+            or prettify_test_func_name(item.nodeid.split("::")[-1])
+        )
+        display_name_en = (
+            strip_scenario_prefix(docstring_summary_en)
+            or docstring_summary_en
+            or prettify_test_func_name(item.nodeid.split("::")[-1])
+        )
         
         # 提取 API 路径（优先从方法 docstring，其次从模块 docstring，最后从捕获流量）
         api_path = extract_api_path_from_docstring(full_docstring)
@@ -856,6 +950,8 @@ def pytest_runtest_makereport(item, call):
             "test_func_name": test_func_name,
             "docstring_summary_zh": docstring_summary_zh,
             "docstring_summary_en": docstring_summary_en,
+            "display_name_zh": display_name_zh,
+            "display_name_en": display_name_en,
             "docstring_summary": docstring_summary_zh,  # 保持向后兼容
             "scenario_number": scenario_number,  # 用于排序
             "api_path": api_path,
@@ -930,7 +1026,7 @@ def _generate_excel_from_results(results: list, output_path: str):
         return {
             "Module":            _safe_str(item.get("module", "")),
             "Test File":         _safe_str(item.get("test_file", "")),
-            "Test Case (EN)":    _safe_str(item.get("docstring_summary_en") or item.get("test_func_name", "")),
+            "Test Case (EN)":    _safe_str(item.get("display_name_en") or item.get("docstring_summary_en") or item.get("test_func_name", "")),
             "API Path":          _safe_str(item.get("api_path", "")),
             "Status":            _safe_str((item.get("status") or "").upper()),
             "Duration (s)":      round(float(item.get("duration") or 0), 3),

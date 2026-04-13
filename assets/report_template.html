@@ -386,6 +386,12 @@
             const n = Number(d);
             return Number.isFinite(n) ? n : 0;
         }
+        
+        function prettyTestName(name) {
+            const raw = String(name || '').trim();
+            if (!raw) return 'Unknown';
+            return raw.replace(/^test_/, '').replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
+        }
 
         function browserIanaTimeZone() {
             try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { return ''; }
@@ -528,7 +534,7 @@
                         row.setAttribute('data-markers', JSON.stringify(item.markers || []));
                         row.setAttribute('data-test-file', testFile);
                         row.setAttribute('data-api-path', item.api_path || '');
-                        row.setAttribute('data-test-name', item.test_func_name || '');
+                        row.setAttribute('data-test-name', item.display_name_en || item.docstring_summary_en || prettyTestName(item.test_func_name) || '');
                         row.setAttribute('data-docstring', item.docstring_summary_zh || item.docstring_summary || '');
                         row.setAttribute('data-original-index', item.originalIndex);
                         row.onclick = () => showDetail(item.originalIndex);
@@ -544,8 +550,8 @@
                         
                         // Display test name: use bilingual docstring based on current language
                         const displayName = currentLang === 'zh' 
-                            ? (item.docstring_summary_zh || item.docstring_summary || item.test_func_name)
-                            : (item.docstring_summary_en || item.test_func_name);
+                            ? (item.display_name_zh || item.docstring_summary_zh || item.docstring_summary || prettyTestName(item.test_func_name))
+                            : (item.display_name_en || item.docstring_summary_en || prettyTestName(item.test_func_name));
                         const apiPathDisplay = item.api_path ? `<span class="api-path">${item.api_path}</span>` : '<span style="color: #bfbfbf;">-</span>';
                         
                         row.innerHTML = `
@@ -705,8 +711,8 @@
                 if (!isNaN(originalIndex)) {
                     const item = testData[originalIndex];
                     const displayName = currentLang === 'zh' 
-                        ? (item.docstring_summary_zh || item.docstring_summary || item.test_func_name)
-                        : (item.docstring_summary_en || item.test_func_name);
+                        ? (item.display_name_zh || item.docstring_summary_zh || item.docstring_summary || prettyTestName(item.test_func_name))
+                        : (item.display_name_en || item.docstring_summary_en || prettyTestName(item.test_func_name));
                     
                     // Update the test case name cell (3rd cell, index 2)
                     const cells = row.querySelectorAll('td');
@@ -935,8 +941,8 @@
             
             // Set modal title to bilingual docstring
             const titleText = currentLang === 'zh'
-                ? (data.docstring_summary_zh || data.docstring_summary || data.test_func_name)
-                : (data.docstring_summary_en || data.test_func_name);
+                ? (data.display_name_zh || data.docstring_summary_zh || data.docstring_summary || prettyTestName(data.test_func_name))
+                : (data.display_name_en || data.docstring_summary_en || prettyTestName(data.test_func_name));
             document.getElementById('modal-title').textContent = titleText;
             
             let extraHtml = '';
@@ -1100,7 +1106,7 @@
                     return {
                     'Module': item.module || 'Unknown',
                     'Test File': item.test_file || '',
-                    'Test Case': item.docstring_summary_en || item.test_func_name || '',
+                    'Test Case': item.display_name_en || item.docstring_summary_en || prettyTestName(item.test_func_name) || '',
                     'API Path': item.api_path || '',
                     'Status': item.status.toUpperCase(),
                     'Duration (s)': parseFloat(safeDuration(item.duration).toFixed(3)),

@@ -24,10 +24,12 @@ def _has_chinese(s: str) -> bool:
 
 
 def _get_en_name(case: dict) -> str:
-    en = case.get("docstring_summary_en", "")
+    en = case.get("display_name_en") or case.get("docstring_summary_en", "")
     if en and not _has_chinese(en):
         return en
-    return case.get("test_func_name", "Unknown")
+    raw = case.get("test_func_name", "Unknown")
+    pretty = str(raw).replace("test_", "").replace("_", " ").strip()
+    return pretty[:1].upper() + pretty[1:] if pretty else "Unknown"
 
 
 def _esc(text: str) -> str:
